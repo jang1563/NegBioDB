@@ -29,7 +29,7 @@ A fundamental paradox defines the DTI negative data landscape: the vast majority
 
 ### How Inactive/Negative Data is Stored
 - **pChEMBL values**: Negative log of activity (molar). Commonly used thresholds for "inactive": pChEMBL < 5 (potency > 10 uM); also 5.5 and 6 used
-- **activity_comment / TEXT_VALUE**: Qualitative annotations ("Not Active", "Inactive", "Inconclusive"). Standardization to "Not active" underway from ChEMBL 37. ~133,421 inactive data points extractable (83,716 unique compounds)
+- **activity_comment / TEXT_VALUE**: Qualitative annotations ("Not Active", "Inactive", "Inconclusive"). Standardization to "Not active" underway from ChEMBL 37. ~133,421 narrowly-defined "Not Active" entries; **~763K total** when including all activity_comment variants (see research/08 §1 for verified counts)
 - **data_validity_comment**: Data reliability flags (since v15)
 
 ### Limitations

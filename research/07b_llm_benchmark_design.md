@@ -150,7 +150,7 @@ Expected Output:
 ```
 
 **Data Construction:**
-- Manually annotate 200 abstracts with gold-standard JSON extractions
+- Annotate **100 abstracts** with gold-standard JSON extractions (semi-automated: LLM first-pass + human correction, ~4 days; see research/08 §6)
 - Include challenging cases: hedged language, implicit negatives, multi-target panels
 - Include supplementary table descriptions for harder examples
 
@@ -541,7 +541,7 @@ NegBioBench
 | **M2** | 70% | 10% | 20% | Full NegBioDB | Automated from DB |
 | **M3** | 70% | 10% | 20% | Subset with quantitative values | Automated from DB |
 | **L1** | 200 (few-shot examples) | 200 | 1,600 | 2,000 | Semi-automated + human review |
-| **L2** | 20 (few-shot examples) | 30 | 150 | 200 | Manual annotation (abstracts) |
+| **L2** | 15 (few-shot examples) | 15 | 70 | 100 | Semi-automated annotation (LLM first-pass + human correction) |
 | **L3** | 10 (few-shot examples) | 20 | 170 | 200 | Expert-created rubrics |
 | **L4** | 50 (few-shot examples) | 50 | 400 | 500 | Semi-automated + validation |
 | **L5** | 10 (few-shot examples) | 15 | 125 | 150 | Expert-created scenarios |
@@ -759,7 +759,7 @@ Output: {example_output}
 |------|-------------------|
 | 1-2 | Design prompt templates for L1, L2, L4 |
 | 2-3 | Construct L1 dataset (2,000 MCQ from NegBioDB entries) |
-| 3-4 | Construct L2 dataset (annotate 200 abstracts) |
+| 3-4 | Construct L2 dataset (annotate 100 abstracts, semi-automated) |
 | 3-4 | Construct L4 dataset (500 tested/untested pairs) |
 | 4-5 | Implement automated evaluation scripts (L1, L2, L4) |
 | 5-6 | Set up LLM-as-Judge pipeline (Gemini free tier) |

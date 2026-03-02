@@ -380,7 +380,9 @@ DTIContext {
 | **AUROC** | Ranking | Backward compatibility only (not for ranking) |
 
 ### LLM Evaluation Configuration
-- All LLM tasks evaluated in: zero-shot, 3-shot, 5-shot, CoT, CoT+3-shot
+- **Full benchmark** (5 configs): zero-shot, 3-shot, 5-shot, CoT, CoT+3-shot
+- **NeurIPS sprint must-have** (2 configs): zero-shot, 3-shot only (see research/08 §3)
+- **Should-have** (add CoT): 3 configs total for Exp 11 (prompt strategy comparison)
 - 3 runs per evaluation, report mean ± std
 - Temperature = 0, prompts version-controlled
 - Anti-contamination: temporal holdout + paraphrased variants + contamination detection

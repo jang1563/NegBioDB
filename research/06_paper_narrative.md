@@ -125,7 +125,7 @@ LLMs are increasingly applied to drug discovery (DrugAgent ICLR 2025, DrugChat, 
 ### 4.3 What to Prioritize for NeurIPS Submission
 
 **Must Have (for submission):**
-- [ ] MVP dataset: ≥5,000 curated negative DTIs from PubChem + ChEMBL
+- [ ] MVP dataset: **≥10,000 curated negative DTIs** from PubChem + ChEMBL (see research/08 §1 — 5K insufficient for "large-scale" claim)
 - [ ] Confidence tier assignment for all entries
 - [ ] 3+ splitting strategies implemented (random, cold compound, cold target)
 - [ ] 3+ ML baseline models evaluated (DeepDTA, GraphDTA, DrugBAN)

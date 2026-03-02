@@ -35,7 +35,9 @@ GET https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{CID}/property/InChIK
 3. Primary screens with multi-concentration data
 4. Primary single-point screens (lowest value — only at Bronze tier)
 
-**Volume Estimate:** ~50K+ confirmatory inactive dose-response records; millions of primary screen inactives
+**Volume Estimate:** ~61M target-annotated confirmatory inactive records via FTP bulk; ~4,500 MLPCN/MLSCN AIDs with genuine HTS dose-response (richest unique source). See research/08 §2.
+
+**Note:** For bulk extraction, **FTP download is strongly preferred over API** (see ROADMAP v5). `bioactivities.tsv.gz` (3 GB) + `bioassays.tsv.gz` (52 MB) processes in < 1 day. API approach (5 req/sec) would take weeks for full extraction. Use API only for supplementary targeted lookups.
 
 **Output Format:** CSV/JSON with SID, CID, activity outcome, activity values, assay conditions
 
@@ -89,7 +91,7 @@ ORDER BY a.pchembl_value ASC;
 - ChEMBL 37+ will standardize activity_comment to "Not active" (currently inconsistent)
 - `data_validity_comment IS NULL` excludes records flagged for quality issues
 - Download full MySQL/PostgreSQL dump for bulk processing: https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/
-- ~133K explicitly labeled inactive records; ~500K+ with pChEMBL < 5
+- ~763K literature-curated inactive records (activity_comment variants); ~527K quality-filtered with pChEMBL < 5 (IC50/Ki/Kd/EC50, validated). See research/08 §1 for verified counts.
 
 **Output Format:** SDF, CSV, JSON via API; SQL dump for bulk
 
@@ -510,7 +512,7 @@ Models should span multiple paradigms to demonstrate benchmark utility:
 
 #### Experiment 10: LLM Extraction Quality (Task L2)
 - **Hypothesis:** Current LLMs can extract negative DTI results from abstracts with moderate accuracy, but struggle with hedged language and implicit negatives
-- **Design:** Evaluate all LLM baselines on L2 (200 annotated abstracts). Stratify by difficulty level (explicit, hedged, implicit). Compare entity-level F1 across models
+- **Design:** Evaluate all LLM baselines on L2 (100 annotated abstracts; see research/08 §6). Stratify by difficulty level (explicit, hedged, implicit). Compare entity-level F1 across models
 - **Metric:** Schema compliance, field-level F1, entity-level F1, STED score. Per-difficulty-level breakdown
 - **Expected result:** Schema compliance > 80% for all models; entity F1 60-80% for easy, 30-50% for hard; larger models (Llama 3.3 70B) outperform smaller (Mistral 7B) by 10-15%; all models struggle with hedged language (F1 drop 20%+)
 
