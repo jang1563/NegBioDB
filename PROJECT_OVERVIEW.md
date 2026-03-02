@@ -68,7 +68,8 @@ Biology-first, Science-extensible Architecture
 | [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, NeurIPS strategy, competitive positioning |
 | [research/07a_llm_benchmark_landscape_survey.md](research/07a_llm_benchmark_landscape_survey.md) | Survey of existing bio/chem LLM benchmarks and evaluation methods |
 | [research/07b_llm_benchmark_design.md](research/07b_llm_benchmark_design.md) | LLM benchmark: 6 tasks, evaluation methods, dual-track architecture |
-| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v4 — dual ML+LLM benchmark) |
+| [research/08_expert_review_and_feasibility.md](research/08_expert_review_and_feasibility.md) | Expert review responses, feasibility analysis, revised scope |
+| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v5 — feasibility-validated, revised scope) |
 
 ## Timeline
 - Project initiated: 2026-03-02

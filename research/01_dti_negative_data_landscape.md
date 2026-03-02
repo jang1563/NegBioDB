@@ -193,12 +193,13 @@ Most commonly used DTI training source, but models inherit positive bias → exc
 
 ### Priority Data Sources
 
-1. **PubChem BioAssay confirmatory data**: Largest experimentally confirmed negative source. Prioritize dose-response inactive over single-point
-2. **ChEMBL "Not Active" records**: pChEMBL < 5 + activity_comment based
-3. **HCDT 2.0 curated negatives**: 38,653 high-confidence negative DTI seed set
-4. **InertDB universally inactive compounds**: 3,205 compounds
-5. **DAVIS complete matrix**: Benchmark gold standard
-6. **Literature text mining**: Inactive data from supplementary materials
+1. **PubChem BioAssay confirmatory data**: Largest experimentally confirmed negative source. Prioritize dose-response inactive over single-point. License: Public domain.
+2. **ChEMBL "Not Active" records**: pChEMBL < 5 + activity_comment based. License: CC BY-SA 3.0 (viral — derived works must be CC BY-SA).
+3. **BindingDB (Kd/Ki > 10 uM)**: Quantitative binding measurements. License: CC BY.
+4. **DAVIS complete matrix**: Benchmark gold standard. License: Public/academic.
+5. **HCDT 2.0 curated negatives**: 38,653 high-confidence negative DTIs. **License: CC BY-NC-ND 4.0 — cannot redistribute derivatives. Use as validation reference only; independently extract from underlying sources (BindingDB, ChEMBL, GtoPdb, PubChem, TTD) using same >100 uM threshold.**
+6. **InertDB universally inactive compounds**: 3,205 compounds. **License: CC BY-NC — cannot include in commercial track. Provide optional download script only.**
+7. **Literature text mining**: Inactive data from supplementary materials. No license restriction on extracted facts.
 
 ### Essential Metadata to Record
 - Assay format / technology

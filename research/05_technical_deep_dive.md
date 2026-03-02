@@ -450,7 +450,7 @@ Models should span multiple paradigms to demonstrate benchmark utility:
 
 ## 5. Validation Experiments
 
-### 5.1 Core Validation Protocol (8 Experiments)
+### 5.1 ML Track Validation Experiments (Experiments 1-8)
 
 #### Experiment 1: NegBioDB vs. Random Negatives
 - **Hypothesis:** Models trained on NegBioDB's experimentally confirmed negatives outperform models trained with random negative sampling
@@ -500,7 +500,33 @@ Models should span multiple paradigms to demonstrate benchmark utility:
 - **Metric:** Coverage rate; additional negatives provided by NegBioDB
 - **Expected result:** 90%+ of LIT-PCBA negatives covered; NegBioDB adds 10-50× more targets
 
-### 5.2 Statistical Rigor Requirements
+### 5.2 LLM Track Validation Experiments (Experiments 9-12)
+
+#### Experiment 9: LLM vs. ML Comparison on Negative DTI Prediction
+- **Hypothesis:** Traditional ML models outperform LLMs on binary DTI prediction (active/inactive), but LLMs provide complementary reasoning that ML lacks
+- **Design:** Compare ML baselines (DeepDTA, GraphDTA, DrugBAN) on Task M1 with LLM baselines (Gemini Flash, Llama 3.3, Mistral 7B) on Task L1. Use the same compound-target test set, with L1 providing natural language descriptions of the same pairs M1 receives as SMILES+sequence
+- **Metric:** Compare LogAUC/AUPRC (M1) vs. Accuracy/MCC (L1) on matched test set; qualitative analysis of LLM reasoning for incorrectly predicted pairs
+- **Expected result:** ML models achieve 10-30% higher raw classification accuracy, but LLMs produce scientifically meaningful reasoning for their predictions; LLM performance improves significantly with few-shot examples vs. zero-shot
+
+#### Experiment 10: LLM Extraction Quality (Task L2)
+- **Hypothesis:** Current LLMs can extract negative DTI results from abstracts with moderate accuracy, but struggle with hedged language and implicit negatives
+- **Design:** Evaluate all LLM baselines on L2 (200 annotated abstracts). Stratify by difficulty level (explicit, hedged, implicit). Compare entity-level F1 across models
+- **Metric:** Schema compliance, field-level F1, entity-level F1, STED score. Per-difficulty-level breakdown
+- **Expected result:** Schema compliance > 80% for all models; entity F1 60-80% for easy, 30-50% for hard; larger models (Llama 3.3 70B) outperform smaller (Mistral 7B) by 10-15%; all models struggle with hedged language (F1 drop 20%+)
+
+#### Experiment 11: Prompt Strategy Comparison
+- **Hypothesis:** Chain-of-thought (CoT) prompting and few-shot examples significantly improve LLM performance on negative DTI tasks compared to zero-shot
+- **Design:** Evaluate all LLM baselines in 5 configurations (zero-shot, 3-shot, 5-shot, CoT, CoT+3-shot) across tasks L1, L2, L4
+- **Metric:** Absolute and relative performance gain per prompt strategy per task
+- **Expected result:** CoT improves L1 accuracy by 5-15%, few-shot improves L2 F1 by 10-20%, CoT+few-shot provides best results; diminishing returns from 3-shot to 5-shot; smaller models benefit more from few-shot examples than larger models
+
+#### Experiment 12: LLM-as-Judge Reliability
+- **Hypothesis:** Gemini Flash as LLM-as-Judge achieves substantial agreement (kappa > 0.6) with human annotations on Tasks L3, L5, L6
+- **Design:** Human-annotate 50 examples per task (L3, L5, L6) using the same 4-dimension rubric. Run Gemini Flash judge 3 times per example (majority vote). Compute Cohen's kappa and Pearson correlation per dimension
+- **Metric:** Cohen's kappa (inter-rater agreement), Pearson r (score correlation), per-dimension agreement rate
+- **Expected result:** kappa 0.5-0.7 (moderate to substantial agreement); scientific accuracy dimension has highest agreement (kappa ~0.7); specificity dimension has lowest (kappa ~0.5); overall correlation r > 0.6, validating use of LLM-as-Judge for benchmark evaluation
+
+### 5.3 Statistical Rigor Requirements
 
 - All experiments: 3 independent runs with different random seeds
 - Report mean ± standard deviation for all metrics

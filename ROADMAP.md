@@ -1,12 +1,12 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-02 (v4 — dual ML+LLM benchmark design added)
+> Last updated: 2026-03-02 (v5 — feasibility analysis, revised scope, expert review responses)
 
 ---
 
-## Critical Findings (Added March 2026)
+## Critical Findings (Updated March 2026)
 
-1. **HCDT 2.0 License: CC BY-NC-ND 4.0** — Cannot redistribute derivatives. Must independently recreate from underlying sources (BindingDB, ChEMBL, GtoPdb, PubChem, TTD) using >100 uM threshold. Factual data is not copyrightable.
+1. **HCDT 2.0 License: CC BY-NC-ND 4.0** — Cannot redistribute derivatives. Must independently recreate from underlying sources (BindingDB, ChEMBL, GtoPdb, PubChem, TTD). Use 10 uM primary threshold (not 100 uM) to differentiate.
 2. **InertDB License: CC BY-NC** — Cannot include in commercial track. Provide optional download script only.
 3. **NeurIPS 2026 D&B deadline: ~May 15, 2026** (~11 weeks from project start). Requires: downloadable data, Croissant metadata, code available, Datasheet for Datasets.
 4. **LIT-PCBA compromised** (2025 audit found data leakage) — Creates urgency for NegBioDB as replacement gold-standard.
@@ -14,6 +14,10 @@
 6. **No direct competitor exists** as of March 2026.
 7. **No LLM benchmark tests negative DTI tasks** — ChemBench, Mol-Instructions, MedQA, SciBench all lack negative result evaluation. NegBioBench LLM track is first-of-kind.
 8. **LLM evaluation also free** — Gemini Flash free tier as LLM-as-Judge + ollama local models as baselines. Flagship models (GPT-4, Claude) added post-stabilization only.
+9. **Data volume is NOT the bottleneck** — ChEMBL alone has ~527K quality inactive records (pchembl < 5, validated). PubChem has ~61M target-annotated confirmatory inactives. Estimated 200K+ unique compound-target pairs available. Minimum target raised to **10K curated entries** (from 5K).
+10. **PubChem FTP bulk is far superior to API** — `bioactivities.tsv.gz` (3 GB) contains all 301M bioactivity rows. Processing: < 1 day. API approach would take weeks.
+11. **LLM-as-Judge rate limit (250 RPD)** — Must-have tasks (L1, L2, L4) all use automated evaluation. Judge needed only for should-have L3 (1,530 calls = 6 days). All judge tasks with 3 models = 20 days. With 6 models = 39 days (NOT feasible for sprint).
+12. **Paper narrative must be problem-first** — "Existing benchmarks are broken" (Exp 1 + Exp 4), not "Here's a database." Database is the solution, not the contribution.
 
 ---
 
@@ -63,94 +67,114 @@ Stage 3: Validation
 - [ ] Implement compound standardization pipeline (RDKit: salt removal, normalization, InChIKey)
 - [ ] Implement target standardization pipeline (UniProt accession as canonical ID)
 - [ ] Set up cross-DB deduplication (InChIKey[0:14] connectivity layer)
+- [ ] Download all source data (see below — < 1 day total)
 
 ### Week 2-4: Data Extraction
 
+**Minimum target: 10K curated entries. Stretch: 20K+.**
+
 **Data Sources (License-Safe Only):**
 
-| Source | Target Volume | Method | License |
-|--------|--------------|--------|---------|
-| PubChem BioAssay (confirmatory inactive) | ~50K+ | PUG REST API, filter `activity_outcome=inactive` | Public domain |
-| ChEMBL "Not Active" + pChEMBL < 5 | ~133K | SQL query on downloaded dump | CC BY-SA 3.0 |
-| BindingDB (Kd/Ki > 10 uM) | ~30K+ | Bulk TSV download + filter | CC BY |
-| DAVIS complete matrix (pKd < 5) | ~27K | TDC Python download | Public/academic |
-| Independent HCDT-style extraction | ~38K | Query underlying sources at >100 uM threshold | Derived from public domain + CC BY-SA |
+| Source | Available Volume | Method | License |
+|--------|-----------------|--------|---------|
+| PubChem BioAssay (confirmatory inactive) | **~61M** (target-annotated) | **FTP bulk: `bioactivities.tsv.gz` (3 GB)** + `bioassays.tsv.gz` (52 MB) | Public domain |
+| ChEMBL pChEMBL < 5 (quality-filtered) | **~527K** records → ~100-200K unique pairs | **SQLite via `chembl_downloader`** (4.6 GB, 1h setup) | CC BY-SA 3.0 |
+| ChEMBL activity_comment "Not Active" | **~763K** (literature-curated) | SQL query on same SQLite dump | CC BY-SA 3.0 |
+| BindingDB (Kd/Ki > 10 uM) | **~30K+** | Bulk TSV download + filter | CC BY |
+| DAVIS complete matrix (pKd < 5) | **~27K** | TDC Python download | Public/academic |
 
 **NOT bundled (license issues):**
-- HCDT 2.0 (CC BY-NC-ND) — Use as validation reference only
+- HCDT 2.0 (CC BY-NC-ND) — Use as validation reference only; we use 10 uM threshold (not 100 uM) to differentiate
 - InertDB (CC BY-NC) — Optional download script for users
 
-- [ ] Build PubChem BioAssay extraction script (confirmatory > primary > counter-screen)
-- [ ] Build ChEMBL extraction SQL query (activity_comment + pChEMBL threshold)
-- [ ] Build BindingDB extraction script (filter Kd/Ki > threshold)
-- [ ] Integrate DAVIS matrix from TDC
-- [ ] Independently extract HCDT-equivalent negatives from underlying sources
-- [ ] Run compound/target standardization on all extracted data
-- [ ] Run cross-DB deduplication
-- [ ] Assign confidence tiers (Gold/Silver/Bronze/Copper)
+**PubChem FTP extraction pipeline (< 1 day):**
+```
+1. bioassays.tsv.gz → filter confirmatory AIDs with target annotations → ~260K AIDs
+2. bioactivities.tsv.gz (stream) → filter AID ∈ confirmatory, Outcome=Inactive → ~61M records
+3. Prioritize MLPCN/MLSCN assays (~4,500 AIDs, genuine HTS dose-response) for Silver tier
+4. Map SID→CID via Sid2CidSMILES.gz, targets via Aid2GeneidAccessionUniProt.gz
+```
 
-### Week 4-6: Benchmark Construction (ML + LLM)
+- [ ] Download PubChem FTP files (bioactivities.tsv.gz + bioassays.tsv.gz + mapping files)
+- [ ] Download ChEMBL SQLite via chembl_downloader
+- [ ] Download BindingDB bulk TSV
+- [ ] Build PubChem FTP extraction script (filter confirmatory + inactive + target-annotated)
+- [ ] Build ChEMBL extraction SQL query (activity_comment + pChEMBL threshold)
+- [ ] Build BindingDB extraction script (filter Kd/Ki > 10 uM, human targets)
+- [ ] Integrate DAVIS matrix from TDC
+- [ ] Run compound/target standardization on all extracted data
+- [ ] Run cross-DB deduplication + **overlap analysis** (vs DAVIS, TDC, DUD-E, LIT-PCBA)
+- [ ] Assign confidence tiers (Gold/Silver/Bronze/Copper)
+- [ ] Spot-check top 100 most-duplicated compounds (manual QC checkpoint)
+- [ ] Run data leakage check: NegBioDB test set ∩ existing benchmark train sets
+
+### Week 3-5: Benchmark Construction (ML + LLM)
 
 **ML Track:**
-- [ ] Implement 7 splitting strategies (Random, Cold-Compound, Cold-Target, Cold-Both, Temporal, Scaffold, DDB)
+- [ ] Implement 3 must-have splits (Random, Cold-Compound, Cold-Target) + DDB for Exp 4
 - [ ] Implement ML evaluation metrics: LogAUC[0.001,0.1], BEDROC, EF@1%, EF@5%, AUPRC, MCC, AUROC
+- [ ] (Should have) Add Cold-Both, Temporal, Scaffold splits
 
 **LLM Track:**
 - [ ] Design prompt templates for L1, L2, L4 (priority tasks)
 - [ ] Construct L1 dataset: 2,000 MCQ from NegBioDB entries (semi-automated)
-- [ ] Construct L2 dataset: annotate 200 PubMed abstracts with gold-standard JSON
-- [ ] Construct L4 dataset: 500 tested/untested compound-target pairs
+- [ ] Construct L2 dataset: **100 PubMed abstracts** (semi-automated: LLM first-pass + human correction, ~4 days)
+- [ ] Construct L4 dataset: 500 tested/untested pairs (**post-2024 data for test set** + trick pairs for anti-contamination)
 - [ ] Implement automated evaluation scripts (L1: accuracy/F1, L2: schema/entity F1, L4: classification F1)
-- [ ] Set up LLM-as-Judge pipeline (Gemini 2.5 Flash free tier)
-- [ ] (If time) Construct L3 dataset: 200 reasoning examples with expert rubrics
+- [ ] (Should have) Construct L3 dataset: 200 reasoning examples + set up LLM-as-Judge pipeline
 
 **Shared:**
 - [ ] Generate Croissant machine-readable metadata (NeurIPS mandatory)
 - [ ] Write Datasheet for Datasets (Gebru et al. template)
 
-### Week 5-8: Baseline Experiments (ML + LLM)
+### Week 5-7: Baseline Experiments (ML + LLM)
 
-**ML Baselines (minimum for submission):**
+**ML Baselines:**
 
-| Model | Type | Priority |
-|-------|------|----------|
-| DeepDTA | Sequence CNN | Must have |
-| GraphDTA | Graph neural network | Must have |
-| DrugBAN | Bilinear attention | Must have |
-| Random Forest | Traditional ML | Must have |
-| XGBoost | Traditional ML | Should have |
-| DTI-LM | Language model-based | Nice to have |
-| EviDTI | Evidential/uncertainty | Nice to have |
+| Model | Type | Priority | Runs (3 splits) |
+|-------|------|----------|-----------------|
+| DeepDTA | Sequence CNN | Must have | 3 |
+| GraphDTA | Graph neural network | Must have | 3 |
+| DrugBAN | Bilinear attention | Must have | 3 |
+| Random Forest | Traditional ML | Should have | 3 |
+| XGBoost | Traditional ML | Should have | 3 |
+| DTI-LM | Language model-based | Nice to have | 3 |
+| EviDTI | Evidential/uncertainty | Nice to have | 3 |
 
-**LLM Baselines (all free — minimum for submission):**
+**Must-have ML: 3 models × 3 splits = 9 baseline runs + 9 experiment runs = 18 total (~3-4 days GPU)**
+
+**LLM Baselines (all free):**
 
 | Model | Access | Priority |
 |-------|--------|----------|
-| Gemini 2.5 Flash | Free API | Must have |
+| Gemini 2.5 Flash | Free API (250 RPD) | Must have |
 | Llama 3.3 70B | Ollama local | Must have |
 | Mistral 7B | Ollama local | Must have |
 | Phi-3.5 3.8B | Ollama local | Should have |
 | Qwen2.5 7B | Ollama local | Should have |
-| Gemini 2.5 Flash-Lite | Free API | Nice to have |
 
-**LLM flagship models (post-stabilization, NOT for NeurIPS sprint):**
+**Must-have LLM: 3 models × 3 tasks (L1,L2,L4) × 2 configs (zero-shot, 3-shot) = 18 eval runs (all automated)**
+
+**Flagship models (post-stabilization, NOT for NeurIPS sprint):**
 - GPT-4/4.1, Claude Sonnet/Opus, Gemini Pro — added to leaderboard later
 
-**Core validation experiments (minimum for paper):**
-- [ ] Exp 1: NegBioDB confirmed negatives vs. random negatives (ML training comparison)
-- [ ] Exp 4: Node degree bias quantification (DDB vs. random split performance gap)
-- [ ] Exp 5: Cross-database consistency (agreement rate for overlapping pairs)
-- [ ] Exp 7: Target class coverage analysis vs. existing benchmarks
-- [ ] **Exp 9 (NEW): LLM vs. ML comparison on negative DTI prediction (L1 vs. M1)**
-- [ ] **Exp 10 (NEW): LLM extraction quality (L2 entity F1 across models)**
+**Must-have experiments (minimum for paper):**
+- [ ] **Exp 1: NegBioDB vs. random negatives** (the main result — 3 ML models, random split)
+- [ ] **Exp 4: Node degree bias** (DDB vs. random split, 3 ML models)
+- [ ] **Exp 9: LLM vs. ML comparison** (L1 vs. M1 on matched test set — reuses baseline results)
+- [ ] **Exp 10: LLM extraction quality** (L2 entity F1 — reuses baseline results)
 
-**Additional experiments (strengthen paper):**
+**Should-have experiments (strengthen paper, no extra training):**
+- [ ] Exp 5: Cross-database consistency (analysis only, no training)
+- [ ] Exp 7: Target class coverage analysis (analysis only)
+- [ ] Exp 11: Prompt strategy comparison (add CoT config to LLM baselines)
+- [ ] L3 task + Exp 12: LLM-as-Judge reliability (1,530 judge calls = 6 days)
+
+**Nice-to-have experiments (defer to camera-ready):**
 - [ ] Exp 2: Confidence tier discrimination
-- [ ] Exp 3: Assay context dependency
+- [ ] Exp 3: Assay context dependency (with assay format stratification)
 - [ ] Exp 6: Temporal generalization
-- [ ] Exp 8: LIT-PCBA recapitulation and extension
-- [ ] Exp 11: Prompt strategy comparison (zero-shot vs few-shot vs CoT on LLM tasks)
-- [ ] Exp 12: LLM-as-Judge reliability (kappa vs human annotations)
+- [ ] Exp 8: LIT-PCBA recapitulation
 
 ### Week 8-10: Paper Writing
 
@@ -177,9 +201,11 @@ Stage 3: Validation
 - [ ] Supplementary materials table extraction (pilot)
 
 ### Benchmark Refinement
-- [ ] Add remaining baseline models
-- [ ] Complete all 8 validation experiments
-- [ ] Build public leaderboard (simple GitHub-based)
+- [ ] Add remaining ML and LLM baseline models
+- [ ] Complete all 12 validation experiments (8 ML + 4 LLM)
+- [ ] Complete LLM tasks L5, L6 datasets
+- [ ] Add flagship LLM evaluations (GPT-4, Claude)
+- [ ] Build public leaderboard (simple GitHub-based, separate ML and LLM tracks)
 
 ### Perspective Paper (Parallel Track)
 - [ ] Write "Publication Bias in DTI Prediction" perspective
@@ -371,10 +397,11 @@ DTIContext {
 - [ ] Begin Gene Function (KO/KD) negative data collection
 
 ### 3.2 Benchmark Evolution (NegBioBench v1.0)
-- [ ] Expand tasks: Failure Diagnosis, Experimental Design Critique, Literature Contradiction Detection
-- [ ] Multi-modal: integrate protein structures, assay images
-- [ ] LLM-specific evaluation tasks (reasoning about negative results)
-- [ ] Regular leaderboard updates
+- [ ] Track A expansion: multi-modal integration (protein structures, assay images)
+- [ ] Track B expansion: additional tasks — Failure Diagnosis, Experimental Design Critique, Literature Contradiction Detection
+- [ ] Track C: Cross-track ensemble evaluation (ML + LLM combined prediction)
+- [ ] Specialized bio-LLM evaluations (LlaSMol, BioMedGPT, DrugChat)
+- [ ] Regular leaderboard updates (both ML and LLM tracks)
 
 ### 3.3 Commercialization
 - [ ] Launch tiered API access (free / pro / enterprise)
@@ -414,8 +441,8 @@ DTI (Phase 1-3)
 | Milestone | Target Date | Deliverable |
 |-----------|------------|-------------|
 | Schema v1.0 finalized | Week 2 (Mar 2026) | SQLite schema + standardization pipeline |
-| MVP dataset (5K+ entries) | Week 4-6 (Apr 2026) | Curated negative DTI dataset |
-| Baseline experiments complete | Week 8 (Apr 2026) | 4+ models × 3+ splits × 7 metrics |
+| Data extraction complete | Week 3-4 (Mar-Apr 2026) | **10K+ curated** negative DTI entries (target: 20K+) |
+| Baseline experiments complete | Week 7 (Apr 2026) | 3 ML models × 3 splits + 3 LLM models × 3 tasks |
 | **ArXiv preprint** | **Week 9 (May 2026)** | **Priority establishment** |
 | **NeurIPS 2026 submission** | **Week 11 (~May 15, 2026)** | **Benchmark paper** |
 | Perspective paper submitted | Month 4-6 | Publication bias in DTI |
@@ -457,3 +484,4 @@ DTI (Phase 1-3)
 | [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, NeurIPS strategy, competitive positioning |
 | [research/07a_llm_benchmark_landscape_survey.md](research/07a_llm_benchmark_landscape_survey.md) | Survey of existing bio/chem LLM benchmarks and evaluation methods |
 | [research/07b_llm_benchmark_design.md](research/07b_llm_benchmark_design.md) | LLM benchmark tasks, evaluation methods, dual-track architecture |
+| [research/08_expert_review_and_feasibility.md](research/08_expert_review_and_feasibility.md) | Expert review responses, feasibility analysis, concrete decisions |

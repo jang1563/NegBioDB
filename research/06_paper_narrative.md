@@ -10,12 +10,12 @@
 
 | # | Title | Style | Target Venue |
 |---|-------|-------|-------------|
-| 1 | **NegBioDB: A Curated Database and Benchmark for Experimentally Confirmed Negative Drug-Target Interactions** | Descriptive | NeurIPS D&B / J. Cheminformatics |
+| 1 | **NegBioDB: A Curated Database and Dual ML+LLM Benchmark for Experimentally Confirmed Negative Drug-Target Interactions** | Descriptive | NeurIPS D&B / J. Cheminformatics |
 | 2 | **Beyond Assumed Negatives: NegBioDB Brings Experimental Rigor to Drug-Target Interaction Benchmarking** | Provocative | NeurIPS D&B |
 | 3 | **The Missing Negatives: A Large-Scale Curated Resource of Confirmed Drug-Target Non-Interactions** | Problem-framing | Nature Scientific Data |
-| 4 | **NegBioDB: Bridging the Negative Data Gap in Computational Drug Discovery** | Gap-focused | General |
+| 4 | **NegBioDB: Bridging the Negative Data Gap in Computational Drug Discovery with a Dual ML+LLM Benchmark** | Gap-focused | General |
 
-**Recommended: Title #2** for NeurIPS (provocative, clearly states the problem and solution)
+**Recommended: Title #2** for NeurIPS (provocative, clearly states the problem and solution; dual-track is detailed in abstract)
 **Recommended: Title #1** for J. Cheminformatics / Nature Scientific Data (descriptive, precise)
 
 ---
@@ -24,11 +24,11 @@
 
 ### Draft Abstract (~250 words)
 
-> Machine learning models for drug-target interaction (DTI) prediction are trained and evaluated using benchmarks where "negative" examples — compound-target pairs with no interaction — are either assumed from untested pairs or randomly sampled from unknown interaction space. Since less than 1% of all possible drug-target combinations have been experimentally tested, this "untested = negative" assumption introduces systematic bias that inflates reported performance and obscures real-world generalization. Recent audits have shown that even carefully designed benchmarks like LIT-PCBA suffer from data leakage and methodological flaws.
+> Machine learning models for drug-target interaction (DTI) prediction are trained and evaluated using benchmarks where "negative" examples — compound-target pairs with no interaction — are either assumed from untested pairs or randomly sampled from unknown interaction space. Since less than 1% of all possible drug-target combinations have been experimentally tested, this "untested = negative" assumption introduces systematic bias that inflates reported performance and obscures real-world generalization. Meanwhile, no existing benchmark evaluates whether large language models (LLMs) can reason about compound inactivity — a critical gap as LLMs are increasingly applied to drug discovery.
 >
 > We introduce NegBioDB, the first large-scale database dedicated to **experimentally confirmed negative** drug-target interactions. NegBioDB integrates inactive results from PubChem BioAssay confirmatory screens, ChEMBL quantitative assays, BindingDB binding measurements, and literature extraction, encompassing [X]K curated negative DTI pairs across [Y] targets spanning kinases, GPCRs, ion channels, nuclear receptors, and emerging target classes. Each entry is assigned a hierarchical confidence tier (Gold through Copper) based on assay quality, dose-response confirmation, and replication.
 >
-> We present NegBioBench, a standardized evaluation suite with seven splitting strategies (including cold-compound, cold-target, temporal, and degree-balanced splits), early-enrichment metrics (LogAUC, BEDROC, EF@1%), and baselines from [N] established DTI models. We demonstrate that (1) models trained on experimentally confirmed negatives show significantly higher precision than those trained with random negatives, (2) existing benchmark performance is inflated by 10-20% due to node degree bias, and (3) assay context critically determines inactivity classification for 5-15% of compound-target pairs.
+> We present NegBioBench, a **dual-track evaluation suite**: Track A evaluates traditional ML models with seven splitting strategies (cold-compound, cold-target, temporal, degree-balanced), early-enrichment metrics (LogAUC, BEDROC, EF@1%), and baselines from [N] established DTI models. Track B is the first LLM benchmark for negative DTI reasoning, comprising six tasks: negative DTI classification, negative result extraction from literature, inactivity reasoning, tested-versus-untested discrimination, assay context reasoning, and evidence quality assessment — evaluated across [M] LLMs using automated metrics and LLM-as-Judge protocols. We demonstrate that (1) models trained on experimentally confirmed negatives show significantly higher precision than those trained with random negatives, (2) existing benchmark performance is inflated by 10-20% due to node degree bias, (3) assay context critically determines inactivity classification for 5-15% of compound-target pairs, and (4) current LLMs struggle to distinguish experimentally tested negatives from untested pairs.
 >
 > NegBioDB is freely available under CC BY-SA 4.0 with a Python API, standardized downloads, and public leaderboards.
 
@@ -72,14 +72,27 @@ No. Our contributions beyond aggregation include:
 3. **Assay-context-aware inactivity** — capturing conditional negatives (compound inactive under condition A, active under condition B)
 4. **Degree-balanced benchmark design** — addressing the node degree bias that invalidates existing DTI benchmarks
 5. **Standardized negative evaluation protocol** — early enrichment metrics and prospective-style temporal splits
+6. **First LLM benchmark for negative DTI** — six novel tasks evaluating LLM reasoning about compound inactivity, a capability entirely absent from existing benchmarks (ChemBench, Mol-Instructions, MedQA, SciBench)
+7. **Dual ML+LLM track design** — bridges the cheminformatics and NLP/LLM communities in a single benchmark
+
+### 3.6 "Why include LLM evaluation? LLMs aren't used for DTI prediction."
+
+**Response:**
+LLMs are increasingly applied to drug discovery (DrugAgent ICLR 2025, DrugChat, MolecularGPT). However:
+1. **No existing benchmark** tests whether LLMs can reason about negative DTI data — ChemBench, Mol-Instructions, SciBench all focus on positive-outcome tasks
+2. LLMs are now being used for **literature extraction** — testing their ability to extract negative results (Task L2) has immediate practical value
+3. The **tested-vs-untested discrimination** task (L4) is directly relevant to the core problem: LLMs must distinguish "absence of evidence" from "evidence of absence"
+4. Fine-tuned small LLMs (Phi-3.5, 2.7B parameters) already match GPT-4 on DDI tasks — benchmarking their capabilities on negative DTI is timely
+5. The dual-track design maximizes the benchmark's audience across both communities
 
 ### 3.5 "What impact will this have?"
 
 **Response:**
-1. **Methodological**: Every DTI prediction paper currently uses assumed negatives. NegBioDB enables true performance assessment.
+1. **Methodological**: Every DTI prediction paper currently uses assumed negatives. NegBioDB enables true performance assessment for both ML models and LLMs.
 2. **Practical**: Pharma companies waste resources pursuing computationally predicted "hits" that were already experimentally shown to be inactive. NegBioDB directly reduces this waste.
 3. **Scientific**: Negative results contain biological information (why a compound doesn't bind) that is lost when negatives are randomly sampled.
 4. **Community**: Provides infrastructure and incentives for depositing negative results, addressing the publication bias problem.
+5. **LLM evaluation**: As LLMs are increasingly applied to drug discovery, NegBioBench Track B provides the first rigorous evaluation of their ability to reason about negative outcomes — a capability critical for real-world deployment.
 
 ---
 
@@ -115,10 +128,14 @@ No. Our contributions beyond aggregation include:
 - [ ] MVP dataset: ≥5,000 curated negative DTIs from PubChem + ChEMBL
 - [ ] Confidence tier assignment for all entries
 - [ ] 3+ splitting strategies implemented (random, cold compound, cold target)
-- [ ] 3+ baseline models evaluated (DeepDTA, GraphDTA, DrugBAN)
-- [ ] Core metrics: LogAUC, AUPRC, MCC (minimum)
+- [ ] 3+ ML baseline models evaluated (DeepDTA, GraphDTA, DrugBAN)
+- [ ] Core ML metrics: LogAUC, AUPRC, MCC (minimum)
+- [ ] LLM tasks L1 (Classification), L2 (Extraction), L4 (Tested-vs-Untested) constructed
+- [ ] 2-3 free LLM baselines evaluated (Gemini Flash, Llama 3.3, Mistral 7B)
+- [ ] LLM automated evaluation scripts for L1, L2, L4
 - [ ] Experiment 1 (NegBioDB vs. random negatives) completed
 - [ ] Experiment 4 (node degree bias) completed
+- [ ] Experiment 9 (LLM vs ML comparison on L1 vs M1) completed
 - [ ] Python download script (`pip install negbiodb` or simple script)
 - [ ] Croissant metadata
 - [ ] Datasheet
@@ -126,12 +143,17 @@ No. Our contributions beyond aggregation include:
 **Nice to Have (strengthens paper):**
 - [ ] 10K+ entries
 - [ ] All 7 splitting strategies
-- [ ] All 8 validation experiments
-- [ ] Web interface
-- [ ] LLM text mining pipeline results
-- [ ] All 7 baseline models
+- [ ] All 12 validation experiments (8 ML + 4 LLM)
+- [ ] LLM task L3 (Reasoning) with LLM-as-Judge validation
+- [ ] LLM task L6 (Evidence Assessment)
+- [ ] More LLM baselines (Phi-3.5, Qwen2.5)
+- [ ] All 7 ML baseline models
+- [ ] Experiment 10-12 (LLM extraction quality, prompt comparison, judge reliability)
 
 **Can Defer to Camera-Ready:**
+- [ ] LLM task L5 (Conditional reasoning)
+- [ ] Track C: Cross-track ensemble (C1)
+- [ ] Flagship LLM evaluations (GPT-4, Claude)
 - [ ] Community submission portal
 - [ ] Full web platform
 - [ ] Leaderboard system
@@ -196,7 +218,7 @@ As of March 2026, no published resource matches NegBioDB's scope:
 
 ### 6.2 Key Differentiators (Elevator Pitch)
 
-"NegBioDB is the first resource that treats experimentally confirmed negative drug-target interactions as **first-class citizens** rather than afterthoughts. While PubChem buries inactive data in uncurated dumps and ChEMBL barely acknowledges it, NegBioDB curates, standardizes, confidence-scores, and benchmarks negative DTI data at scale. Every compound-target pair in NegBioDB was experimentally tested and found inactive — no assumptions, no random sampling."
+"NegBioDB is the first resource that treats experimentally confirmed negative drug-target interactions as **first-class citizens** rather than afterthoughts. While PubChem buries inactive data in uncurated dumps and ChEMBL barely acknowledges it, NegBioDB curates, standardizes, confidence-scores, and benchmarks negative DTI data at scale. NegBioBench is the first **dual ML+LLM benchmark** for negative DTI data: Track A evaluates traditional ML models with degree-balanced splits and early-enrichment metrics, while Track B introduces six novel tasks that test whether LLMs can reason about, extract, and assess negative drug-target evidence. Every compound-target pair in NegBioDB was experimentally tested and found inactive — no assumptions, no random sampling."
 
 ### 6.3 Potential Competitors to Watch
 
@@ -253,12 +275,17 @@ As of March 2026, no published resource matches NegBioDB's scope:
 - Panel B: Confidence tier system with examples
 - Panel C: Database statistics (targets, compounds, pairs by tier and target class)
 
-### 8.3 Figure 3: NegBioBench Evaluation
-- Panel A: Baseline model comparison across 7 metrics
-- Panel B: Performance across splitting strategies (heatmap)
+### 8.3 Figure 3: NegBioBench Dual-Track Architecture
+- Panel A: Dual-track overview diagram (Track A: ML tasks M1-M3, Track B: LLM tasks L1-L6)
+- Panel B: ML baseline comparison across 7 metrics × splitting strategies (heatmap)
 - Panel C: NegBioDB vs. random negatives (Experiment 1 results)
 
-### 8.4 Figure 4: Insights from Negative Data
+### 8.4 Figure 4: LLM Benchmark Results
+- Panel A: LLM performance across tasks L1, L2, L4 (grouped bar chart: Gemini Flash vs. Llama 3.3 vs. Mistral 7B)
+- Panel B: LLM vs. ML comparison on negative DTI prediction (Experiment 9: L1 vs. M1)
+- Panel C: Tested-vs-Untested discrimination accuracy by model (L4 — unique selling point)
+
+### 8.5 Figure 5: Insights from Negative Data
 - Panel A: Node degree bias quantification (Experiment 4)
 - Panel B: Assay context-dependent inactivity (Experiment 3)
 - Panel C: Target class coverage comparison vs. existing benchmarks (Experiment 7)
@@ -267,12 +294,14 @@ As of March 2026, no published resource matches NegBioDB's scope:
 
 ## 9. Related Work Section Outline
 
-1. **DTI Prediction Landscape** — Brief survey of methods (DeepDTA → DrugBAN → LLM-based)
+1. **DTI Prediction Landscape** — Brief survey of methods (DeepDTA → DrugBAN → LLM-based: DrugAgent, MolecularGPT)
 2. **The Negative Data Problem** — Publication bias, "untested = negative," performance inflation
-3. **Existing Benchmarks** — MoleculeNet, TDC, DAVIS, DUD-E, LIT-PCBA — and their limitations
-4. **Recent Negative Data Resources** — HCDT 2.0, InertDB, ExCAPE-DB, WelQrate
-5. **Quality-Aware Data Curation** — BAO ontology, WelQrate hierarchical QC, Z-factor standards
-6. **Positioning NegBioDB** — First to combine: (a) experimentally confirmed, (b) curated + tiered, (c) ML-ready benchmark, (d) multi-source, (e) diverse target classes
+3. **Existing ML Benchmarks** — MoleculeNet, TDC, DAVIS, DUD-E, LIT-PCBA — and their limitations
+4. **LLM Benchmarks for Science/Drug Discovery** — ChemBench, Mol-Instructions, MedQA, SciBench, LAB-Bench — none address negative results or DTI inactivity reasoning
+5. **Recent Negative Data Resources** — HCDT 2.0, InertDB, ExCAPE-DB, WelQrate
+6. **Quality-Aware Data Curation** — BAO ontology, WelQrate hierarchical QC, Z-factor standards
+7. **LLM Evaluation Methods** — G-Eval, MT-Bench, STED, LLM-as-Judge protocols, anti-contamination strategies
+8. **Positioning NegBioDB** — First to combine: (a) experimentally confirmed, (b) curated + tiered, (c) ML-ready benchmark, (d) multi-source, (e) diverse target classes, (f) dual ML+LLM evaluation, (g) negative DTI reasoning tasks for LLMs
 
 ---
 

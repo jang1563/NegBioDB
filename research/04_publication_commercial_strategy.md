@@ -151,15 +151,15 @@
 
 | Component | License | Rationale |
 |-----------|---------|-----------|
-| Core data | CC BY 4.0 or CC0 | Maximize academic adoption/citations |
-| Value-added (API, analytics) | Commercial license | Revenue generation |
+| Core data | **CC BY-SA 4.0** | Required by ChEMBL CC BY-SA 3.0 viral clause (one-way upgrade 3.0→4.0). See [research/05_technical_deep_dive.md](research/05_technical_deep_dive.md) §2 for full license analysis |
+| Value-added (API, analytics) | Commercial license | Revenue generation (separate from core data) |
 | Open-source code | MIT or Apache 2.0 | Community contributions |
 
 ### Dual-track Model
 
 ```
 Open Track (Academic/Community):
-├── Core dataset: CC BY 4.0
+├── Core dataset: CC BY-SA 4.0 (required by ChEMBL viral clause)
 ├── Python library: MIT license
 ├── Web interface: free access
 └── Leaderboards: open participation
@@ -241,7 +241,7 @@ Commercial Track (Pharma/Enterprise):
 ## 9. Recommended Commercialization Roadmap
 
 ### Phase 1 — Build Adoption (Open)
-- Core dataset: CC BY 4.0
+- Core dataset: CC BY-SA 4.0
 - Python library (`pip install negbiodb`)
 - Free web interface
 - Public leaderboards
