@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-02 (v3 — strengthened with license, timeline, and benchmark findings)
+> Last updated: 2026-03-02 (v4 — dual ML+LLM benchmark design added)
 
 ---
 
@@ -12,6 +12,8 @@
 4. **LIT-PCBA compromised** (2025 audit found data leakage) — Creates urgency for NegBioDB as replacement gold-standard.
 5. **Recommended NegBioDB License: CC BY-SA 4.0** — Compatible with ChEMBL (CC BY-SA 3.0) via one-way upgrade.
 6. **No direct competitor exists** as of March 2026.
+7. **No LLM benchmark tests negative DTI tasks** — ChemBench, Mol-Instructions, MedQA, SciBench all lack negative result evaluation. NegBioBench LLM track is first-of-kind.
+8. **LLM evaluation also free** — Gemini Flash free tier as LLM-as-Judge + ollama local models as baselines. Flagship models (GPT-4, Claude) added post-stabilization only.
 
 ---
 
@@ -87,23 +89,28 @@ Stage 3: Validation
 - [ ] Run cross-DB deduplication
 - [ ] Assign confidence tiers (Gold/Silver/Bronze/Copper)
 
-### Week 4-6: Benchmark Construction
+### Week 4-6: Benchmark Construction (ML + LLM)
 
-- [ ] Implement 7 splitting strategies:
-  1. Random (stratified 70/10/20)
-  2. Cold compound (Butina clustering)
-  3. Cold target (by UniProt accession)
-  4. Cold both (compound + target clusters)
-  5. Temporal (train < 2020, val 2020-2022, test > 2022)
-  6. Scaffold (Murcko scaffold clustering)
-  7. DDB (Degree Distribution Balanced)
-- [ ] Implement evaluation metric suite: LogAUC[0.001,0.1], BEDROC, EF@1%, EF@5%, AUPRC, MCC, AUROC
+**ML Track:**
+- [ ] Implement 7 splitting strategies (Random, Cold-Compound, Cold-Target, Cold-Both, Temporal, Scaffold, DDB)
+- [ ] Implement ML evaluation metrics: LogAUC[0.001,0.1], BEDROC, EF@1%, EF@5%, AUPRC, MCC, AUROC
+
+**LLM Track:**
+- [ ] Design prompt templates for L1, L2, L4 (priority tasks)
+- [ ] Construct L1 dataset: 2,000 MCQ from NegBioDB entries (semi-automated)
+- [ ] Construct L2 dataset: annotate 200 PubMed abstracts with gold-standard JSON
+- [ ] Construct L4 dataset: 500 tested/untested compound-target pairs
+- [ ] Implement automated evaluation scripts (L1: accuracy/F1, L2: schema/entity F1, L4: classification F1)
+- [ ] Set up LLM-as-Judge pipeline (Gemini 2.5 Flash free tier)
+- [ ] (If time) Construct L3 dataset: 200 reasoning examples with expert rubrics
+
+**Shared:**
 - [ ] Generate Croissant machine-readable metadata (NeurIPS mandatory)
 - [ ] Write Datasheet for Datasets (Gebru et al. template)
 
-### Week 5-8: Baseline Experiments
+### Week 5-8: Baseline Experiments (ML + LLM)
 
-**Minimum baselines for submission:**
+**ML Baselines (minimum for submission):**
 
 | Model | Type | Priority |
 |-------|------|----------|
@@ -115,17 +122,35 @@ Stage 3: Validation
 | DTI-LM | Language model-based | Nice to have |
 | EviDTI | Evidential/uncertainty | Nice to have |
 
+**LLM Baselines (all free — minimum for submission):**
+
+| Model | Access | Priority |
+|-------|--------|----------|
+| Gemini 2.5 Flash | Free API | Must have |
+| Llama 3.3 70B | Ollama local | Must have |
+| Mistral 7B | Ollama local | Must have |
+| Phi-3.5 3.8B | Ollama local | Should have |
+| Qwen2.5 7B | Ollama local | Should have |
+| Gemini 2.5 Flash-Lite | Free API | Nice to have |
+
+**LLM flagship models (post-stabilization, NOT for NeurIPS sprint):**
+- GPT-4/4.1, Claude Sonnet/Opus, Gemini Pro — added to leaderboard later
+
 **Core validation experiments (minimum for paper):**
-- [ ] Exp 1: NegBioDB confirmed negatives vs. random negatives (training comparison)
+- [ ] Exp 1: NegBioDB confirmed negatives vs. random negatives (ML training comparison)
 - [ ] Exp 4: Node degree bias quantification (DDB vs. random split performance gap)
 - [ ] Exp 5: Cross-database consistency (agreement rate for overlapping pairs)
 - [ ] Exp 7: Target class coverage analysis vs. existing benchmarks
+- [ ] **Exp 9 (NEW): LLM vs. ML comparison on negative DTI prediction (L1 vs. M1)**
+- [ ] **Exp 10 (NEW): LLM extraction quality (L2 entity F1 across models)**
 
 **Additional experiments (strengthen paper):**
 - [ ] Exp 2: Confidence tier discrimination
 - [ ] Exp 3: Assay context dependency
 - [ ] Exp 6: Temporal generalization
 - [ ] Exp 8: LIT-PCBA recapitulation and extension
+- [ ] Exp 11: Prompt strategy comparison (zero-shot vs few-shot vs CoT on LLM tasks)
+- [ ] Exp 12: LLM-as-Judge reliability (kappa vs human annotations)
 
 ### Week 8-10: Paper Writing
 
@@ -275,17 +300,40 @@ DTIContext {
 
 ---
 
-## Benchmark Design (NegBioBench)
+## Benchmark Design (NegBioBench) — Dual ML + LLM Track
 
-### Task Types
+### Track A: Traditional ML Tasks
 
 | Task | Input | Output | Primary Metric |
 |------|-------|--------|----------------|
-| **DTI Binary Prediction** | (compound SMILES, target sequence) | Interacting / Non-interacting | LogAUC[0.001,0.1], AUPRC |
-| **Negative Confidence Prediction** | (compound, target, assay context) | Confidence tier | Weighted F1, MCC |
-| **Counterfactual Reasoning** | Negative result + condition change | Predicted new outcome | Accuracy + reasoning quality |
+| **M1: DTI Binary Prediction** | (compound SMILES, target sequence) | Active / Inactive | LogAUC[0.001,0.1], AUPRC |
+| **M2: Negative Confidence Prediction** | (SMILES, sequence, assay features) | Gold/Silver/Bronze/Copper | Weighted F1, MCC |
+| **M3: Activity Value Regression** | (SMILES, sequence) | pIC50 / pKd | RMSE, R², Spearman ρ |
 
-### Splitting Strategies (7 total)
+**ML Baselines:** DeepDTA, GraphDTA, DrugBAN, RF, XGBoost, DTI-LM, EviDTI
+
+### Track B: LLM Tasks
+
+| Task | Input | Output | Metric | Eval Method |
+|------|-------|--------|--------|-------------|
+| **L1: Negative DTI Classification** | Natural language description | Active/Inactive/Inconclusive/Conditional (MCQ) | Accuracy, F1, MCC | Automated |
+| **L2: Negative Result Extraction** | Paper abstract | Structured JSON (compound, target, outcome) | Schema compliance, Entity F1, STED | Automated |
+| **L3: Inactivity Reasoning** | Confirmed negative + context | Scientific explanation | 4-dim rubric (accuracy, reasoning, completeness, specificity) | LLM-as-Judge + human sample |
+| **L4: Tested-vs-Untested Discrimination** | Compound-target pairs | Tested/Untested + evidence | Accuracy, F1, evidence quality | Automated + spot-check |
+| **L5: Assay Context Reasoning** | Negative result + condition changes | Prediction + reasoning per scenario | Prediction accuracy, reasoning quality | LLM-as-Judge |
+| **L6: Evidence Quality Assessment** | Negative result + metadata | Confidence tier + justification | Tier F1, justification quality | Automated + LLM-judge |
+
+**LLM Baselines (Phase 1 — Free):** Gemini 2.5 Flash, Llama 3.3, Mistral 7B, Phi-3.5, Qwen2.5
+**LLM Baselines (Phase 2 — Flagship):** GPT-4, Claude Sonnet/Opus, Gemini Pro
+**LLM-as-Judge:** Gemini 2.5 Flash free tier (validated against human annotations)
+
+### Track C: Cross-Track (Future)
+
+| Task | Description |
+|------|-------------|
+| **C1: Ensemble Prediction** | Combine ML model scores + LLM reasoning — does LLM improve ML? |
+
+### Splitting Strategies (7 total, for Track A)
 1. Random (stratified 70/10/20)
 2. Cold compound (Butina clustering on Murcko scaffolds)
 3. Cold target (by UniProt accession)
@@ -294,7 +342,7 @@ DTIContext {
 6. Scaffold (Murcko scaffold cluster-based)
 7. DDB — Degree Distribution Balanced (addresses node degree bias)
 
-### Evaluation Metrics
+### Evaluation Metrics (Track A)
 
 | Metric | Type | Role |
 |--------|------|------|
@@ -304,6 +352,12 @@ DTIContext {
 | **AUPRC** | Ranking | **Secondary ranking metric** |
 | **MCC** | Classification | Balanced classification |
 | **AUROC** | Ranking | Backward compatibility only (not for ranking) |
+
+### LLM Evaluation Configuration
+- All LLM tasks evaluated in: zero-shot, 3-shot, 5-shot, CoT, CoT+3-shot
+- 3 runs per evaluation, report mean ± std
+- Temperature = 0, prompts version-controlled
+- Anti-contamination: temporal holdout + paraphrased variants + contamination detection
 
 ---
 
@@ -399,5 +453,7 @@ DTI (Phase 1-3)
 | [research/02_benchmark_analysis.md](research/02_benchmark_analysis.md) | Analysis of existing DTI benchmarks and their negative handling |
 | [research/03_data_collection_methodology.md](research/03_data_collection_methodology.md) | Methodologies for collecting and curating negative data |
 | [research/04_publication_commercial_strategy.md](research/04_publication_commercial_strategy.md) | Publication venues, funding, commercialization |
-| [research/05_technical_deep_dive.md](research/05_technical_deep_dive.md) | Data access APIs, license analysis, dedup, baselines, metrics |
+| [research/05_technical_deep_dive.md](research/05_technical_deep_dive.md) | Data access APIs, license analysis, dedup, ML baselines, metrics |
 | [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, NeurIPS strategy, competitive positioning |
+| [research/07a_llm_benchmark_landscape_survey.md](research/07a_llm_benchmark_landscape_survey.md) | Survey of existing bio/chem LLM benchmarks and evaluation methods |
+| [research/07b_llm_benchmark_design.md](research/07b_llm_benchmark_design.md) | LLM benchmark tasks, evaluation methods, dual-track architecture |

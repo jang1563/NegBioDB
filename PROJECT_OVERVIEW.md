@@ -1,6 +1,6 @@
 # NegBioDB: Negative Results Database for Drug-Target Interactions
 
-> Biology-first, Science-extensible negative results database and benchmark for AI/ML
+> Biology-first, Science-extensible negative results database and dual ML+LLM benchmark
 
 ## Project Vision
 
@@ -66,7 +66,9 @@ Biology-first, Science-extensible Architecture
 | [research/04_publication_commercial_strategy.md](research/04_publication_commercial_strategy.md) | Academic publication and commercialization strategy |
 | [research/05_technical_deep_dive.md](research/05_technical_deep_dive.md) | Data access APIs, license analysis, deduplication, baselines, metrics |
 | [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, NeurIPS strategy, competitive positioning |
-| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v3 — accelerated for NeurIPS 2026) |
+| [research/07a_llm_benchmark_landscape_survey.md](research/07a_llm_benchmark_landscape_survey.md) | Survey of existing bio/chem LLM benchmarks and evaluation methods |
+| [research/07b_llm_benchmark_design.md](research/07b_llm_benchmark_design.md) | LLM benchmark: 6 tasks, evaluation methods, dual-track architecture |
+| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v4 — dual ML+LLM benchmark) |
 
 ## Timeline
 - Project initiated: 2026-03-02
