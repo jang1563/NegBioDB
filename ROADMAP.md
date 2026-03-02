@@ -4,13 +4,48 @@
 
 ---
 
+## Cost Strategy
+
+**Pre-publication cost target: $0.** All data sources are free. LLM pipeline uses free tiers and local models only.
+
+### LLM Pipeline (Zero Cost)
+
+```
+Stage 1: Coarse Filtering ("Does this paper contain negative DTI results?")
+  → Mistral 7B local via ollama (no rate limit, unlimited)
+  → OR Gemini 2.5 Flash-Lite free tier (1,000 RPD)
+
+Stage 2: Fine-grained Extraction (compound, target, conditions, outcome)
+  → Gemini 2.5 Flash free tier (250 RPD, 250K TPM)
+  → OR Llama 3.3 local via ollama (if RAM ≥ 32GB)
+
+Stage 3: Validation
+  → Human review on sampled outputs (no LLM cost)
+```
+
+**Throughput estimate:**
+- 10K papers via Gemini Flash-Lite: ~10 days (free)
+- 100K papers via local Mistral 7B: ~1-2 weeks (free, speed depends on hardware)
+
+### Infrastructure (Free Tier)
+- DB: Supabase free / SQLite local
+- Web: Vercel free tier
+- Storage: GitHub LFS / S3 free tier (<5GB)
+- CI/CD: GitHub Actions free
+
+### Only Paid Cost: Publication
+- OA APC: ~$2,500-3,000 (J. Cheminformatics or Nature Sci Data)
+- Conference registration: ~$200-400
+
+---
+
 ## Phase 1: Foundation & MVP (Months 0-6)
 
 ### 1.1 Data Pipeline MVP
 
 **Goal:** Build initial curated dataset of ~5,000-10,000 experimentally confirmed negative DTIs
 
-**Data Sources (Priority Order):**
+**Data Sources (Priority Order, All Free):**
 
 | Source | Target Volume | Method |
 |--------|--------------|--------|
@@ -29,6 +64,9 @@
 - [ ] Integrate DTO for target classification
 - [ ] Implement compound standardization (InChIKey, canonical SMILES)
 - [ ] Build QC pipeline (Z-factor check, PAINS filter, cross-DB validation)
+- [ ] Set up LLM text mining pipeline (Mistral 7B local + Gemini free tier)
+- [ ] Build PubMed abstract coarse filter (negative DTI result detection)
+- [ ] Build fine extraction prompts (structured JSON output)
 
 ### 1.2 Schema Design
 
