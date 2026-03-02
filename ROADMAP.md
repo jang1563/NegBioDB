@@ -1,6 +1,17 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-02
+> Last updated: 2026-03-02 (v3 — strengthened with license, timeline, and benchmark findings)
+
+---
+
+## Critical Findings (Added March 2026)
+
+1. **HCDT 2.0 License: CC BY-NC-ND 4.0** — Cannot redistribute derivatives. Must independently recreate from underlying sources (BindingDB, ChEMBL, GtoPdb, PubChem, TTD) using >100 uM threshold. Factual data is not copyrightable.
+2. **InertDB License: CC BY-NC** — Cannot include in commercial track. Provide optional download script only.
+3. **NeurIPS 2026 D&B deadline: ~May 15, 2026** (~11 weeks from project start). Requires: downloadable data, Croissant metadata, code available, Datasheet for Datasets.
+4. **LIT-PCBA compromised** (2025 audit found data leakage) — Creates urgency for NegBioDB as replacement gold-standard.
+5. **Recommended NegBioDB License: CC BY-SA 4.0** — Compatible with ChEMBL (CC BY-SA 3.0) via one-way upgrade.
+6. **No direct competitor exists** as of March 2026.
 
 ---
 
@@ -28,49 +39,172 @@ Stage 3: Validation
 - 100K papers via local Mistral 7B: ~1-2 weeks (free, speed depends on hardware)
 
 ### Infrastructure (Free Tier)
-- DB: Supabase free / SQLite local
+- DB: SQLite local (MVP) → Supabase free (Phase 2)
 - Web: Vercel free tier
-- Storage: GitHub LFS / S3 free tier (<5GB)
+- Storage: GitHub LFS / Zenodo (dataset DOI)
 - CI/CD: GitHub Actions free
 
 ### Only Paid Cost: Publication
 - OA APC: ~$2,500-3,000 (J. Cheminformatics or Nature Sci Data)
 - Conference registration: ~$200-400
+- NeurIPS D&B: No publication fee (if accepted)
 
 ---
 
-## Phase 1: Foundation & MVP (Months 0-6)
+## Accelerated Phase 1: NeurIPS 2026 Sprint (Weeks 0-11)
 
-### 1.1 Data Pipeline MVP
+**Deadline: ~May 15, 2026 (paper) | ~May 1, 2026 (abstract)**
 
-**Goal:** Build initial curated dataset of ~5,000-10,000 experimentally confirmed negative DTIs
+### Week 1-2: Schema + Data Pipeline Setup
 
-**Data Sources (Priority Order, All Free):**
+- [ ] Finalize database schema (SQLite for MVP)
+- [ ] Implement compound standardization pipeline (RDKit: salt removal, normalization, InChIKey)
+- [ ] Implement target standardization pipeline (UniProt accession as canonical ID)
+- [ ] Set up cross-DB deduplication (InChIKey[0:14] connectivity layer)
 
-| Source | Target Volume | Method |
-|--------|--------------|--------|
-| HCDT 2.0 | 38,653 negative DTIs (seed set) | Direct integration (> 100 uM threshold) |
-| PubChem BioAssay confirmatory | ~50K+ inactive dose-response | API extraction, filter confirmatory only |
-| ChEMBL "Not Active" | ~133K inactive records | SQL/API query (activity_comment + pChEMBL < 5) |
-| InertDB | 3,205 universally inactive compounds | Direct integration |
-| DAVIS complete matrix | ~27K entries (full negative matrix) | Direct integration as gold standard |
+### Week 2-4: Data Extraction
 
-**Key Technical Tasks:**
-- [ ] Design database schema (see Schema Design below)
-- [ ] Build PubChem BioAssay extraction pipeline (confirmatory > primary)
-- [ ] Build ChEMBL extraction pipeline (activity_comment + pChEMBL threshold)
-- [ ] Implement confidence tier assignment (Gold/Silver/Bronze/Copper)
-- [ ] Integrate BAO ontology for assay standardization
-- [ ] Integrate DTO for target classification
-- [ ] Implement compound standardization (InChIKey, canonical SMILES)
-- [ ] Build QC pipeline (Z-factor check, PAINS filter, cross-DB validation)
-- [ ] Set up LLM text mining pipeline (Mistral 7B local + Gemini free tier)
-- [ ] Build PubMed abstract coarse filter (negative DTI result detection)
-- [ ] Build fine extraction prompts (structured JSON output)
+**Data Sources (License-Safe Only):**
 
-### 1.2 Schema Design
+| Source | Target Volume | Method | License |
+|--------|--------------|--------|---------|
+| PubChem BioAssay (confirmatory inactive) | ~50K+ | PUG REST API, filter `activity_outcome=inactive` | Public domain |
+| ChEMBL "Not Active" + pChEMBL < 5 | ~133K | SQL query on downloaded dump | CC BY-SA 3.0 |
+| BindingDB (Kd/Ki > 10 uM) | ~30K+ | Bulk TSV download + filter | CC BY |
+| DAVIS complete matrix (pKd < 5) | ~27K | TDC Python download | Public/academic |
+| Independent HCDT-style extraction | ~38K | Query underlying sources at >100 uM threshold | Derived from public domain + CC BY-SA |
 
-**Common Layer:**
+**NOT bundled (license issues):**
+- HCDT 2.0 (CC BY-NC-ND) — Use as validation reference only
+- InertDB (CC BY-NC) — Optional download script for users
+
+- [ ] Build PubChem BioAssay extraction script (confirmatory > primary > counter-screen)
+- [ ] Build ChEMBL extraction SQL query (activity_comment + pChEMBL threshold)
+- [ ] Build BindingDB extraction script (filter Kd/Ki > threshold)
+- [ ] Integrate DAVIS matrix from TDC
+- [ ] Independently extract HCDT-equivalent negatives from underlying sources
+- [ ] Run compound/target standardization on all extracted data
+- [ ] Run cross-DB deduplication
+- [ ] Assign confidence tiers (Gold/Silver/Bronze/Copper)
+
+### Week 4-6: Benchmark Construction
+
+- [ ] Implement 7 splitting strategies:
+  1. Random (stratified 70/10/20)
+  2. Cold compound (Butina clustering)
+  3. Cold target (by UniProt accession)
+  4. Cold both (compound + target clusters)
+  5. Temporal (train < 2020, val 2020-2022, test > 2022)
+  6. Scaffold (Murcko scaffold clustering)
+  7. DDB (Degree Distribution Balanced)
+- [ ] Implement evaluation metric suite: LogAUC[0.001,0.1], BEDROC, EF@1%, EF@5%, AUPRC, MCC, AUROC
+- [ ] Generate Croissant machine-readable metadata (NeurIPS mandatory)
+- [ ] Write Datasheet for Datasets (Gebru et al. template)
+
+### Week 5-8: Baseline Experiments
+
+**Minimum baselines for submission:**
+
+| Model | Type | Priority |
+|-------|------|----------|
+| DeepDTA | Sequence CNN | Must have |
+| GraphDTA | Graph neural network | Must have |
+| DrugBAN | Bilinear attention | Must have |
+| Random Forest | Traditional ML | Must have |
+| XGBoost | Traditional ML | Should have |
+| DTI-LM | Language model-based | Nice to have |
+| EviDTI | Evidential/uncertainty | Nice to have |
+
+**Core validation experiments (minimum for paper):**
+- [ ] Exp 1: NegBioDB confirmed negatives vs. random negatives (training comparison)
+- [ ] Exp 4: Node degree bias quantification (DDB vs. random split performance gap)
+- [ ] Exp 5: Cross-database consistency (agreement rate for overlapping pairs)
+- [ ] Exp 7: Target class coverage analysis vs. existing benchmarks
+
+**Additional experiments (strengthen paper):**
+- [ ] Exp 2: Confidence tier discrimination
+- [ ] Exp 3: Assay context dependency
+- [ ] Exp 6: Temporal generalization
+- [ ] Exp 8: LIT-PCBA recapitulation and extension
+
+### Week 8-10: Paper Writing
+
+- [ ] Write NeurIPS D&B paper (8 pages + unlimited appendix)
+- [ ] Create key figures (see research/06_paper_narrative.md for figure plan)
+- [ ] Python download script: `pip install negbiodb` or simple wget script
+- [ ] Host dataset (Zenodo DOI + GitHub release)
+- [ ] Author ethical statement
+
+### Week 10-11: Review & Submit
+
+- [ ] Internal review and polish
+- [ ] Submit abstract (~May 1)
+- [ ] Submit full paper (~May 15)
+- [ ] Post ArXiv preprint (same day or before submission)
+
+---
+
+## Phase 1b: Post-Submission Expansion (Months 3-6)
+
+### Data Expansion (if not at 10K+ for submission)
+- [ ] Complete PubChem BioAssay extraction (full confirmatory set)
+- [ ] LLM text mining pipeline activation (PubMed abstracts)
+- [ ] Supplementary materials table extraction (pilot)
+
+### Benchmark Refinement
+- [ ] Add remaining baseline models
+- [ ] Complete all 8 validation experiments
+- [ ] Build public leaderboard (simple GitHub-based)
+
+### Perspective Paper (Parallel Track)
+- [ ] Write "Publication Bias in DTI Prediction" perspective
+- [ ] Target: Briefings in Bioinformatics or Drug Discovery Today
+- [ ] Cite NegBioDB as the solution
+
+---
+
+## Phase 2: Community & Platform (Months 6-18)
+
+### 2.1 Platform Development
+- [ ] Web interface (search, browse, download)
+- [ ] Python library: `pip install negbiodb`
+- [ ] REST API with tiered access
+- [ ] Community submission portal with controlled vocabularies
+- [ ] Leaderboard system
+
+### 2.2 Community Building
+- [ ] GitHub repository with documentation and tutorials
+- [ ] Partner with SGC and Target 2035/AIRCHECK for data access
+- [ ] Engage with DREAM challenge community
+- [ ] Tutorial at relevant workshop (ICLR/ICML)
+- [ ] Researcher incentive design (citation credit, DOI per submission)
+
+### 2.3 Publication Strategy
+
+| Month | Target | Type |
+|-------|--------|------|
+| 2-3 | ArXiv preprint | Establish priority (concurrent with NeurIPS) |
+| 3 | NeurIPS 2026 D&B Track | Primary benchmark paper (~May 15) |
+| 3-6 | Perspective paper | Publication bias in DTI (parallel) |
+| 8-12 | J. Cheminformatics / Nature Sci Data | Database descriptor |
+| 12-18 | NAR Database Issue | Contact editor July; publish January |
+
+**Backup if NeurIPS rejects:** ICLR 2027 D&B (submission ~Oct 2026) or ICML 2027
+
+### 2.4 Funding Applications
+
+| Month | Target | Amount |
+|-------|--------|--------|
+| 3-6 | NIH PAR-23-236 (R24) | Up to $350K/yr × 4yr |
+| 6-9 | CZI Open Science | Varies |
+| 12-18 | NSF IDSS / Cyberinfrastructure | Varies |
+
+---
+
+## Schema Design
+
+### Common Layer
+
 ```
 NegativeResult {
   id: UUID
@@ -124,7 +258,8 @@ NegativeResult {
 }
 ```
 
-**Biology/DTI Domain Layer:**
+### Biology/DTI Domain Layer
+
 ```
 DTIContext {
   negative_result_id: UUID (FK)
@@ -138,59 +273,37 @@ DTIContext {
 }
 ```
 
-### 1.3 Initial Benchmark Design (NegBioBench v0.1)
-
-**Task Types:**
-
-| Task | Input | Output | Metric |
-|------|-------|--------|--------|
-| **DTI Binary Prediction** | (compound SMILES, target sequence) | Interacting / Non-interacting | AUPRC, AUROC |
-| **Negative Confidence Prediction** | (compound, target, assay context) | Confidence tier | Weighted F1 |
-| **Counterfactual Reasoning** | Negative result + condition change | Predicted new outcome | Accuracy + reasoning quality |
-
-**Splitting Strategies:**
-- Random split
-- Cold compound split
-- Cold target split
-- Cold compound + target split
-- Temporal split (by publication date)
-- Degree-distribution-balanced split (address node degree bias)
-
 ---
 
-## Phase 2: Community & Publication (Months 6-18)
+## Benchmark Design (NegBioBench)
 
-### 2.1 Platform Development
-- [ ] Web interface (search, browse, download)
-- [ ] Python library: `pip install negbiodb`
-- [ ] REST API with tiered access
-- [ ] Community submission portal with controlled vocabularies
-- [ ] Leaderboard system
+### Task Types
 
-### 2.2 Community Building
-- [ ] GitHub repository with documentation and tutorials
-- [ ] Partner with SGC and Target 2035/AIRCHECK for data access
-- [ ] Engage with DREAM challenge community
-- [ ] Tutorial at relevant workshop (ICLR/ICML)
-- [ ] Researcher incentive design (citation credit, DOI per submission)
+| Task | Input | Output | Primary Metric |
+|------|-------|--------|----------------|
+| **DTI Binary Prediction** | (compound SMILES, target sequence) | Interacting / Non-interacting | LogAUC[0.001,0.1], AUPRC |
+| **Negative Confidence Prediction** | (compound, target, assay context) | Confidence tier | Weighted F1, MCC |
+| **Counterfactual Reasoning** | Negative result + condition change | Predicted new outcome | Accuracy + reasoning quality |
 
-### 2.3 Publication Strategy
+### Splitting Strategies (7 total)
+1. Random (stratified 70/10/20)
+2. Cold compound (Butina clustering on Murcko scaffolds)
+3. Cold target (by UniProt accession)
+4. Cold both (compound + target unseen)
+5. Temporal (train < 2020, val 2020-2022, test > 2022)
+6. Scaffold (Murcko scaffold cluster-based)
+7. DDB — Degree Distribution Balanced (addresses node degree bias)
 
-| Month | Target | Type |
-|-------|--------|------|
-| 3-6 | ArXiv preprint | Establish priority |
-| 6-9 | ICLR/ICML workshop paper | Early visibility in ML community |
-| 9-12 | NeurIPS D&B Track | Primary benchmark paper (May submission) |
-| 12-15 | J. Cheminformatics / Nature Sci Data | Database descriptor |
-| 15-18 | Briefings in Bioinformatics | Perspective on publication bias in DTI |
+### Evaluation Metrics
 
-### 2.4 Funding Applications
-
-| Month | Target | Amount |
-|-------|--------|--------|
-| 3-6 | NIH PAR-23-236 (R24) | Up to $350K/yr × 4yr |
-| 6-9 | CZI Open Science | Varies |
-| 12-18 | NSF IDSS / Cyberinfrastructure | Varies |
+| Metric | Type | Role |
+|--------|------|------|
+| **LogAUC[0.001,0.1]** | Enrichment | **Primary ranking metric** |
+| **BEDROC (α=20)** | Enrichment | Early enrichment |
+| **EF@1%, EF@5%** | Enrichment | Top-ranked performance |
+| **AUPRC** | Ranking | **Secondary ranking metric** |
+| **MCC** | Classification | Balanced classification |
+| **AUROC** | Ranking | Backward compatibility only (not for ranking) |
 
 ---
 
@@ -198,13 +311,13 @@ DTIContext {
 
 ### 3.1 Data Expansion
 - [ ] Expand to 100K+ curated negative DTIs
-- [ ] Add LLM-based literature mining pipeline (NLP extraction from PubMed/PMC)
-- [ ] Supplementary materials table extraction
-- [ ] Integrate with Target 2035 AIRCHECK data as it becomes available
-- [ ] Begin Gene Function (KO/KD) negative data collection (domain expansion Phase 1)
+- [ ] Full LLM-based literature mining pipeline (PubMed/PMC)
+- [ ] Supplementary materials table extraction (Table Transformer)
+- [ ] Integrate Target 2035 AIRCHECK data as it becomes available
+- [ ] Begin Gene Function (KO/KD) negative data collection
 
 ### 3.2 Benchmark Evolution (NegBioBench v1.0)
-- [ ] Expand task types: Failure Diagnosis, Experimental Design Critique, Literature Contradiction Detection
+- [ ] Expand tasks: Failure Diagnosis, Experimental Design Critique, Literature Contradiction Detection
 - [ ] Multi-modal: integrate protein structures, assay images
 - [ ] LLM-specific evaluation tasks (reasoning about negative results)
 - [ ] Regular leaderboard updates
@@ -224,8 +337,6 @@ DTIContext {
 
 ## Phase 4: Domain Expansion (Months 36+)
 
-### Expansion Path
-
 ```
 DTI (Phase 1-3)
   │
@@ -244,30 +355,49 @@ DTI (Phase 1-3)
 
 ---
 
-## Key Milestones
+## Key Milestones (Revised)
 
 | Milestone | Target Date | Deliverable |
 |-----------|------------|-------------|
-| Schema v1.0 finalized | Month 2 | Database schema + ontology mappings |
-| MVP dataset (5K+ entries) | Month 4 | Curated negative DTI dataset |
-| ArXiv preprint | Month 6 | Priority establishment |
+| Schema v1.0 finalized | Week 2 (Mar 2026) | SQLite schema + standardization pipeline |
+| MVP dataset (5K+ entries) | Week 4-6 (Apr 2026) | Curated negative DTI dataset |
+| Baseline experiments complete | Week 8 (Apr 2026) | 4+ models × 3+ splits × 7 metrics |
+| **ArXiv preprint** | **Week 9 (May 2026)** | **Priority establishment** |
+| **NeurIPS 2026 submission** | **Week 11 (~May 15, 2026)** | **Benchmark paper** |
+| Perspective paper submitted | Month 4-6 | Publication bias in DTI |
 | Python library v0.1 | Month 8 | `pip install negbiodb` |
-| NeurIPS submission | Month 12 | Benchmark paper |
-| Web platform launch | Month 14 | Public access |
+| NeurIPS decision | Month 7 (~Sep 2026) | Accept/reject notification |
+| Web platform launch | Month 12 | Public access + leaderboard |
+| Database descriptor paper | Month 8-12 | J. Cheminformatics or Nature Sci Data |
 | NIH R24 funding | Month 12-18 | Multi-year sustainability |
 | 100K+ entries | Month 24 | Scale milestone |
-| First pharma partnership | Month 24-30 | Commercial validation |
-| NAR Database Issue | Month 30 | Gold standard DB recognition |
+| NAR Database Issue | Month 24-30 | Gold standard DB recognition |
 
 ---
 
-## Risk Assessment
+## Risk Assessment (Updated)
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
+| NeurIPS 2026 deadline too tight (11 weeks) | Medium-High | High | Focus on core experiments; ArXiv as fallback; ICLR 2027 backup |
+| HCDT 2.0 license blocks integration | **Confirmed** | Medium | Already mitigated: independently extract from underlying sources |
 | Insufficient data quality | Medium | High | Strict QC pipeline + confidence tiers |
 | Low community adoption | Medium | High | TDC-style easy access + workshop tutorials |
-| Competitive entry | Low | Medium | First-mover advantage + deep curation expertise |
+| Competitive entry before NeurIPS | Low | Medium | First-mover advantage + ArXiv priority |
 | Funding gap | Medium | High | Multiple funding sources + early commercial track |
-| Schema over-engineering | Medium | Medium | Start minimal, iterate based on user feedback |
+| Schema over-engineering | Medium | Medium | Start minimal (SQLite), iterate based on user feedback |
 | Pharma resistance to sharing | High | Medium | Start with public data; build trust first |
+| ChEMBL CC BY-SA viral clause | Low | Medium | Use CC BY-SA 4.0 for NegBioDB; compatible |
+
+---
+
+## Document Index
+
+| Document | Content |
+|----------|---------|
+| [research/01_dti_negative_data_landscape.md](research/01_dti_negative_data_landscape.md) | Survey of existing DTI negative data sources |
+| [research/02_benchmark_analysis.md](research/02_benchmark_analysis.md) | Analysis of existing DTI benchmarks and their negative handling |
+| [research/03_data_collection_methodology.md](research/03_data_collection_methodology.md) | Methodologies for collecting and curating negative data |
+| [research/04_publication_commercial_strategy.md](research/04_publication_commercial_strategy.md) | Publication venues, funding, commercialization |
+| [research/05_technical_deep_dive.md](research/05_technical_deep_dive.md) | Data access APIs, license analysis, dedup, baselines, metrics |
+| [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, NeurIPS strategy, competitive positioning |

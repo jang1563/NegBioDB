@@ -46,6 +46,16 @@ Biology-first, Science-extensible Architecture
 | Starting Domain | Drug-Target Interaction | Data accessibility + existing infrastructure (ChEMBL) + pharma demand |
 | Architecture | Extensible (common + domain layers) | Future expansion to Chemistry, Materials |
 
+## Key Constraints
+
+| Constraint | Detail |
+|------------|--------|
+| **Budget** | $0 pre-publication (free data sources, free LLM tiers, free infrastructure) |
+| **License** | CC BY-SA 4.0 for NegBioDB (compatible with ChEMBL CC BY-SA 3.0) |
+| **HCDT 2.0** | CC BY-NC-ND — cannot integrate directly; independently recreate from underlying sources |
+| **LLM Pipeline** | Mistral 7B (ollama) + Gemini 2.5 Flash free tier |
+| **Primary Deadline** | NeurIPS 2026 D&B Track (~May 15, 2026) |
+
 ## Project Documents
 
 | Document | Description |
@@ -54,8 +64,11 @@ Biology-first, Science-extensible Architecture
 | [research/02_benchmark_analysis.md](research/02_benchmark_analysis.md) | Analysis of existing DTI benchmarks and their negative data handling |
 | [research/03_data_collection_methodology.md](research/03_data_collection_methodology.md) | Data collection, curation, and structuring methodologies |
 | [research/04_publication_commercial_strategy.md](research/04_publication_commercial_strategy.md) | Academic publication and commercialization strategy |
-| [ROADMAP.md](ROADMAP.md) | Execution roadmap |
+| [research/05_technical_deep_dive.md](research/05_technical_deep_dive.md) | Data access APIs, license analysis, deduplication, baselines, metrics |
+| [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, NeurIPS strategy, competitive positioning |
+| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v3 — accelerated for NeurIPS 2026) |
 
 ## Timeline
 - Project initiated: 2026-03-02
+- Primary target: NeurIPS 2026 D&B Track (~May 15, 2026)
 - Last updated: 2026-03-02
