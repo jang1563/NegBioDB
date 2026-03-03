@@ -1,0 +1,55 @@
+# NegBioDB Configuration
+# Source of truth for thresholds, paths, and pipeline settings.
+
+# === Inactivity Thresholds ===
+inactivity_threshold_nm: 10000         # 10 uM in nM; compound inactive if IC50/Ki/Kd > this
+positive_pchembl_min: 6.0             # pChEMBL >= 6 for positives (IC50 <= 1 uM)
+borderline_exclusion:
+  lower: 4.5                          # Exclude pChEMBL in [4.5, 5.5] from both pools
+  upper: 5.5
+davis_inactive_pkd_threshold: 5.0     # DAVIS: inactive if pKd <= 5 (NOT strictly < 5)
+
+# === ML Split Configuration ===
+split_ratios:
+  train: 0.7
+  val: 0.1
+  test: 0.2
+random_seed: 42
+
+# === Processing ===
+pubchem_chunksize: 100000             # Rows per chunk for streaming PubChem processing
+
+# === Confidence Tier Ordering (gold = highest) ===
+confidence_tiers:
+  - gold
+  - silver
+  - bronze
+  - copper
+
+# === Paths (relative to project root) ===
+paths:
+  data_dir: data
+  exports_dir: exports
+  migrations_dir: migrations
+  database: data/negbiodb.db
+
+# === Download URLs ===
+downloads:
+  pubchem:
+    url: "ftp://ftp.ncbi.nlm.nih.gov/pubchem/Bioassay/Extras/bioactivities.tsv.gz"
+    dest: data/pubchem/bioactivities.tsv.gz
+    min_size_bytes: 1000000000
+  chembl:
+    dest_dir: data/chembl
+  bindingdb:
+    url: "https://www.bindingdb.org/bind/downloads/BindingDB_All_202603_tsv.zip"
+    dest_dir: data/bindingdb
+    min_size_bytes: 500000000
+  davis:
+    base_url: "https://raw.githubusercontent.com/dingyan20/Davis-Dataset-for-DTA-Prediction/master"
+    files:
+      - drugs.csv
+      - proteins.csv
+      - drug_protein_affinity.csv
+    dest_dir: data/davis
+    min_rows: 25000
