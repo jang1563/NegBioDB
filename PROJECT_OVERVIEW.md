@@ -69,7 +69,11 @@ Biology-first, Science-extensible Architecture
 | [research/07a_llm_benchmark_landscape_survey.md](research/07a_llm_benchmark_landscape_survey.md) | Survey of existing bio/chem LLM benchmarks and evaluation methods |
 | [research/07b_llm_benchmark_design.md](research/07b_llm_benchmark_design.md) | LLM benchmark: 6 tasks, evaluation methods, dual-track architecture |
 | [research/08_expert_review_and_feasibility.md](research/08_expert_review_and_feasibility.md) | Expert review responses, feasibility analysis, revised scope |
-| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v5 — feasibility-validated, revised scope) |
+| [research/09_schema_and_ml_export_design.md](research/09_schema_and_ml_export_design.md) | SQLite schema DDL, ML export patterns, Croissant metadata, Datasheet for Datasets |
+| [research/10_expert_panel_review.md](research/10_expert_panel_review.md) | 6-expert panel review: NeurIPS reviewer, data eng, ML, domain, SW arch, PM |
+| [research/11_full_plan_review.md](research/11_full_plan_review.md) | Pre-implementation audit: 16 issues found, feasibility ratings, execution adjustments |
+| [research/12_review_findings_summary.md](research/12_review_findings_summary.md) | Schema/pipeline implementation review: 9 issues (3 critical, 3 high, 2 moderate, 1 low) |
+| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v8 — research/12 fixes incorporated) |
 
 ## Timeline
 - Project initiated: 2026-03-02

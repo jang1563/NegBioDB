@@ -104,23 +104,25 @@ LLMs are increasingly applied to drug discovery (DrugAgent ICLR 2025, DrugChat, 
 |-------------------|-------|--------|
 | **March-April 2026** | Development sprint | Build MVP dataset + benchmark |
 | **~May 1, 2026** | Abstract deadline | Submit 1-page abstract |
-| **~May 15, 2026** | Paper deadline | Submit full paper (8 pages + unlimited appendix) |
+| **~May 15, 2026** | Paper deadline | Submit full paper (**9 pages** + unlimited appendix) |
 | **~Aug 2026** | Reviews returned | Address reviewer feedback |
 | **~Sep 2026** | Decision notification | Accept/reject |
 | **~Dec 2026** | NeurIPS 2026 conference | Present paper |
 
 **From today (March 2, 2026): ~10-11 weeks to paper deadline.**
 
-### 4.2 NeurIPS D&B Mandatory Requirements
+### 4.2 NeurIPS D&B Mandatory Requirements (Updated — 2025/2026 rules)
 
 | Requirement | Status | Action Needed |
 |-------------|--------|---------------|
-| Data downloadable by reviewers at submission | Not started | Must have hosted dataset by May |
-| Croissant machine-readable metadata | Not started | Generate Croissant JSON-LD |
+| Data downloadable by reviewers at submission | Not started | HuggingFace (primary) + Zenodo (archival) |
+| **Croissant machine-readable metadata** | Template ready (research/09) | **MANDATORY — desk rejection if missing/invalid.** Validate with `mlcroissant` |
 | Code publicly available by camera-ready | Not started | GitHub repo (already exists) |
-| Datasheet for dataset | Not started | Write using Gebru et al. template |
+| Datasheet for dataset | Template ready (research/09) | Write using Gebru et al. template |
 | Author statement on ethical/legal use | Not started | Write; address license compliance |
-| Hosting plan beyond 3 years | Not started | GitHub + Zenodo DOI |
+| Hosting plan beyond 3 years | Not started | HuggingFace + Zenodo DOI |
+| **Page limit** | — | **9 pages** (not 8), unlimited appendix |
+| **Scoring scale** | — | 1-6 (new in 2025), ~25% acceptance rate |
 
 ### 4.3 What to Prioritize for NeurIPS Submission
 
@@ -292,11 +294,41 @@ As of March 2026, no published resource matches NegBioDB's scope:
 
 ---
 
-## 9. Related Work Section Outline
+## 9. Paper Page Budget (9 pages + unlimited appendix)
+
+### Main Body (9 pages)
+
+| Section | Pages | Content |
+|---------|-------|---------|
+| **1. Introduction** | 1.5 | Problem statement (assumed negatives inflate performance). Exp 1 + Exp 4 preview as hook. Contributions list. |
+| **2. NegBioDB: Database Design** | 1.5 | Data sources, confidence tiers, curation pipeline, statistics (1 figure). |
+| **3. NegBioBench: Dual-Track Benchmark** | 1.5 | Track A (M1-M3, splits, metrics), Track B (L1-L6, evaluation). Architecture diagram (1 figure). |
+| **4. Experiments & Results** | 3.0 | 4.1: Exp 1 (inflation). 4.2: Exp 4 (DDB). 4.3: ML baselines (heatmap). 4.4: LLM results (L1,L2,L4). 4.5: Exp 9 (ML vs LLM). (2-3 figures/tables). |
+| **5. Discussion & Limitations** | 1.0 | Inactive definition caveat, target class bias, solo-resource sustainability. |
+| **6. Conclusion** | 0.5 | Summary + future: Gene Function domain, community platform, leaderboard. |
+
+### Appendix (unlimited)
+
+- A: Full SQLite schema DDL
+- B: Complete metric tables (all models × splits × metrics)
+- C: L2 annotation protocol and inter-annotator agreement
+- D: Few-shot prompt examples for all LLM tasks
+- E: Datasheet for Datasets (Gebru et al.)
+- F: Croissant metadata excerpt
+- G: Should-have experiment results (Exp 5, 7, 11 if completed)
+- H: Overlap analysis with existing benchmarks
+
+---
+
+## 10. Related Work Section Outline
 
 1. **DTI Prediction Landscape** — Brief survey of methods (DeepDTA → DrugBAN → LLM-based: DrugAgent, MolecularGPT)
 2. **The Negative Data Problem** — Publication bias, "untested = negative," performance inflation
+   - **Must cite: Nature Machine Intelligence 2025** — Biologically driven negative subsampling independently validates the "assumed negative" problem in DTI benchmarks
+   - **Must cite: Science 2025 editorial** — Calls for including negative results in AI training data
 3. **Existing ML Benchmarks** — MoleculeNet, TDC, DAVIS, DUD-E, LIT-PCBA — and their limitations
+   - **Must cite: LIT-PCBA 2025 audit** — Data leakage discovered, benchmark compromised
+   - **Must cite: BMC Biology 2025 (DDB)** — Node degree bias quantification in DTI benchmarks
 4. **LLM Benchmarks for Science/Drug Discovery** — ChemBench, Mol-Instructions, MedQA, SciBench, LAB-Bench — none address negative results or DTI inactivity reasoning
 5. **Recent Negative Data Resources** — HCDT 2.0, InertDB, ExCAPE-DB, WelQrate
 6. **Quality-Aware Data Curation** — BAO ontology, WelQrate hierarchical QC, Z-factor standards
@@ -315,3 +347,6 @@ As of March 2026, no published resource matches NegBioDB's scope:
 - LIT-PCBA 2025 audit: https://arxiv.org/html/2507.21404v1
 - EviDTI 2025: https://www.nature.com/articles/s41467-025-62235-6
 - Node degree bias 2025: https://bmcbiol.biomedcentral.com/articles/10.1186/s12915-025-02231-w
+- **[UNVERIFIED]** Nature Machine Intelligence 2025 (biologically driven negative subsampling): [to be confirmed — validates assumed negative problem]. If not found, substitute: EviDTI (Nature Comms 2025), DDB paper (BMC Biology 2025), or LIT-PCBA audit (2025)
+- **[UNVERIFIED]** Science 2025 editorial (negative results in AI): [to be confirmed — call for negative data inclusion]. If not found, substitute with existing references on publication bias
+- NeurIPS 2025 D&B blog (raising the bar): https://blog.neurips.cc/2025/03/10/neurips-datasets-benchmarks-raising-the-bar-for-dataset-submissions/

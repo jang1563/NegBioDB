@@ -15,17 +15,17 @@ A fundamental paradox defines the DTI negative data landscape: the vast majority
 
 ---
 
-## 1. ChEMBL (v35, Dec 2024)
+## 1. ChEMBL (v36, Sep 2025)
 
 **URL:** https://www.ebi.ac.uk/chembl/
 
 ### Scale
 | Metric | Value |
 |--------|-------|
-| Total bioactivity records | ~21.1M |
-| Unique compounds | ~2.5M |
-| Assays | ~1.74M |
-| Targets | ~16,003 |
+| Total bioactivity records | ~24.3M (v36; was ~21.1M in v35) |
+| Unique compounds | ~2.5M+ |
+| Assays | ~1.74M+ |
+| Targets | ~16,003+ |
 
 ### How Inactive/Negative Data is Stored
 - **pChEMBL values**: Negative log of activity (molar). Commonly used thresholds for "inactive": pChEMBL < 5 (potency > 10 uM); also 5.5 and 6 used

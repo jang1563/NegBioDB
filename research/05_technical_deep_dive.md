@@ -37,7 +37,7 @@ GET https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{CID}/property/InChIK
 
 **Volume Estimate:** ~61M target-annotated confirmatory inactive records via FTP bulk; ~4,500 MLPCN/MLSCN AIDs with genuine HTS dose-response (richest unique source). See research/08 §2.
 
-**Note:** For bulk extraction, **FTP download is strongly preferred over API** (see ROADMAP v5). `bioactivities.tsv.gz` (3 GB) + `bioassays.tsv.gz` (52 MB) processes in < 1 day. API approach (5 req/sec) would take weeks for full extraction. Use API only for supplementary targeted lookups.
+**Note:** For bulk extraction, **FTP download is strongly preferred over API** (see ROADMAP v6). `bioactivities.tsv.gz` (3 GB) + `bioassays.tsv.gz` (52 MB) processes in < 1 day. API approach (5 req/sec) would take weeks for full extraction. Use API only for supplementary targeted lookups.
 
 **Output Format:** CSV/JSON with SID, CID, activity outcome, activity values, assay conditions
 
@@ -45,11 +45,11 @@ GET https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{CID}/property/InChIK
 
 ---
 
-### 1.2 ChEMBL (v35+)
+### 1.2 ChEMBL (v36, Sep 2025)
 
 **API:** ChEMBL REST API (https://www.ebi.ac.uk/chembl/api/data/)
 
-**Extraction Strategy: Explicit "Not Active" + Low pChEMBL**
+**Extraction Strategy: Inactive (pChEMBL < 5) + Active (pChEMBL ≥ 6) for ML Benchmarking**
 
 ```
 # Method 1: activity_comment based
@@ -87,11 +87,22 @@ WHERE
 ORDER BY a.pchembl_value ASC;
 ```
 
+**Positive Data Extraction (for ML Task M1):**
+```sql
+-- Active DTIs: pChEMBL ≥ 6 (IC50/Ki/Kd/EC50 ≤ 1 uM)
+-- Same query structure as above, but WHERE a.pchembl_value >= 6
+-- Restrict to SINGLE PROTEIN targets: td.target_type = 'SINGLE PROTEIN'
+-- Match to NegBioDB target pool (shared targets only)
+-- Exclude borderline: pChEMBL 4.5–5.5 from both active and inactive pools
+```
+
 **Key Notes:**
+- **Use ChEMBL v36 (Sep 2025)** — 24.3M activities (up from v35's 21.1M). `chembl_downloader` fetches latest by default.
 - ChEMBL 37+ will standardize activity_comment to "Not active" (currently inconsistent)
 - `data_validity_comment IS NULL` excludes records flagged for quality issues
 - Download full MySQL/PostgreSQL dump for bulk processing: https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/
 - ~763K literature-curated inactive records (activity_comment variants); ~527K quality-filtered with pChEMBL < 5 (IC50/Ki/Kd/EC50, validated). See research/08 §1 for verified counts.
+- **Positive data estimated at ~300-500K records with pChEMBL ≥ 6** (more abundant than negatives in ChEMBL due to publication bias)
 
 **Output Format:** SDF, CSV, JSON via API; SQL dump for bulk
 
@@ -114,7 +125,7 @@ df = data.get_data()  # Returns compound SMILES, target sequence, Kd value
 - Complete matrix — virtually all pairs experimentally measured
 - Minimum Kd = 10,000 nM (10 uM) → entries at minimum are weak/non-binders
 - pKd ≥ 7 (Kd ≤ 100 nM) commonly used as "active" threshold
-- At pKd < 5 (Kd > 10 uM): ~27K entries → confirmed non-interacting pairs
+- At pKd ≤ 5 (Kd ≥ 10 uM): ~27K entries → confirmed non-interacting pairs (DAVIS detection limit is 10,000 nM = pKd 5.0; non-binders sit at this ceiling)
 
 **License:** Public / academic use (original paper supplementary)
 

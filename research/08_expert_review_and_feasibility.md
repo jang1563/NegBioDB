@@ -14,7 +14,7 @@
 | **ChEMBL (activity_comment)** | ~763K (literature-curated) | ~300K (after dedup with above) | ~50-100K |
 | **PubChem confirmatory inactive** | ~78.9M SID records | ~61M (with target annotations) | ~5-10M (est.) |
 | **BindingDB (Kd/Ki > 10 uM)** | ~30K+ | ~25K (human targets) | ~20K |
-| **DAVIS (pKd < 5)** | ~27K | ~27K (complete matrix) | ~27K |
+| **DAVIS (pKd ≤ 5)** | ~27K | ~27K (complete matrix) | ~27K |
 
 **Conclusion: Data volume is NOT the bottleneck.** After deduplication across sources, conservative estimate is **200K+ unique inactive compound-target pairs** from license-safe sources alone.
 
@@ -72,12 +72,14 @@
 
 **ML Track — 18 training runs total:**
 
-| Component | Models | Splits | Runs |
-|-----------|--------|--------|------|
-| Baselines | DeepDTA, GraphDTA, DrugBAN | Random, Cold-Compound, Cold-Target | 9 |
-| Exp 1 (vs random negatives) | Same 3 models | Random split only | 3 (random neg) |
-| Exp 4 (node degree bias) | Same 3 models | DDB vs Random | 6 |
-| **Total** | | | **18 runs** |
+| Component | Models | Splits / Conditions | Runs | Notes |
+|-----------|--------|---------------------|------|-------|
+| Baselines | DeepDTA, GraphDTA, DrugBAN | Random, Cold-Compound, Cold-Target (NegBioDB negatives) | 9 | NegBioDB-neg random-split runs shared with Exp 1 & Exp 4 |
+| Exp 1 additional | Same 3 models | Random split: uniform random neg + degree-matched random neg | 6 | NegBioDB condition = baseline random-split (no extra runs) |
+| Exp 4 additional | Same 3 models | DDB split (NegBioDB negatives) | 3 | Random-split comparison = baseline (no extra runs) |
+| **Total** | | | **18 runs** | |
+
+> **Run count clarification:** Baselines include 3 models × 3 splits = 9 runs, all using NegBioDB negatives. The NegBioDB-negative random-split runs (3) are shared with Exp 1 (as NegBioDB condition) and Exp 4 (as random-split condition). This avoids double-counting while keeping the total at 18.
 
 Estimated GPU time: 18 runs × 2-4 hours = 36-72 hours (3-4 days on single GPU)
 
@@ -123,7 +125,7 @@ All automated evaluation — no judge calls needed for must-haves.
 | 5-6 | LLM baselines evaluation (18 runs, automated) |
 | 6-7 | Analysis + figures + should-have experiments if time |
 | 7-8 | Croissant metadata + Datasheet |
-| 8-10 | Paper writing (8 pages + appendix) |
+| 8-10 | Paper writing (9 pages + appendix) |
 | 10-11 | Polish + ArXiv preprint + submit |
 
 ---
@@ -251,6 +253,8 @@ If a compound-target pair's test result is in LLM training data, this becomes a 
 
 **Opening hook should be:**
 > "We demonstrate that existing DTI benchmarks systematically overestimate model performance by 10-20% due to the use of assumed negatives (Experiment 1), and that this inflation is further compounded by node degree bias in negative sampling (Experiment 4). To address this, we introduce NegBioDB..."
+>
+> **Note:** The "10-20%" figure is hypothesized, not measured. Actual value will come from Exp 1 results (Week 6 Go/No-Go checkpoint).
 
 ### Paper structure recommendation:
 1. **Section 1 (Intro):** The problem — show Exp 1 + Exp 4 preview results as motivation
@@ -453,6 +457,97 @@ def ddb_sample_negatives(positive_pairs, all_compounds, all_targets, ratio=1):
 
 ---
 
+## 15. Positive Data Protocol for ML Benchmarking (P0 — Expert Panel v6)
+
+### The Gap
+
+NegBioDB collects only inactive (negative) compound-target pairs. However, ML Task M1 (binary DTI prediction) requires both actives and inactives. No prior document defined the positive data source.
+
+### Decision
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| **Positive source** | ChEMBL v36, pChEMBL ≥ 6 | Standard potency threshold (IC50/Ki/Kd/EC50 ≤ 1 uM). Quality-filtered. |
+| **Target pool** | Shared targets only | Positives and negatives cover the same target set. No "positive-only" or "negative-only" targets in benchmark |
+| **Validation set** | DAVIS actives (pKd ≥ 7) | Complete matrix = gold-standard ground truth |
+| **Borderline exclusion** | pChEMBL 4.5–5.5 excluded from both | Clean class separation. Eliminates threshold artifacts |
+| **Class ratios** | Balanced (1:1) + Realistic (1:10) | Both reported. Balanced for fair model comparison; Realistic for drug discovery simulation |
+
+### Why 1 uM and Not 100 nM?
+
+The 1 uM (pChEMBL 6) active threshold is standard in DTI benchmarks (TDC, WelQrate). Using 100 nM (pChEMBL 7) would reduce the positive pool substantially and bias toward potent inhibitors only. The gap between pChEMBL 6 (active) and pChEMBL 5 (inactive) provides a clear 10-fold separation.
+
+---
+
+## 16. Random Negative Control Design for Exp 1 (P0 — Expert Panel v6)
+
+### The Gap
+
+Exp 1 is the paper's primary result: "NegBioDB negatives vs. random negatives." But "random" was not precisely defined, allowing multiple interpretations that affect the result.
+
+### Decision: Two Random Controls
+
+| Control | Generation Method | What It Tests |
+|---------|------------------|---------------|
+| **Uniform random** | Sample untested (compound, target) pairs uniformly from the full cross-product | Standard practice (TDC default). Maximum expected performance inflation |
+| **Degree-matched random** | Sample untested pairs matching NegBioDB's compound-degree and target-degree distribution | Isolates confirmation effect from degree bias. More rigorous control |
+
+### Experimental Design
+
+- 3 ML models × 3 negative conditions (NegBioDB, uniform random, degree-matched random) = 9 runs
+- Same positive data, same random split, same seed
+- Only the negative set changes
+- Degree-matched random is generated via the DDB sampling algorithm (research/08 §13) applied in reverse
+
+### Expected Results
+
+- Uniform random: Highest apparent model performance (inflated by easy negatives)
+- Degree-matched random: Moderate performance (some bias removed)
+- NegBioDB: Lowest apparent performance (hardest negatives = most realistic)
+- **The gap between uniform random and NegBioDB is the "inflation" number for the paper abstract**
+
+---
+
+## 17. Project Code Structure (P0 — Expert Panel v6)
+
+### Recommended Directory Layout
+
+```
+negbiodb/
+├── README.md
+├── pyproject.toml              # Python 3.11+, rdkit, pandas, pyarrow, mlcroissant
+├── Makefile                    # Pipeline orchestration with dependency tracking
+├── config.yaml                 # All configurable parameters (thresholds, paths, URLs)
+├── Dockerfile
+│
+├── src/negbiodb/               # Installable Python package
+│   ├── __init__.py
+│   ├── config.py               # Load config.yaml
+│   ├── standardize/            # RDKit compound + UniProt target standardization
+│   ├── extract/                # Per-source extraction (pubchem, chembl, bindingdb, davis)
+│   ├── curate/                 # Dedup, confidence tiers, quality flags
+│   ├── benchmark/              # Split generation, ML baselines, LLM evaluation
+│   ├── export/                 # CSV/Parquet export, Croissant generation
+│   └── api.py                  # User-facing Python API (TDC-compatible)
+│
+├── scripts/                    # CLI entry points (01_fetch_pubchem.py ... 09_export.py)
+├── migrations/                 # Numbered SQL migration files
+├── tests/                      # pytest: standardize, dedup, export edge cases
+├── data/                       # .gitignore'd — generated data
+├── exports/                    # .gitignore'd — generated exports
+├── research/                   # Planning & analysis documents
+├── paper/                      # LaTeX source
+└── croissant/                  # metadata.json
+```
+
+### Critical Tests to Implement
+
+1. `test_standardize.py`: Salt removal, stereoisomers, empty SMILES, tautomers, InChIKey generation
+2. `test_dedup.py`: Cross-DB deduplication correctness, borderline zone exclusion
+3. `test_export.py`: CSV/Parquet schema validation, split assignment completeness, Croissant validation
+
+---
+
 ## Summary of All Decisions
 
 | Item | Decision | Impact |
@@ -469,6 +564,13 @@ def ddb_sample_negatives(positive_pairs, all_compounds, all_targets, ratio=1):
 | Inactive definition | **10 uM primary threshold** (not 100 uM like HCDT) + store actual values | Legal differentiation |
 | Inactive caveat | Explicit "within tested assay context" language | Scientific rigor |
 | Data leakage check | **Mandatory overlap analysis** with DAVIS/TDC/DUD-E | Prevents reviewer objection |
+| Positive data source | **ChEMBL pChEMBL ≥ 6** (shared targets, borderline 4.5-5.5 excluded) | Enables ML binary classification |
+| Class ratios | **1:1 (balanced) + 1:10 (realistic)** both reported | Fair comparison + real-world simulation |
+| Random negative controls | **Uniform + degree-matched** (2 controls for Exp 1) | Rigorous experimental design |
+| Project structure | **src/negbiodb/ + Makefile + pyproject.toml + Dockerfile** | Reproducibility + solo author credibility |
+| GPU strategy | **Kaggle free tier** (30h/wk) primary; Colab Pro fallback | $0 budget maintained |
+| ChEMBL version | **v36** (Sep 2025, 24.3M activities) | Latest available data |
+| Go/No-Go framework | **Week 6 checkpoint**: Exp 1 result determines narrative | Risk mitigation for weak results |
 
 ---
 
