@@ -42,7 +42,8 @@ downloads:
   chembl:
     dest_dir: data/chembl
   bindingdb:
-    url: "https://www.bindingdb.org/bind/downloads/BindingDB_All_202603_tsv.zip"
+    servlet_url: "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/SDFdownload.jsp?download_file=/rwd/bind/downloads/BindingDB_All_202603_tsv.zip"
+    file_url: "https://www.bindingdb.org/rwd/bind/downloads/BindingDB_All_202603_tsv.zip"
     dest_dir: data/bindingdb
     min_size_bytes: 500000000
   davis:
