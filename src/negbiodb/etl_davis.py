@@ -135,88 +135,213 @@ def parse_gene_name(gene_name: str) -> tuple[str, str | None]:
     return base, None
 
 
-def map_refseq_to_uniprot(
-    refseq_ids: list[str],
-    cache_path: Path | None = None,
-) -> dict[str, str]:
-    """Batch-map RefSeq protein IDs to UniProt accessions.
+def _classify_accession(acc_id: str) -> str:
+    """Classify a protein accession by database type.
 
-    Uses UniProt ID Mapping API with caching.
-    Falls back to cached results if API is unavailable.
+    Returns 'refseq', 'genbank', or 'uniprot'.
     """
-    # Check cache first
-    if cache_path and cache_path.exists():
-        with open(cache_path) as f:
-            cached = json.load(f)
-        if set(refseq_ids).issubset(set(cached.keys())):
-            logger.info("Using cached RefSeq->UniProt mapping (%d entries)", len(cached))
-            return cached
+    if acc_id.startswith(("NP_", "XP_", "YP_", "WP_")):
+        return "refseq"
+    # UniProt accessions: old format [OPQ]XXXXX, new format [A-NR-Z]XXXXXXXXX
+    base = acc_id.split(".")[0]
+    if re.match(r"^[OPQ][0-9][A-Z0-9]{3}[0-9]$", base) or re.match(
+        r"^[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9]([A-Z0-9]{0,4})$", base
+    ):
+        return "uniprot"
+    return "genbank"
 
-    # Submit mapping job
-    logger.info("Submitting %d RefSeq IDs to UniProt ID Mapping API...", len(refseq_ids))
+
+def _call_uniprot_idmapping(
+    ids: list[str], from_db: str
+) -> dict[str, str]:
+    """Call UniProt ID Mapping API for a single database type.
+
+    Strips version numbers (e.g. NP_005408.1 -> NP_005408) before
+    submitting, then maps results back to the original versioned IDs.
+
+    Returns dict mapping original input IDs to UniProt accessions.
+    """
+    if not ids:
+        return {}
+
+    # Strip version numbers — UniProt API requires unversioned IDs
+    unversioned_to_original = {}
+    for acc_id in ids:
+        base = acc_id.split(".")[0]
+        unversioned_to_original[base] = acc_id
+    unversioned_ids = list(unversioned_to_original.keys())
+
+    logger.info(
+        "Submitting %d %s IDs to UniProt ID Mapping API...",
+        len(unversioned_ids), from_db,
+    )
     try:
         resp = requests.post(
             "https://rest.uniprot.org/idmapping/run",
             data={
-                "from": "RefSeq_Protein",
+                "from": from_db,
                 "to": "UniProtKB",
-                "ids": ",".join(refseq_ids),
+                "ids": ",".join(unversioned_ids),
             },
             timeout=30,
         )
         resp.raise_for_status()
         job_id = resp.json()["jobId"]
     except (requests.RequestException, KeyError) as e:
-        logger.warning("UniProt API submission failed: %s", e)
-        if cache_path and cache_path.exists():
-            with open(cache_path) as f:
-                return json.load(f)
+        logger.warning("UniProt API submission failed (%s): %s", from_db, e)
         return {}
 
-    # Poll for results
-    result_url = f"https://rest.uniprot.org/idmapping/status/{job_id}"
+    # Poll for job completion (do NOT consume inline results — they're paginated at 25)
     for attempt in range(20):
         time.sleep(min(2 ** attempt, 30))
         try:
-            status = requests.get(result_url, timeout=30)
+            status = requests.get(
+                f"https://rest.uniprot.org/idmapping/status/{job_id}",
+                timeout=30,
+            )
             status_data = status.json()
-            if "results" in status_data or "redirectURL" in status_data:
+            # Job is done when jobStatus is absent or FINISHED
+            if "jobStatus" not in status_data or status_data.get("jobStatus") == "FINISHED":
                 break
         except requests.RequestException:
             continue
     else:
-        logger.warning("UniProt API polling timed out")
-        if cache_path and cache_path.exists():
-            with open(cache_path) as f:
-                return json.load(f)
+        logger.warning("UniProt API polling timed out (%s)", from_db)
         return {}
 
-    # Fetch results
-    if "redirectURL" in status_data:
-        try:
-            results_resp = requests.get(
-                status_data["redirectURL"],
-                params={"size": "500"},
-                timeout=60,
-            )
-            results_data = results_resp.json()
-        except requests.RequestException as e:
-            logger.warning("Failed to fetch UniProt results: %s", e)
-            return {}
-    else:
-        results_data = status_data
+    # Use stream endpoint to get ALL results at once (no pagination)
+    stream_url = f"https://rest.uniprot.org/idmapping/stream/{job_id}"
+    try:
+        results_resp = requests.get(stream_url, timeout=120)
+        results_resp.raise_for_status()
+        results_data = results_resp.json()
+    except requests.RequestException as e:
+        logger.warning("Failed to fetch UniProt stream results (%s): %s", from_db, e)
+        return {}
 
-    # Build mapping
-    mapping = {}
+    # Build mapping: unversioned API result -> original versioned ID
+    # When multiple UniProt entries map to the same source ID,
+    # prefer reviewed (SwissProt) 6-char accessions over unreviewed (TrEMBL).
+    raw_mapping: dict[str, str] = {}
     for result in results_data.get("results", []):
         from_id = result["from"]
         to_entry = result["to"]
         if isinstance(to_entry, dict):
-            mapping[from_id] = to_entry["primaryAccession"]
+            accession = to_entry["primaryAccession"]
         else:
-            mapping[from_id] = to_entry
+            accession = to_entry
+        # Keep first (preferred) mapping; skip duplicates
+        if from_id not in raw_mapping:
+            raw_mapping[from_id] = accession
 
-    logger.info("Mapped %d / %d RefSeq IDs to UniProt", len(mapping), len(refseq_ids))
+    # Map back to original versioned IDs
+    mapping = {}
+    for unversioned, accession in raw_mapping.items():
+        original = unversioned_to_original.get(unversioned, unversioned)
+        mapping[original] = accession
+
+    logger.info(
+        "Mapped %d / %d %s IDs to UniProt",
+        len(mapping), len(ids), from_db,
+    )
+    return mapping
+
+
+def map_accessions_to_uniprot(
+    accession_ids: list[str],
+    cache_path: Path | None = None,
+    gene_symbol_map: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Map mixed-type protein accessions to UniProt.
+
+    Handles RefSeq (NP_*/XP_*), GenBank (AAA*/BAA*/CAA*),
+    and already-UniProt (P0C*/Q6X*) accessions.
+    Uses UniProt ID Mapping API with caching.
+
+    If gene_symbol_map is provided (accession -> gene_symbol), unmapped
+    accessions are retried via Gene_Name mapping as a fallback.
+    """
+    # Check cache first
+    if cache_path and cache_path.exists():
+        with open(cache_path) as f:
+            cached = json.load(f)
+        if set(accession_ids).issubset(set(cached.keys())):
+            logger.info("Using cached accession->UniProt mapping (%d entries)", len(cached))
+            return cached
+
+    # Classify accessions
+    refseq_ids = []
+    genbank_ids = []
+    mapping = {}
+
+    for acc in accession_ids:
+        acc_type = _classify_accession(acc)
+        if acc_type == "refseq":
+            refseq_ids.append(acc)
+        elif acc_type == "genbank":
+            genbank_ids.append(acc)
+        else:  # uniprot
+            base = acc.split(".")[0]
+            mapping[acc] = base
+            logger.info("Already UniProt: %s -> %s", acc, base)
+
+    logger.info(
+        "Accession types: %d RefSeq, %d GenBank, %d UniProt",
+        len(refseq_ids), len(genbank_ids), len(mapping),
+    )
+
+    # API calls for RefSeq and GenBank
+    refseq_map = _call_uniprot_idmapping(refseq_ids, "RefSeq_Protein")
+    mapping.update(refseq_map)
+
+    genbank_map = _call_uniprot_idmapping(genbank_ids, "EMBL-GenBank-DDBJ_CDS")
+    mapping.update(genbank_map)
+
+    # Fallback: gene symbol -> UniProt for unmapped accessions
+    unmapped = set(accession_ids) - set(mapping.keys())
+    if unmapped and gene_symbol_map:
+        # Collect unique gene symbols for unmapped accessions
+        gene_to_accs: dict[str, list[str]] = {}
+        for acc in unmapped:
+            gene = gene_symbol_map.get(acc)
+            if gene:
+                gene_to_accs.setdefault(gene, []).append(acc)
+
+        if gene_to_accs:
+            gene_list = list(gene_to_accs.keys())
+            logger.info(
+                "Trying gene symbol fallback for %d unmapped accessions (%d unique genes)...",
+                len(unmapped), len(gene_list),
+            )
+            # Batch gene symbol queries (50 per batch to avoid API timeouts)
+            batch_size = 50
+            gene_map: dict[str, str] = {}
+            for i in range(0, len(gene_list), batch_size):
+                batch = gene_list[i : i + batch_size]
+                logger.info(
+                    "Gene symbol batch %d/%d (%d genes)...",
+                    i // batch_size + 1,
+                    (len(gene_list) + batch_size - 1) // batch_size,
+                    len(batch),
+                )
+                batch_result = _call_uniprot_idmapping(batch, "Gene_Name")
+                gene_map.update(batch_result)
+
+            # Map gene results back to accession IDs
+            for gene, uniprot_acc in gene_map.items():
+                for acc in gene_to_accs.get(gene, []):
+                    if acc not in mapping:
+                        mapping[acc] = uniprot_acc
+
+    # Log remaining unmapped
+    still_unmapped = set(accession_ids) - set(mapping.keys())
+    if still_unmapped:
+        logger.warning(
+            "Failed to map %d accessions after all strategies",
+            len(still_unmapped),
+        )
+
+    logger.info("Total mapped: %d / %d accessions", len(mapping), len(accession_ids))
 
     # Cache results
     if cache_path:
@@ -509,14 +634,24 @@ def run_davis_etl(
     logger.info("Standardized %d / %d compounds", len(compounds), len(drugs_df))
 
     # === TRANSFORM: Targets ===
-    unique_refseqs = proteins_df["Accession_Number"].unique().tolist()
+    unique_accessions = proteins_df["Accession_Number"].unique().tolist()
+
+    # Build gene symbol map for fallback mapping
+    gene_symbol_map = {}
+    for _, row in proteins_df.drop_duplicates("Accession_Number").iterrows():
+        base_gene, _ = parse_gene_name(row["Gene_Name"])
+        gene_symbol_map[row["Accession_Number"]] = base_gene
+
     if skip_api:
         refseq_map = {}
         if cache_path.exists():
             with open(cache_path) as f:
                 refseq_map = json.load(f)
     else:
-        refseq_map = map_refseq_to_uniprot(unique_refseqs, cache_path=cache_path)
+        refseq_map = map_accessions_to_uniprot(
+            unique_accessions, cache_path=cache_path,
+            gene_symbol_map=gene_symbol_map,
+        )
 
     targets = standardize_all_targets(proteins_df, refseq_map)
     logger.info(
