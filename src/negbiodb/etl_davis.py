@@ -151,38 +151,102 @@ def _classify_accession(acc_id: str) -> str:
     return "genbank"
 
 
+def _download_refseq_mapping() -> dict[str, str]:
+    """Download reviewed human RefSeq→UniProt mapping via UniProt search API.
+
+    Returns dict mapping unversioned RefSeq IDs (e.g. 'NP_005408') to
+    reviewed UniProt accessions. Downloads ~19k entries in one request.
+    """
+    url = (
+        "https://rest.uniprot.org/uniprotkb/stream"
+        "?query=(organism_id:9606)+AND+(reviewed:true)+AND+(database:refseq)"
+        "&fields=accession,xref_refseq&format=tsv"
+    )
+    logger.info("Downloading human RefSeq->UniProt mapping from UniProt...")
+    try:
+        resp = requests.get(url, timeout=120)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        logger.warning("Failed to download RefSeq mapping: %s", e)
+        return {}
+
+    refseq_to_uniprot: dict[str, str] = {}
+    lines = resp.text.strip().split("\n")
+    for line in lines[1:]:
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        uniprot_acc = parts[0]
+        for entry in parts[1].split(";"):
+            entry = entry.strip()
+            if not entry:
+                continue
+            refseq_id = entry.split()[0]
+            base = refseq_id.split(".")[0]
+            if base not in refseq_to_uniprot:
+                refseq_to_uniprot[base] = uniprot_acc
+
+    logger.info(
+        "Downloaded %d RefSeq->UniProt mappings (%d UniProt entries)",
+        len(refseq_to_uniprot), len(lines) - 1,
+    )
+    return refseq_to_uniprot
+
+
+def _search_uniprot_by_gene(gene_symbols: list[str]) -> dict[str, str]:
+    """Map gene symbols to reviewed human UniProt accessions via search API.
+
+    Uses individual search queries (one per gene) with rate limiting.
+    Returns dict mapping gene symbol to UniProt accession.
+    """
+    if not gene_symbols:
+        return {}
+
+    mapping: dict[str, str] = {}
+    for gene in gene_symbols:
+        url = (
+            f"https://rest.uniprot.org/uniprotkb/search"
+            f"?query=(gene_exact:{gene})+AND+(organism_id:9606)+AND+(reviewed:true)"
+            f"&fields=accession&format=tsv&size=1"
+        )
+        try:
+            r = requests.get(url, timeout=10)
+            if r.ok:
+                lines = r.text.strip().split("\n")
+                if len(lines) > 1:
+                    mapping[gene] = lines[1].strip()
+        except requests.RequestException:
+            pass
+        time.sleep(0.2)
+
+    logger.info("Gene symbol search: mapped %d / %d genes", len(mapping), len(gene_symbols))
+    return mapping
+
+
 def _call_uniprot_idmapping(
     ids: list[str], from_db: str
 ) -> dict[str, str]:
     """Call UniProt ID Mapping API for a single database type.
 
-    Strips version numbers (e.g. NP_005408.1 -> NP_005408) before
-    submitting, then maps results back to the original versioned IDs.
+    Strips version numbers before submitting.
+    Uses allow_redirects=False for reliable polling.
 
     Returns dict mapping original input IDs to UniProt accessions.
     """
     if not ids:
         return {}
 
-    # Strip version numbers — UniProt API requires unversioned IDs
-    unversioned_to_original = {}
+    unversioned_to_original: dict[str, str] = {}
     for acc_id in ids:
         base = acc_id.split(".")[0]
         unversioned_to_original[base] = acc_id
     unversioned_ids = list(unversioned_to_original.keys())
 
-    logger.info(
-        "Submitting %d %s IDs to UniProt ID Mapping API...",
-        len(unversioned_ids), from_db,
-    )
+    logger.info("Submitting %d %s IDs to UniProt ID Mapping API...", len(unversioned_ids), from_db)
     try:
         resp = requests.post(
             "https://rest.uniprot.org/idmapping/run",
-            data={
-                "from": from_db,
-                "to": "UniProtKB",
-                "ids": ",".join(unversioned_ids),
-            },
+            data={"from": from_db, "to": "UniProtKB", "ids": ",".join(unversioned_ids)},
             timeout=30,
         )
         resp.raise_for_status()
@@ -191,59 +255,58 @@ def _call_uniprot_idmapping(
         logger.warning("UniProt API submission failed (%s): %s", from_db, e)
         return {}
 
-    # Poll for job completion (do NOT consume inline results — they're paginated at 25)
-    for attempt in range(20):
-        time.sleep(min(2 ** attempt, 30))
+    for attempt in range(30):
+        time.sleep(min(3 + attempt * 2, 30))
         try:
             status = requests.get(
                 f"https://rest.uniprot.org/idmapping/status/{job_id}",
-                timeout=30,
+                timeout=10, allow_redirects=False,
             )
-            status_data = status.json()
-            # Job is done when jobStatus is absent or FINISHED
-            if "jobStatus" not in status_data or status_data.get("jobStatus") == "FINISHED":
+            if status.status_code in (303, 302):
                 break
+            data = status.json()
+            js = data.get("jobStatus")
+            if js is None or js == "FINISHED":
+                break
+            if js == "ERROR":
+                logger.warning("UniProt job failed (%s): %s", from_db, data)
+                return {}
         except requests.RequestException:
             continue
     else:
         logger.warning("UniProt API polling timed out (%s)", from_db)
         return {}
 
-    # Use stream endpoint to get ALL results at once (no pagination)
-    stream_url = f"https://rest.uniprot.org/idmapping/stream/{job_id}"
-    try:
-        results_resp = requests.get(stream_url, timeout=120)
-        results_resp.raise_for_status()
-        results_data = results_resp.json()
-    except requests.RequestException as e:
-        logger.warning("Failed to fetch UniProt stream results (%s): %s", from_db, e)
-        return {}
+    all_results: list[dict] = []
+    next_url = f"https://rest.uniprot.org/idmapping/results/{job_id}?size=500&fields=accession"
+    while next_url:
+        try:
+            r = requests.get(next_url, timeout=120)
+            r.raise_for_status()
+            rdata = r.json()
+            all_results.extend(rdata.get("results", []))
+            link = r.headers.get("Link", "")
+            next_url = None
+            if 'rel="next"' in link:
+                next_url = link.split(";")[0].strip("<>")
+        except requests.RequestException as e:
+            logger.warning("Failed to fetch results page (%s): %s", from_db, e)
+            break
 
-    # Build mapping: unversioned API result -> original versioned ID
-    # When multiple UniProt entries map to the same source ID,
-    # prefer reviewed (SwissProt) 6-char accessions over unreviewed (TrEMBL).
     raw_mapping: dict[str, str] = {}
-    for result in results_data.get("results", []):
+    for result in all_results:
         from_id = result["from"]
         to_entry = result["to"]
-        if isinstance(to_entry, dict):
-            accession = to_entry["primaryAccession"]
-        else:
-            accession = to_entry
-        # Keep first (preferred) mapping; skip duplicates
+        acc = to_entry["primaryAccession"] if isinstance(to_entry, dict) else to_entry
         if from_id not in raw_mapping:
-            raw_mapping[from_id] = accession
+            raw_mapping[from_id] = acc
 
-    # Map back to original versioned IDs
     mapping = {}
-    for unversioned, accession in raw_mapping.items():
+    for unversioned, acc in raw_mapping.items():
         original = unversioned_to_original.get(unversioned, unversioned)
-        mapping[original] = accession
+        mapping[original] = acc
 
-    logger.info(
-        "Mapped %d / %d %s IDs to UniProt",
-        len(mapping), len(ids), from_db,
-    )
+    logger.info("Mapped %d / %d %s IDs to UniProt", len(mapping), len(ids), from_db)
     return mapping
 
 
@@ -290,17 +353,26 @@ def map_accessions_to_uniprot(
         len(refseq_ids), len(genbank_ids), len(mapping),
     )
 
-    # API calls for RefSeq and GenBank
-    refseq_map = _call_uniprot_idmapping(refseq_ids, "RefSeq_Protein")
-    mapping.update(refseq_map)
+    # RefSeq: download bulk mapping from UniProt (one fast request)
+    if refseq_ids:
+        refseq_table = _download_refseq_mapping()
+        for acc in refseq_ids:
+            base = acc.split(".")[0]
+            if base in refseq_table:
+                mapping[acc] = refseq_table[base]
+        logger.info(
+            "RefSeq mapped: %d / %d via bulk download",
+            sum(1 for a in refseq_ids if a in mapping), len(refseq_ids),
+        )
 
-    genbank_map = _call_uniprot_idmapping(genbank_ids, "EMBL-GenBank-DDBJ_CDS")
-    mapping.update(genbank_map)
+    # GenBank: use ID Mapping API (small batch, reliable)
+    if genbank_ids:
+        genbank_map = _call_uniprot_idmapping(genbank_ids, "EMBL-GenBank-DDBJ_CDS")
+        mapping.update(genbank_map)
 
-    # Fallback: gene symbol -> UniProt for unmapped accessions
+    # Fallback: gene symbol search for unmapped accessions
     unmapped = set(accession_ids) - set(mapping.keys())
     if unmapped and gene_symbol_map:
-        # Collect unique gene symbols for unmapped accessions
         gene_to_accs: dict[str, list[str]] = {}
         for acc in unmapped:
             gene = gene_symbol_map.get(acc)
@@ -310,24 +382,10 @@ def map_accessions_to_uniprot(
         if gene_to_accs:
             gene_list = list(gene_to_accs.keys())
             logger.info(
-                "Trying gene symbol fallback for %d unmapped accessions (%d unique genes)...",
+                "Gene symbol fallback for %d unmapped accessions (%d unique genes)...",
                 len(unmapped), len(gene_list),
             )
-            # Batch gene symbol queries (50 per batch to avoid API timeouts)
-            batch_size = 50
-            gene_map: dict[str, str] = {}
-            for i in range(0, len(gene_list), batch_size):
-                batch = gene_list[i : i + batch_size]
-                logger.info(
-                    "Gene symbol batch %d/%d (%d genes)...",
-                    i // batch_size + 1,
-                    (len(gene_list) + batch_size - 1) // batch_size,
-                    len(batch),
-                )
-                batch_result = _call_uniprot_idmapping(batch, "Gene_Name")
-                gene_map.update(batch_result)
-
-            # Map gene results back to accession IDs
+            gene_map = _search_uniprot_by_gene(gene_list)
             for gene, uniprot_acc in gene_map.items():
                 for acc in gene_to_accs.get(gene, []):
                     if acc not in mapping:
