@@ -12,6 +12,7 @@ MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 EXPECTED_TABLES = {
     "compounds",
     "targets",
+    "target_variants",
     "assays",
     "negative_results",
     "dti_context",
@@ -53,16 +54,17 @@ class TestMigrationRunner:
             count = conn.execute(
                 "SELECT COUNT(*) FROM schema_migrations"
             ).fetchone()[0]
-        assert count == 1
+        assert count == 2
 
     def test_schema_migrations_records_version(self, migrated_db):
         with connect(migrated_db) as conn:
             versions = get_applied_versions(conn)
         assert "001" in versions
+        assert "002" in versions
 
     def test_returns_applied_versions(self, db_path):
         applied = run_migrations(db_path, MIGRATIONS_DIR)
-        assert applied == ["001"]
+        assert applied == ["001", "002"]
 
 
 class TestForeignKeys:

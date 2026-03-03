@@ -10,6 +10,17 @@ borderline_exclusion:
 davis_inactive_pkd_threshold: 5.0     # DAVIS: inactive if pKd <= 5 (NOT strictly < 5)
 davis_active_pkd_threshold: 7.0       # DAVIS: active if pKd >= 7 (Kd <= 100 nM)
 
+# === ChEMBL ETL Policy ===
+# Core benchmark should remain conservative by default.
+# Optional activity_comment route can be enabled for recall-focused expansion.
+chembl_etl:
+  include_activity_comment: false
+  inactive_activity_comments:
+    - "Not Active"
+    - "Inactive"
+    - "Not active"
+    - "inactive"
+
 # === ML Split Configuration ===
 split_ratios:
   train: 0.7
@@ -19,6 +30,15 @@ random_seed: 42
 
 # === Processing ===
 pubchem_chunksize: 100000             # Rows per chunk for streaming PubChem processing
+
+pubchem_etl:
+  chunksize: 100000
+  human_only: true
+
+bindingdb_etl:
+  chunksize: 100000
+  inactive_threshold_nm: 10000
+  human_only: true
 
 # === Confidence Tier Ordering (gold = highest) ===
 confidence_tiers:
@@ -37,9 +57,21 @@ paths:
 # === Download URLs ===
 downloads:
   pubchem:
+    # Legacy keys kept for backward compatibility
     url: "https://ftp.ncbi.nlm.nih.gov/pubchem/Bioassay/Extras/bioactivities.tsv.gz"
     dest: data/pubchem/bioactivities.tsv.gz
     min_size_bytes: 1000000000
+    # Required files for full PubChem ETL
+    bioassays_url: "https://ftp.ncbi.nlm.nih.gov/pubchem/Bioassay/Extras/bioassays.tsv.gz"
+    bioassays_dest: data/pubchem/bioassays.tsv.gz
+    bioassays_min_size_bytes: 10000000
+    aid_uniprot_url: "https://ftp.ncbi.nlm.nih.gov/pubchem/Bioassay/Extras/Aid2GeneidAccessionUniProt.gz"
+    aid_uniprot_dest: data/pubchem/Aid2GeneidAccessionUniProt.gz
+    aid_uniprot_min_size_bytes: 1000000
+    sid_cid_smiles_url: "https://ftp.ncbi.nlm.nih.gov/pubchem/Bioassay/Extras/Sid2CidSMILES.gz"
+    sid_cid_smiles_dest: data/pubchem/Sid2CidSMILES.gz
+    sid_cid_smiles_min_size_bytes: 1000000
+    sid_lookup_db: data/pubchem/sid_lookup.sqlite
   chembl:
     dest_dir: data/chembl
   bindingdb:

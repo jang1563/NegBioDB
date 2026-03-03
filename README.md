@@ -21,7 +21,7 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 | Schema & database | Done |
 | Data download (4 sources) | Done |
 | ETL: DAVIS | Done |
-| ETL: ChEMBL, PubChem, BindingDB | Planned |
+| ETL: ChEMBL, PubChem, BindingDB | Done (initial implementation) |
 | Deduplication & pair creation | Planned |
 | ML export & splits | Planned |
 | LLM benchmark tasks | Planned |
@@ -42,6 +42,10 @@ make db             # Initialize SQLite database
 ```bash
 make download       # Download all 4 sources (ChEMBL, PubChem, BindingDB, DAVIS)
 make load-davis     # ETL: load DAVIS into database
+make load-chembl    # ETL: load ChEMBL inactive records
+make load-pubchem   # ETL: load PubChem confirmatory inactive records
+make load-bindingdb # ETL: load BindingDB inactive records
+make load-all       # Run all ETL loaders
 ```
 
 Individual downloads:
@@ -66,12 +70,16 @@ NegBioDB/
 ├── src/negbiodb/         # Core library
 │   ├── db.py             # Database creation & migration runner
 │   ├── download.py       # Download utilities (resume, checksum)
-│   └── etl_davis.py      # DAVIS ETL pipeline
+│   ├── etl_davis.py      # DAVIS ETL pipeline
+│   ├── etl_chembl.py     # ChEMBL ETL pipeline
+│   ├── etl_pubchem.py    # PubChem ETL pipeline
+│   └── etl_bindingdb.py  # BindingDB ETL pipeline
 ├── scripts/              # CLI entry points
 │   ├── download_*.py     # Download scripts for each source
-│   └── load_davis.py     # DAVIS loading script
+│   └── load_*.py         # Source loading scripts
 ├── migrations/           # SQL schema migrations
-│   └── 001_initial_schema.sql
+│   ├── 001_initial_schema.sql
+│   └── 002_target_variants.sql
 ├── tests/                # Test suite
 ├── research/             # Research documents (01-12)
 ├── config.yaml           # Pipeline configuration (thresholds, paths, URLs)

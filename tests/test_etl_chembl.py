@@ -328,6 +328,34 @@ class TestInsertChEMBLNegativeResults:
             ).fetchone()
         assert row[0] == "silver"
 
+    def test_confidence_bronze_for_activity_comment(self, migrated_db):
+        with connect(migrated_db) as conn:
+            cid, tid = self._setup_data(conn)
+
+            df = pd.DataFrame({
+                "activity_id": [1001],
+                "molregno": [100],
+                "uniprot_accession": ["P00533"],
+                "pchembl_value": [None],
+                "standard_type": ["IC50"],
+                "standard_value": [500.0],
+                "standard_relation": ["="],
+                "standard_units": ["nM"],
+                "publication_year": [2010],
+                "inactivity_source": ["activity_comment"],
+            })
+            insert_chembl_negative_results(
+                conn, df,
+                {100: "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"},
+                {"BSYNRYMUTXBXSQ-UHFFFAOYSA-N": cid},
+                {"P00533": tid},
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT confidence_tier FROM negative_results"
+            ).fetchone()
+        assert row[0] == "bronze"
+
     def test_right_censored(self, migrated_db):
         """Right-censored records should have activity_relation='>'."""
         with connect(migrated_db) as conn:
@@ -489,7 +517,8 @@ class TestExtractChEMBLInactives:
                 assay_id INTEGER, doc_id INTEGER,
                 pchembl_value REAL, standard_type TEXT,
                 standard_value REAL, standard_relation TEXT,
-                standard_units TEXT, data_validity_comment TEXT
+                standard_units TEXT, data_validity_comment TEXT,
+                activity_comment TEXT
             );
             CREATE TABLE assays (assay_id INTEGER PRIMARY KEY, tid INTEGER, chembl_id TEXT);
             CREATE TABLE target_dictionary (tid INTEGER PRIMARY KEY, chembl_id TEXT, pref_name TEXT, target_type TEXT, organism TEXT);
@@ -516,19 +545,22 @@ class TestExtractChEMBLInactives:
             INSERT INTO docs VALUES (1, 2010);
 
             -- Type 1: pChEMBL < 4.5 (should be extracted)
-            INSERT INTO activities VALUES (1001, 1, 1, 1, 4.0, 'IC50', 100000.0, '=', 'nM', NULL);
+            INSERT INTO activities VALUES (1001, 1, 1, 1, 4.0, 'IC50', 100000.0, '=', 'nM', NULL, NULL);
 
             -- Borderline: pChEMBL = 4.8 (should NOT be extracted with borderline_lower=4.5)
-            INSERT INTO activities VALUES (1002, 2, 1, 1, 4.8, 'Ki', 15000.0, '=', 'nM', NULL);
+            INSERT INTO activities VALUES (1002, 2, 1, 1, 4.8, 'Ki', 15000.0, '=', 'nM', NULL, NULL);
 
             -- Type 2: Right-censored (should be extracted)
-            INSERT INTO activities VALUES (1003, 2, 1, 1, NULL, 'IC50', 50000.0, '>', 'nM', NULL);
+            INSERT INTO activities VALUES (1003, 2, 1, 1, NULL, 'IC50', 50000.0, '>', 'nM', NULL, NULL);
 
             -- Non-human target (should NOT be extracted)
-            INSERT INTO activities VALUES (1004, 1, 2, 1, 3.0, 'IC50', 1000000.0, '=', 'nM', NULL);
+            INSERT INTO activities VALUES (1004, 1, 2, 1, 3.0, 'IC50', 1000000.0, '=', 'nM', NULL, NULL);
 
             -- Invalid data_validity_comment (should NOT be extracted)
-            INSERT INTO activities VALUES (1005, 1, 1, 1, 3.0, 'IC50', 1000000.0, '=', 'nM', 'Outside typical range');
+            INSERT INTO activities VALUES (1005, 1, 1, 1, 3.0, 'IC50', 1000000.0, '=', 'nM', 'Outside typical range', NULL);
+
+            -- Comment-only inactive (optional route)
+            INSERT INTO activities VALUES (1006, 1, 1, 1, NULL, 'IC50', 500.0, '=', 'nM', NULL, 'Not Active');
         """)
 
         conn.commit()
@@ -581,3 +613,25 @@ class TestExtractChEMBLInactives:
 
         # Activity 1005 (invalid data) should be excluded
         assert 1005 not in df["activity_id"].tolist()
+
+    def test_activity_comment_excluded_by_default(self, tmp_path):
+        mock_db = self._create_mock_chembl(tmp_path)
+        cfg = {
+            "borderline_exclusion": {"lower": 4.5, "upper": 5.5},
+            "inactivity_threshold_nm": 10000,
+        }
+        df = extract_chembl_inactives(mock_db, cfg)
+        assert 1006 not in df["activity_id"].tolist()
+
+    def test_includes_activity_comment_when_enabled(self, tmp_path):
+        mock_db = self._create_mock_chembl(tmp_path)
+        cfg = {
+            "borderline_exclusion": {"lower": 4.5, "upper": 5.5},
+            "inactivity_threshold_nm": 10000,
+            "chembl_etl": {
+                "include_activity_comment": True,
+                "inactive_activity_comments": ["Not Active", "Inactive"],
+            },
+        }
+        df = extract_chembl_inactives(mock_db, cfg)
+        assert 1006 in df["activity_id"].tolist()

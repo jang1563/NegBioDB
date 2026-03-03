@@ -1,10 +1,16 @@
 """ETL pipeline for loading ChEMBL inactive DTI data into NegBioDB.
 
-Extracts two types of inactive records from ChEMBL v36 SQLite:
+Core (default, conservative):
   Type 1: pChEMBL < 4.5 (quantitative, after borderline exclusion)
   Type 2: Right-censored (standard_relation '>'/'>=', value >= 10000 nM)
 
-All records are assigned silver confidence tier (peer-reviewed literature).
+Optional (disabled by default, recall expansion):
+  Type 3: activity_comment in inactive terms (e.g., "Not Active")
+
+Confidence policy:
+  - Core types -> silver
+  - activity_comment-only route -> bronze
+
 ChEMBL already provides UniProt accessions — no API mapping needed.
 """
 
@@ -21,8 +27,8 @@ from negbiodb.standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
 
-# SQL query for extracting inactive DTI records from ChEMBL
-_CHEMBL_INACTIVE_SQL = """
+# SQL query for extracting conservative inactive records from ChEMBL
+_CHEMBL_INACTIVE_CORE_SQL = """
 SELECT
     a.activity_id,
     md.molregno,
@@ -41,7 +47,13 @@ SELECT
     cp.sequence AS protein_sequence,
     LENGTH(cp.sequence) AS sequence_length,
     ass.chembl_id AS assay_chembl_id,
-    docs.year AS publication_year
+    docs.year AS publication_year,
+    a.activity_comment,
+    CASE
+      WHEN a.pchembl_value IS NOT NULL AND a.pchembl_value < :borderline_lower
+        THEN 'quantitative'
+      ELSE 'right_censored'
+    END AS inactivity_source
 FROM activities a
 JOIN molecule_dictionary md ON a.molregno = md.molregno
 JOIN compound_structures cs ON a.molregno = cs.molregno
@@ -65,6 +77,52 @@ AND td.organism = 'Homo sapiens'
 AND cp.accession IS NOT NULL
 AND cs.canonical_smiles IS NOT NULL
 """
+
+
+def _build_activity_comment_sql(comment_terms: list[str]) -> tuple[str, dict]:
+    """Build activity_comment extraction SQL with parameterized comment terms."""
+    placeholders = ", ".join([f":comment_{i}" for i in range(len(comment_terms))])
+    params = {f"comment_{i}": term for i, term in enumerate(comment_terms)}
+
+    sql = f"""
+SELECT
+    a.activity_id,
+    md.molregno,
+    md.chembl_id AS chembl_compound_id,
+    cs.canonical_smiles,
+    cs.standard_inchi_key,
+    a.pchembl_value,
+    a.standard_type,
+    a.standard_value,
+    a.standard_relation,
+    a.standard_units,
+    cp.accession AS uniprot_accession,
+    td.chembl_id AS chembl_target_id,
+    td.pref_name AS target_name,
+    td.organism,
+    cp.sequence AS protein_sequence,
+    LENGTH(cp.sequence) AS sequence_length,
+    ass.chembl_id AS assay_chembl_id,
+    docs.year AS publication_year,
+    a.activity_comment,
+    'activity_comment' AS inactivity_source
+FROM activities a
+JOIN molecule_dictionary md ON a.molregno = md.molregno
+JOIN compound_structures cs ON a.molregno = cs.molregno
+JOIN assays ass ON a.assay_id = ass.assay_id
+JOIN target_dictionary td ON ass.tid = td.tid
+JOIN target_components tc ON td.tid = tc.tid
+JOIN component_sequences cp ON tc.component_id = cp.component_id
+LEFT JOIN docs ON a.doc_id = docs.doc_id
+WHERE a.activity_comment IN ({placeholders})
+AND a.standard_type IN ('IC50', 'Ki', 'Kd', 'EC50')
+AND a.data_validity_comment IS NULL
+AND td.target_type = 'SINGLE PROTEIN'
+AND td.organism = 'Homo sapiens'
+AND cp.accession IS NOT NULL
+AND cs.canonical_smiles IS NOT NULL
+"""
+    return sql, params
 
 
 # ============================================================
@@ -104,30 +162,54 @@ def extract_chembl_inactives(
 
     borderline_lower = cfg["borderline_exclusion"]["lower"]
     inactivity_threshold = cfg["inactivity_threshold_nm"]
+    chembl_cfg = cfg.get("chembl_etl", {})
+    include_activity_comment = bool(chembl_cfg.get("include_activity_comment", False))
+    comment_terms = chembl_cfg.get("inactive_activity_comments", ["Not Active", "Inactive"])
 
     logger.info(
-        "Querying ChEMBL for inactives (pChEMBL < %.1f or right-censored >= %d nM)...",
+        "Querying ChEMBL core inactives (pChEMBL < %.1f or right-censored >= %d nM)...",
         borderline_lower, inactivity_threshold,
     )
 
     conn = sqlite3.connect(str(chembl_db_path))
     try:
-        df = pd.read_sql_query(
-            _CHEMBL_INACTIVE_SQL,
+        core_df = pd.read_sql_query(
+            _CHEMBL_INACTIVE_CORE_SQL,
             conn,
             params={
                 "borderline_lower": borderline_lower,
                 "inactivity_threshold": inactivity_threshold,
             },
         )
+
+        if include_activity_comment and comment_terms:
+            logger.info(
+                "Including activity_comment inactive route (terms=%s)",
+                ", ".join(comment_terms),
+            )
+            comment_sql, comment_params = _build_activity_comment_sql(comment_terms)
+            comment_df = pd.read_sql_query(comment_sql, conn, params=comment_params)
+
+            # Keep core route first; if the same activity appears in both routes,
+            # preserve the conservative classification.
+            df = pd.concat([core_df, comment_df], ignore_index=True)
+            df = df.drop_duplicates(subset=["activity_id"], keep="first")
+        elif include_activity_comment:
+            logger.warning(
+                "include_activity_comment=True but inactive_activity_comments is empty; skipping comment route."
+            )
+            df = core_df
+        else:
+            df = core_df
     finally:
         conn.close()
 
-    n_type1 = df["pchembl_value"].notna().sum()
-    n_type2 = df["pchembl_value"].isna().sum()
+    n_type1 = ((df["inactivity_source"] == "quantitative")).sum()
+    n_type2 = ((df["inactivity_source"] == "right_censored")).sum()
+    n_type3 = ((df["inactivity_source"] == "activity_comment")).sum()
     logger.info(
-        "Extracted %d records: %d quantitative (pChEMBL < %.1f), %d right-censored",
-        len(df), n_type1, borderline_lower, n_type2,
+        "Extracted %d records: %d quantitative, %d right-censored, %d activity_comment",
+        len(df), int(n_type1), int(n_type2), int(n_type3),
     )
 
     return df
@@ -335,9 +417,13 @@ def insert_chembl_negative_results(
         activity_relation = row["standard_relation"] if pd.notna(row["standard_relation"]) else "="
         pub_year = int(row["publication_year"]) if pd.notna(row["publication_year"]) else None
 
+        inactivity_source = row.get("inactivity_source", "quantitative")
+        confidence_tier = "bronze" if inactivity_source == "activity_comment" else "silver"
+
         params.append((
             compound_id,
             target_id,
+            confidence_tier,
             row["standard_type"],
             activity_value,
             row["standard_units"] if pd.notna(row["standard_units"]) else "nM",
@@ -358,7 +444,7 @@ def insert_chembl_negative_results(
          source_db, source_record_id, extraction_method,
          curator_validated, publication_year, species_tested)
         VALUES (?, ?, NULL,
-                'hard_negative', 'silver',
+                'hard_negative', ?,
                 ?, ?, ?, ?,
                 ?,
                 10000.0, 'nM',

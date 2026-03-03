@@ -5,6 +5,10 @@ Entries with pKd <= 5.0 (detection limit) are loaded as hard negatives.
 Entries with pKd >= 7.0 are tracked but NOT loaded (active).
 Entries with 5.0 < pKd < 7.0 are excluded (borderline).
 
+Target handling policy:
+- `targets.uniprot_accession` stores canonical UniProt accession only.
+- Mutation context (e.g., E255K, T315I) is stored in `target_variants`.
+
 Reference: Davis et al., Nature Biotechnology 29, 1046-1051 (2011)
 """
 
@@ -378,7 +382,8 @@ def standardize_all_targets(
     """Standardize all DAVIS protein targets.
 
     Targets whose RefSeq ID cannot be mapped to UniProt are skipped.
-    Mutation variants get accessions like 'P00519_E255K'.
+    Canonical UniProt accessions are stored in `targets`; mutation labels
+    are retained for later insertion into `target_variants`.
     """
     targets = []
     for _, row in proteins_df.iterrows():
@@ -394,20 +399,16 @@ def standardize_all_targets(
             )
             continue
 
-        # Build variant-aware accession
-        if mutation:
-            uniprot_acc = f"{base_uniprot}_{mutation}"
-        else:
-            uniprot_acc = base_uniprot
-
         seq = row["Sequence"]
         targets.append({
             "protein_index": int(row["Protein_Index"]),
-            "uniprot_accession": uniprot_acc,
+            "uniprot_accession": base_uniprot,
             "gene_symbol": base_gene,
             "amino_acid_sequence": seq,
             "sequence_length": len(seq),
             "target_family": "kinase",
+            "variant_label": mutation,
+            "raw_gene_name": gene_name,
         })
 
     return targets
@@ -522,11 +523,56 @@ def insert_targets(
     return prot_to_tid
 
 
+def insert_target_variants(
+    conn: sqlite3.Connection,
+    targets: list[dict],
+    target_map: dict[int, int],
+) -> tuple[dict[int, int], int]:
+    """Insert mutation variants into target_variants and map protein_index->variant_id.
+
+    Returns:
+        (protein_to_variant_id, unique_variant_rows)
+    """
+    prot_to_variant: dict[int, int] = {}
+
+    for tgt in targets:
+        variant_label = tgt.get("variant_label")
+        if not variant_label:
+            continue
+
+        protein_index = tgt["protein_index"]
+        target_id = target_map.get(protein_index)
+        if target_id is None:
+            continue
+
+        source_record_id = f"DAVIS:PROTEIN:{protein_index}"
+        conn.execute(
+            """INSERT OR IGNORE INTO target_variants
+            (target_id, variant_label, raw_gene_name, source_db, source_record_id)
+            VALUES (?, ?, ?, 'davis', ?)""",
+            (target_id, variant_label, tgt.get("raw_gene_name"), source_record_id),
+        )
+        row = conn.execute(
+            """SELECT variant_id FROM target_variants
+            WHERE target_id = ? AND variant_label = ?
+              AND source_db = 'davis' AND source_record_id = ?""",
+            (target_id, variant_label, source_record_id),
+        ).fetchone()
+        if row is not None:
+            prot_to_variant[protein_index] = row[0]
+
+    unique_variants = conn.execute(
+        "SELECT COUNT(*) FROM target_variants WHERE source_db = 'davis'"
+    ).fetchone()[0]
+    return prot_to_variant, unique_variants
+
+
 def insert_negative_results(
     conn: sqlite3.Connection,
     inactive_df: pd.DataFrame,
     drug_map: dict[int, int],
     target_map: dict[int, int],
+    variant_map: dict[int, int] | None = None,
 ) -> tuple[int, int]:
     """Insert inactive DAVIS results into negative_results table.
 
@@ -547,23 +593,28 @@ def insert_negative_results(
             continue
 
         source_record_id = f"DAVIS:{drug_idx}_{prot_idx}"
+        variant_id = None
+        if variant_map is not None:
+            variant_id = variant_map.get(prot_idx)
+
         params.append((
             compound_id,
             target_id,
+            variant_id,
             pkd,
             source_record_id,
         ))
 
     conn.executemany(
         """INSERT OR IGNORE INTO negative_results
-        (compound_id, target_id, assay_id,
+        (compound_id, target_id, variant_id, assay_id,
          result_type, confidence_tier,
          activity_type, activity_value, activity_unit, activity_relation,
          pchembl_value,
          inactivity_threshold, inactivity_threshold_unit,
          source_db, source_record_id, extraction_method,
          curator_validated, publication_year, species_tested)
-        VALUES (?, ?, NULL,
+        VALUES (?, ?, ?, NULL,
                 'hard_negative', 'bronze',
                 'Kd', 10000.0, 'nM', '>=',
                 ?,
@@ -700,10 +751,11 @@ def run_davis_etl(
 
         logger.info("Inserting targets...")
         target_map = insert_targets(conn, targets)
+        prot_to_variant, n_variants = insert_target_variants(conn, targets, target_map)
 
         logger.info("Inserting negative results...")
         total_params, skipped = insert_negative_results(
-            conn, inactive_df, drug_map, target_map,
+            conn, inactive_df, drug_map, target_map, variant_map=prot_to_variant,
         )
 
         logger.info("Refreshing compound-target pairs...")
@@ -715,6 +767,7 @@ def run_davis_etl(
         "compounds_inserted": len(compounds),
         "targets_inserted": len(targets),
         "targets_unmapped": len(proteins_df) - len(targets),
+        "variants_tracked": n_variants,
         "results_loaded": total_params,
         "results_skipped_unmapped": skipped,
         "results_skipped_active": int(n_active),

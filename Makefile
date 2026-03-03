@@ -40,7 +40,7 @@ download: download-pubchem download-chembl download-bindingdb download-davis
 
 # === ETL: Load Sources ===
 
-.PHONY: load-davis load-chembl
+.PHONY: load-davis load-chembl load-pubchem load-bindingdb load-all
 
 load-davis: db download-davis
 	uv run python scripts/load_davis.py
@@ -48,10 +48,10 @@ load-davis: db download-davis
 load-chembl: db download-chembl
 	uv run python scripts/load_chembl.py
 
-# === Week 3+ Pipeline (placeholders) ===
-# load-pubchem: db download-pubchem
-# load-bindingdb: db download-bindingdb
-# pairs: load-davis load-pubchem load-chembl load-bindingdb
-# splits: pairs
-# export: splits
-# all: export
+load-pubchem: db download-pubchem
+	uv run python scripts/load_pubchem.py
+
+load-bindingdb: db download-bindingdb
+	uv run python scripts/load_bindingdb.py
+
+load-all: load-davis load-chembl load-pubchem load-bindingdb

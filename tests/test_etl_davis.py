@@ -10,12 +10,14 @@ from negbiodb.etl_davis import (
     classify_affinities,
     insert_compounds,
     insert_negative_results,
+    insert_target_variants,
     insert_targets,
     load_davis_csvs,
     parse_gene_name,
     refresh_pairs,
     standardize_all_compounds,
     standardize_compound,
+    standardize_all_targets,
 )
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
@@ -247,6 +249,77 @@ class TestInsertTargets:
 
 
 # ============================================================
+# TestTargetVariants
+# ============================================================
+
+
+class TestTargetVariants:
+
+    def test_standardize_targets_uses_canonical_uniprot(
+        self,
+        sample_proteins_df,
+        mock_refseq_mapping,
+    ):
+        targets = standardize_all_targets(sample_proteins_df, mock_refseq_mapping)
+        accessions = {t["uniprot_accession"] for t in targets}
+
+        # Canonical only: no mutation suffix in uniprot_accession
+        assert accessions == {"Q2M2I8", "P00519"}
+        assert all("_" not in acc for acc in accessions)
+
+        # Variant labels are kept separately for later target_variants insertion
+        labels = {t["variant_label"] for t in targets if t["variant_label"] is not None}
+        assert labels == {"E255K", "F317I"}
+
+    def test_insert_target_variants(self, migrated_db):
+        targets = [
+            {
+                "protein_index": 0,
+                "uniprot_accession": "Q2M2I8",
+                "gene_symbol": "AAK1",
+                "amino_acid_sequence": "MKKFF" * 20,
+                "sequence_length": 100,
+                "target_family": "kinase",
+                "variant_label": None,
+                "raw_gene_name": "AAK1",
+            },
+            {
+                "protein_index": 1,
+                "uniprot_accession": "P00519",
+                "gene_symbol": "ABL1",
+                "amino_acid_sequence": "MLEICL" * 20,
+                "sequence_length": 120,
+                "target_family": "kinase",
+                "variant_label": "E255K",
+                "raw_gene_name": "ABL1(E255K)-phosphorylated",
+            },
+            {
+                "protein_index": 3,
+                "uniprot_accession": "P00519",
+                "gene_symbol": "ABL1",
+                "amino_acid_sequence": "MLEICL" * 20,
+                "sequence_length": 120,
+                "target_family": "kinase",
+                "variant_label": "F317I",
+                "raw_gene_name": "ABL1(F317I)-phosphorylated",
+            },
+        ]
+
+        with connect(migrated_db) as conn:
+            target_map = insert_targets(conn, targets)
+            prot_to_variant, n_variants = insert_target_variants(conn, targets, target_map)
+            conn.commit()
+
+            assert n_variants == 2
+            assert 1 in prot_to_variant
+            assert 3 in prot_to_variant
+            row = conn.execute(
+                "SELECT COUNT(*) FROM target_variants WHERE source_db='davis'"
+            ).fetchone()
+            assert row[0] == 2
+
+
+# ============================================================
 # TestInsertNegativeResults
 # ============================================================
 
@@ -327,6 +400,40 @@ class TestInsertNegativeResults:
             conn.commit()
         assert total == 1
         assert skipped == 1
+
+    def test_records_variant_id_when_provided(self, migrated_db):
+        with connect(migrated_db) as conn:
+            cid, tid = self._setup_data(conn)
+            conn.execute(
+                """INSERT INTO target_variants
+                (target_id, variant_label, raw_gene_name, source_db, source_record_id)
+                VALUES (?, 'E255K', 'ABL1(E255K)-phosphorylated', 'davis', 'DAVIS:PROTEIN:1')""",
+                (tid,),
+            )
+            variant_id = conn.execute(
+                "SELECT variant_id FROM target_variants WHERE source_record_id='DAVIS:PROTEIN:1'"
+            ).fetchone()[0]
+
+            inactive_df = pd.DataFrame({
+                "Drug_Index": [0],
+                "Protein_Index": [1],
+                "Affinity": [5.0],
+            })
+            total, skipped = insert_negative_results(
+                conn,
+                inactive_df,
+                {0: cid},
+                {1: tid},
+                variant_map={1: variant_id},
+            )
+            conn.commit()
+
+            assert total == 1
+            assert skipped == 0
+            row = conn.execute(
+                "SELECT variant_id FROM negative_results WHERE source_record_id='DAVIS:0_1'"
+            ).fetchone()
+            assert row[0] == variant_id
 
 
 # ============================================================
