@@ -8,6 +8,7 @@ borderline_exclusion:
   lower: 4.5                          # Exclude pChEMBL in [4.5, 5.5] from both pools
   upper: 5.5
 davis_inactive_pkd_threshold: 5.0     # DAVIS: inactive if pKd <= 5 (NOT strictly < 5)
+davis_active_pkd_threshold: 7.0       # DAVIS: active if pKd >= 7 (Kd <= 100 nM)
 
 # === ML Split Configuration ===
 split_ratios:
