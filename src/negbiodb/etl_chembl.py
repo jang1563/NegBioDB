@@ -1,0 +1,468 @@
+"""ETL pipeline for loading ChEMBL inactive DTI data into NegBioDB.
+
+Extracts two types of inactive records from ChEMBL v36 SQLite:
+  Type 1: pChEMBL < 4.5 (quantitative, after borderline exclusion)
+  Type 2: Right-censored (standard_relation '>'/'>=', value >= 10000 nM)
+
+All records are assigned silver confidence tier (peer-reviewed literature).
+ChEMBL already provides UniProt accessions — no API mapping needed.
+"""
+
+import logging
+import sqlite3
+from pathlib import Path
+
+import pandas as pd
+from tqdm import tqdm
+
+from negbiodb.db import connect, create_database, _PROJECT_ROOT
+from negbiodb.download import load_config
+from negbiodb.standardize import standardize_smiles
+
+logger = logging.getLogger(__name__)
+
+# SQL query for extracting inactive DTI records from ChEMBL
+_CHEMBL_INACTIVE_SQL = """
+SELECT
+    a.activity_id,
+    md.molregno,
+    md.chembl_id AS chembl_compound_id,
+    cs.canonical_smiles,
+    cs.standard_inchi_key,
+    a.pchembl_value,
+    a.standard_type,
+    a.standard_value,
+    a.standard_relation,
+    a.standard_units,
+    cp.accession AS uniprot_accession,
+    td.chembl_id AS chembl_target_id,
+    td.pref_name AS target_name,
+    td.organism,
+    cp.sequence AS protein_sequence,
+    LENGTH(cp.sequence) AS sequence_length,
+    ass.chembl_id AS assay_chembl_id,
+    docs.year AS publication_year
+FROM activities a
+JOIN molecule_dictionary md ON a.molregno = md.molregno
+JOIN compound_structures cs ON a.molregno = cs.molregno
+JOIN assays ass ON a.assay_id = ass.assay_id
+JOIN target_dictionary td ON ass.tid = td.tid
+JOIN target_components tc ON td.tid = tc.tid
+JOIN component_sequences cp ON tc.component_id = cp.component_id
+LEFT JOIN docs ON a.doc_id = docs.doc_id
+WHERE (
+    (a.pchembl_value IS NOT NULL AND a.pchembl_value < :borderline_lower)
+    OR
+    (a.pchembl_value IS NULL
+     AND a.standard_relation IN ('>', '>=')
+     AND a.standard_value >= :inactivity_threshold
+     AND a.standard_units = 'nM')
+)
+AND a.standard_type IN ('IC50', 'Ki', 'Kd', 'EC50')
+AND a.data_validity_comment IS NULL
+AND td.target_type = 'SINGLE PROTEIN'
+AND td.organism = 'Homo sapiens'
+AND cp.accession IS NOT NULL
+AND cs.canonical_smiles IS NOT NULL
+"""
+
+
+# ============================================================
+# EXTRACT
+# ============================================================
+
+
+def find_chembl_db(data_dir: Path | None = None) -> Path:
+    """Find ChEMBL SQLite database file in data/chembl/.
+
+    Looks for the symlink created by scripts/download_chembl.py.
+    """
+    if data_dir is None:
+        cfg = load_config()
+        data_dir = _PROJECT_ROOT / cfg["downloads"]["chembl"]["dest_dir"]
+
+    candidates = sorted(data_dir.glob("chembl_*.db"))
+    if not candidates:
+        raise FileNotFoundError(
+            f"No ChEMBL database found in {data_dir}. "
+            "Run 'make download-chembl' first."
+        )
+    # Use the latest version (last in sorted order)
+    return candidates[-1]
+
+
+def extract_chembl_inactives(
+    chembl_db_path: Path,
+    cfg: dict | None = None,
+) -> pd.DataFrame:
+    """Query ChEMBL SQLite for inactive DTI records.
+
+    Returns DataFrame with all columns needed for compound/target/result loading.
+    """
+    if cfg is None:
+        cfg = load_config()
+
+    borderline_lower = cfg["borderline_exclusion"]["lower"]
+    inactivity_threshold = cfg["inactivity_threshold_nm"]
+
+    logger.info(
+        "Querying ChEMBL for inactives (pChEMBL < %.1f or right-censored >= %d nM)...",
+        borderline_lower, inactivity_threshold,
+    )
+
+    conn = sqlite3.connect(str(chembl_db_path))
+    try:
+        df = pd.read_sql_query(
+            _CHEMBL_INACTIVE_SQL,
+            conn,
+            params={
+                "borderline_lower": borderline_lower,
+                "inactivity_threshold": inactivity_threshold,
+            },
+        )
+    finally:
+        conn.close()
+
+    n_type1 = df["pchembl_value"].notna().sum()
+    n_type2 = df["pchembl_value"].isna().sum()
+    logger.info(
+        "Extracted %d records: %d quantitative (pChEMBL < %.1f), %d right-censored",
+        len(df), n_type1, borderline_lower, n_type2,
+    )
+
+    return df
+
+
+# ============================================================
+# TRANSFORM: Compounds
+# ============================================================
+
+
+def standardize_chembl_compounds(
+    df: pd.DataFrame,
+) -> tuple[list[dict], dict[int, str]]:
+    """Standardize unique ChEMBL compounds with RDKit.
+
+    Returns:
+        compounds: list of dicts ready for DB insertion
+        molregno_to_inchikey: mapping from ChEMBL molregno to computed InChIKey
+    """
+    unique = df.drop_duplicates("molregno")[["molregno", "chembl_compound_id", "canonical_smiles"]]
+    logger.info("Standardizing %d unique compounds...", len(unique))
+
+    compounds = []
+    molregno_to_inchikey: dict[int, str] = {}
+    failed = 0
+
+    for _, row in tqdm(unique.iterrows(), total=len(unique), desc="RDKit"):
+        result = standardize_smiles(row["canonical_smiles"])
+        if result is None:
+            failed += 1
+            continue
+        result["chembl_id"] = row["chembl_compound_id"]
+        compounds.append(result)
+        molregno_to_inchikey[row["molregno"]] = result["inchikey"]
+
+    logger.info(
+        "Standardized %d / %d compounds (%d failed)",
+        len(compounds), len(unique), failed,
+    )
+    return compounds, molregno_to_inchikey
+
+
+# ============================================================
+# TRANSFORM: Targets
+# ============================================================
+
+
+def prepare_chembl_targets(df: pd.DataFrame) -> list[dict]:
+    """Deduplicate and prepare target dicts from ChEMBL query results.
+
+    UniProt accessions come directly from ChEMBL — no API mapping needed.
+    """
+    target_cols = [
+        "uniprot_accession", "chembl_target_id", "target_name",
+        "protein_sequence", "sequence_length",
+    ]
+    unique = df.drop_duplicates("uniprot_accession")[target_cols]
+    logger.info("Preparing %d unique targets...", len(unique))
+
+    targets = []
+    for _, row in unique.iterrows():
+        targets.append({
+            "uniprot_accession": row["uniprot_accession"],
+            "chembl_target_id": row["chembl_target_id"],
+            "amino_acid_sequence": row["protein_sequence"],
+            "sequence_length": int(row["sequence_length"]) if pd.notna(row["sequence_length"]) else None,
+        })
+
+    return targets
+
+
+# ============================================================
+# LOAD
+# ============================================================
+
+
+def insert_chembl_compounds(
+    conn: sqlite3.Connection,
+    compounds: list[dict],
+) -> dict[str, int]:
+    """Insert standardized compounds into the database.
+
+    Returns dict mapping InChIKey -> database compound_id.
+    Uses INSERT OR IGNORE for cross-DB dedup with DAVIS via InChIKey UNIQUE.
+    """
+    for comp in compounds:
+        conn.execute(
+            """INSERT OR IGNORE INTO compounds
+            (canonical_smiles, inchikey, inchikey_connectivity, inchi,
+             chembl_id, molecular_weight, logp, hbd, hba, tpsa,
+             rotatable_bonds, num_heavy_atoms, qed, pains_alert,
+             lipinski_violations)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                comp["canonical_smiles"],
+                comp["inchikey"],
+                comp["inchikey_connectivity"],
+                comp["inchi"],
+                comp["chembl_id"],
+                comp["molecular_weight"],
+                comp["logp"],
+                comp["hbd"],
+                comp["hba"],
+                comp["tpsa"],
+                comp["rotatable_bonds"],
+                comp["num_heavy_atoms"],
+                comp["qed"],
+                comp["pains_alert"],
+                comp["lipinski_violations"],
+            ),
+        )
+
+    # Build inchikey -> compound_id mapping
+    inchikeys = [c["inchikey"] for c in compounds]
+    inchikey_to_cid: dict[str, int] = {}
+    # Query in batches to avoid SQL variable limit
+    batch_size = 500
+    for i in range(0, len(inchikeys), batch_size):
+        batch = inchikeys[i : i + batch_size]
+        placeholders = ",".join("?" * len(batch))
+        rows = conn.execute(
+            f"SELECT inchikey, compound_id FROM compounds WHERE inchikey IN ({placeholders})",
+            batch,
+        ).fetchall()
+        for ik, cid in rows:
+            inchikey_to_cid[ik] = cid
+
+    return inchikey_to_cid
+
+
+def insert_chembl_targets(
+    conn: sqlite3.Connection,
+    targets: list[dict],
+) -> dict[str, int]:
+    """Insert standardized targets into the database.
+
+    Returns dict mapping UniProt accession -> database target_id.
+    Uses INSERT OR IGNORE for cross-DB dedup with DAVIS via uniprot_accession UNIQUE.
+    """
+    for tgt in targets:
+        conn.execute(
+            """INSERT OR IGNORE INTO targets
+            (uniprot_accession, chembl_target_id,
+             amino_acid_sequence, sequence_length)
+            VALUES (?, ?, ?, ?)""",
+            (
+                tgt["uniprot_accession"],
+                tgt["chembl_target_id"],
+                tgt["amino_acid_sequence"],
+                tgt["sequence_length"],
+            ),
+        )
+
+    # Build accession -> target_id mapping
+    accessions = [t["uniprot_accession"] for t in targets]
+    acc_to_tid: dict[str, int] = {}
+    batch_size = 500
+    for i in range(0, len(accessions), batch_size):
+        batch = accessions[i : i + batch_size]
+        placeholders = ",".join("?" * len(batch))
+        rows = conn.execute(
+            f"SELECT uniprot_accession, target_id FROM targets WHERE uniprot_accession IN ({placeholders})",
+            batch,
+        ).fetchall()
+        for acc, tid in rows:
+            acc_to_tid[acc] = tid
+
+    return acc_to_tid
+
+
+def insert_chembl_negative_results(
+    conn: sqlite3.Connection,
+    df: pd.DataFrame,
+    molregno_to_inchikey: dict[int, str],
+    inchikey_to_cid: dict[str, int],
+    uniprot_to_tid: dict[str, int],
+) -> tuple[int, int]:
+    """Insert ChEMBL inactive records into negative_results table.
+
+    Returns (inserted_count, skipped_count).
+    """
+    params = []
+    skipped = 0
+
+    for _, row in df.iterrows():
+        # Resolve compound_id via molregno -> inchikey -> compound_id
+        inchikey = molregno_to_inchikey.get(row["molregno"])
+        if inchikey is None:
+            skipped += 1
+            continue
+        compound_id = inchikey_to_cid.get(inchikey)
+        if compound_id is None:
+            skipped += 1
+            continue
+
+        # Resolve target_id via uniprot_accession
+        target_id = uniprot_to_tid.get(row["uniprot_accession"])
+        if target_id is None:
+            skipped += 1
+            continue
+
+        activity_id = int(row["activity_id"])
+        pchembl = float(row["pchembl_value"]) if pd.notna(row["pchembl_value"]) else None
+        activity_value = float(row["standard_value"]) if pd.notna(row["standard_value"]) else None
+        activity_relation = row["standard_relation"] if pd.notna(row["standard_relation"]) else "="
+        pub_year = int(row["publication_year"]) if pd.notna(row["publication_year"]) else None
+
+        params.append((
+            compound_id,
+            target_id,
+            row["standard_type"],
+            activity_value,
+            row["standard_units"] if pd.notna(row["standard_units"]) else "nM",
+            activity_relation,
+            pchembl,
+            f"CHEMBL:{activity_id}",
+            pub_year,
+        ))
+
+    # Batch insert
+    conn.executemany(
+        """INSERT OR IGNORE INTO negative_results
+        (compound_id, target_id, assay_id,
+         result_type, confidence_tier,
+         activity_type, activity_value, activity_unit, activity_relation,
+         pchembl_value,
+         inactivity_threshold, inactivity_threshold_unit,
+         source_db, source_record_id, extraction_method,
+         curator_validated, publication_year, species_tested)
+        VALUES (?, ?, NULL,
+                'hard_negative', 'silver',
+                ?, ?, ?, ?,
+                ?,
+                10000.0, 'nM',
+                'chembl', ?, 'database_direct',
+                0, ?, 'Homo sapiens')""",
+        params,
+    )
+
+    return len(params), skipped
+
+
+def refresh_all_pairs(conn: sqlite3.Connection) -> int:
+    """Refresh compound_target_pairs aggregation across ALL sources.
+
+    Unlike etl_davis.refresh_pairs() which is per-source, this aggregates
+    globally so cross-source pairs are correctly merged.
+    """
+    conn.execute("DELETE FROM compound_target_pairs")
+    conn.execute(
+        """INSERT INTO compound_target_pairs
+        (compound_id, target_id, num_assays, num_sources,
+         best_confidence, best_result_type, earliest_year,
+         median_pchembl, min_activity_value, max_activity_value)
+        SELECT
+            compound_id,
+            target_id,
+            COUNT(DISTINCT COALESCE(assay_id, -1)),
+            COUNT(DISTINCT source_db),
+            CASE MIN(CASE confidence_tier
+                WHEN 'gold' THEN 1 WHEN 'silver' THEN 2
+                WHEN 'bronze' THEN 3 WHEN 'copper' THEN 4 END)
+                WHEN 1 THEN 'gold' WHEN 2 THEN 'silver'
+                WHEN 3 THEN 'bronze' WHEN 4 THEN 'copper' END,
+            MIN(result_type),
+            MIN(publication_year),
+            AVG(pchembl_value),
+            MIN(activity_value),
+            MAX(activity_value)
+        FROM negative_results
+        GROUP BY compound_id, target_id"""
+    )
+
+    count = conn.execute("SELECT COUNT(*) FROM compound_target_pairs").fetchone()[0]
+    return count
+
+
+# ============================================================
+# ORCHESTRATOR
+# ============================================================
+
+
+def run_chembl_etl(
+    db_path: Path,
+    chembl_db_path: Path | None = None,
+) -> dict:
+    """Run the full ChEMBL ETL pipeline.
+
+    Returns dict with ETL statistics.
+    """
+    cfg = load_config()
+
+    if chembl_db_path is None:
+        chembl_db_path = find_chembl_db()
+
+    logger.info("Using ChEMBL database: %s", chembl_db_path)
+
+    # === EXTRACT ===
+    df = extract_chembl_inactives(chembl_db_path, cfg)
+
+    # === TRANSFORM: Compounds ===
+    compounds, molregno_to_inchikey = standardize_chembl_compounds(df)
+
+    # === TRANSFORM: Targets ===
+    targets = prepare_chembl_targets(df)
+
+    # === LOAD ===
+    create_database(db_path)
+
+    with connect(db_path) as conn:
+        logger.info("Inserting %d compounds...", len(compounds))
+        inchikey_to_cid = insert_chembl_compounds(conn, compounds)
+
+        logger.info("Inserting %d targets...", len(targets))
+        uniprot_to_tid = insert_chembl_targets(conn, targets)
+
+        logger.info("Inserting negative results...")
+        inserted, skipped = insert_chembl_negative_results(
+            conn, df, molregno_to_inchikey, inchikey_to_cid, uniprot_to_tid,
+        )
+
+        logger.info("Refreshing compound-target pairs (all sources)...")
+        n_pairs = refresh_all_pairs(conn)
+
+        conn.commit()
+
+    stats = {
+        "records_extracted": len(df),
+        "compounds_standardized": len(compounds),
+        "compounds_failed_rdkit": len(df["molregno"].unique()) - len(compounds),
+        "targets_prepared": len(targets),
+        "results_inserted": inserted,
+        "results_skipped": skipped,
+        "pairs_total": n_pairs,
+    }
+
+    logger.info("ChEMBL ETL complete: %s", stats)
+    return stats

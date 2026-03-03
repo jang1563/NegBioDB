@@ -17,19 +17,12 @@ from pathlib import Path
 
 import pandas as pd
 import requests
-from rdkit import Chem
-from rdkit.Chem import Crippen, Descriptors, QED, rdMolDescriptors
-from rdkit.Chem.FilterCatalog import FilterCatalog, FilterCatalogParams
 
 from negbiodb.db import connect, create_database, _PROJECT_ROOT
 from negbiodb.download import load_config
+from negbiodb.standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
-
-# PAINS filter catalog (initialized once)
-_pains_params = FilterCatalogParams()
-_pains_params.AddCatalog(FilterCatalogParams.FilterCatalogs.PAINS)
-_PAINS_CATALOG = FilterCatalog(_pains_params)
 
 
 # ============================================================
@@ -60,43 +53,11 @@ def standardize_compound(smiles: str, cid: int) -> dict | None:
 
     Returns dict with all compound fields, or None if SMILES fails to parse.
     """
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
+    result = standardize_smiles(smiles)
+    if result is None:
         return None
-
-    canonical = Chem.MolToSmiles(mol)
-    inchi = Chem.MolToInchi(mol)
-    if inchi is None:
-        return None
-    inchikey = Chem.InchiToInchiKey(inchi)
-    if inchikey is None:
-        return None
-
-    mw = Descriptors.MolWt(mol)
-    logp = Crippen.MolLogP(mol)
-    hbd = rdMolDescriptors.CalcNumHBD(mol)
-    hba = rdMolDescriptors.CalcNumHBA(mol)
-
-    lipinski = sum([mw > 500, logp > 5, hbd > 5, hba > 10])
-    pains = 1 if _PAINS_CATALOG.HasMatch(mol) else 0
-
-    return {
-        "canonical_smiles": canonical,
-        "inchikey": inchikey,
-        "inchikey_connectivity": inchikey[:14],
-        "inchi": inchi,
-        "pubchem_cid": int(cid),
-        "molecular_weight": round(mw, 2),
-        "logp": round(logp, 2),
-        "hbd": hbd,
-        "hba": hba,
-        "tpsa": round(Descriptors.TPSA(mol), 2),
-        "rotatable_bonds": rdMolDescriptors.CalcNumRotatableBonds(mol),
-        "num_heavy_atoms": mol.GetNumHeavyAtoms(),
-        "qed": round(QED.qed(mol), 4),
-        "pains_alert": pains,
-        "lipinski_violations": lipinski,
-    }
+    result["pubchem_cid"] = int(cid)
+    return result
 
 
 def standardize_all_compounds(drugs_df: pd.DataFrame) -> list[dict]:
