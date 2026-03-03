@@ -26,7 +26,7 @@ class TestLoadConfig:
 
     def test_config_pubchem_has_url(self):
         cfg = load_config()
-        assert cfg["downloads"]["pubchem"]["url"].startswith("ftp://")
+        assert cfg["downloads"]["pubchem"]["url"].startswith("https://")
 
     def test_config_davis_has_files(self):
         cfg = load_config()

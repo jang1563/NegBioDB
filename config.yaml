@@ -36,7 +36,7 @@ paths:
 # === Download URLs ===
 downloads:
   pubchem:
-    url: "ftp://ftp.ncbi.nlm.nih.gov/pubchem/Bioassay/Extras/bioactivities.tsv.gz"
+    url: "https://ftp.ncbi.nlm.nih.gov/pubchem/Bioassay/Extras/bioactivities.tsv.gz"
     dest: data/pubchem/bioactivities.tsv.gz
     min_size_bytes: 1000000000
   chembl:
