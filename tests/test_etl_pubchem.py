@@ -8,6 +8,7 @@ import pytest
 
 from negbiodb.db import connect, create_database
 from negbiodb.etl_pubchem import (
+    _to_nm,
     build_sid_lookup_db,
     load_aid_to_uniprot_map,
     load_confirmatory_aids,
@@ -32,6 +33,24 @@ def _write_gz_tsv(path: Path, header: list[str], rows: list[list[object]]) -> Pa
         for row in rows:
             f.write("\t".join("" if v is None else str(v) for v in row) + "\n")
     return path
+
+
+class TestToNm:
+
+    def test_nm(self):
+        assert _to_nm(100.0, "nM") == 100.0
+
+    def test_um(self):
+        assert _to_nm(20.0, "uM") == 20_000.0
+
+    def test_mm(self):
+        assert _to_nm(1.0, "mM") == 1_000_000.0
+
+    def test_none_unit(self):
+        assert _to_nm(100.0, None) is None
+
+    def test_unknown_unit(self):
+        assert _to_nm(100.0, "%") is None
 
 
 class TestPubChemHelpers:
@@ -415,3 +434,75 @@ class TestRunPubChemETL:
             }
             assert "P30001" in targets
             assert "1Y7V_A" not in targets
+
+    def test_run_pubchem_etl_computes_pchembl_for_um_units(
+        self, migrated_db, tmp_path
+    ):
+        """pchembl should be calculated for µM values by converting to nM first."""
+        import math
+
+        bioactivities = _write_gz_tsv(
+            tmp_path / "bioactivities.tsv.gz",
+            [
+                "AID", "SID", "CID", "Activity Outcome",
+                "Activity Name", "Activity Value", "Activity Unit",
+                "Protein Accession", "Target TaxID",
+            ],
+            [
+                # 20 µM = 20000 nM → pchembl ≈ 4.699
+                [4001, 41, None, "Inactive", "IC50", 20, "uM", "P40001", 9606],
+                # nM value for comparison
+                [4001, 42, None, "Inactive", "IC50", 20000, "nM", "P40001", 9606],
+                # No value → pchembl should be NULL
+                [4001, 43, None, "Inactive", "IC50", None, None, "P40001", 9606],
+            ],
+        )
+        bioassays = _write_gz_tsv(
+            tmp_path / "bioassays.tsv.gz",
+            ["AID", "Assay Type", "Protein Accession"],
+            [[4001, "confirmatory", "P40001"]],
+        )
+        aid_map = _write_gz_tsv(
+            tmp_path / "Aid2GeneidAccessionUniProt.gz",
+            ["AID", "UniProt"],
+            [[4001, "P40001"]],
+        )
+        sid_map = _write_gz_tsv(
+            tmp_path / "Sid2CidSMILES.gz",
+            ["SID", "CID", "SMILES"],
+            [[41, 141, "CCO"], [42, 142, "CCN"], [43, 143, "CCC"]],
+        )
+
+        run_pubchem_etl(
+            db_path=migrated_db,
+            bioactivities_path=bioactivities,
+            bioassays_path=bioassays,
+            aid_uniprot_path=aid_map,
+            sid_cid_smiles_path=sid_map,
+            sid_lookup_db_path=tmp_path / "sid_lookup.sqlite",
+            chunksize=10,
+        )
+
+        with connect(migrated_db) as conn:
+            rows = conn.execute(
+                """SELECT source_record_id, activity_value, activity_unit, pchembl_value
+                FROM negative_results WHERE source_db='pubchem'
+                ORDER BY source_record_id"""
+            ).fetchall()
+
+            expected_pchembl = 9.0 - math.log10(20000)  # ≈ 4.699
+            # µM row
+            um_row = [r for r in rows if "41:" in r[0]][0]
+            assert um_row[1] == 20.0  # original value preserved
+            assert um_row[2] == "uM"  # original unit preserved
+            assert um_row[3] is not None
+            assert abs(um_row[3] - expected_pchembl) < 0.001
+
+            # nM row — same pchembl
+            nm_row = [r for r in rows if "42:" in r[0]][0]
+            assert nm_row[3] is not None
+            assert abs(nm_row[3] - expected_pchembl) < 0.001
+
+            # NULL value row — pchembl NULL
+            null_row = [r for r in rows if "43:" in r[0]][0]
+            assert null_row[3] is None

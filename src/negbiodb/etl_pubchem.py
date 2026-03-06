@@ -118,6 +118,30 @@ def _is_nm_unit(value: object) -> bool:
     return unit in {"nm", "nanomolar"}
 
 
+_UNIT_TO_NM: dict[str, float] = {
+    "nm": 1.0,
+    "nanomolar": 1.0,
+    "um": 1_000.0,
+    "µm": 1_000.0,
+    "micromolar": 1_000.0,
+    "mm": 1_000_000.0,
+    "millimolar": 1_000_000.0,
+    "m": 1_000_000_000.0,
+    "molar": 1_000_000_000.0,
+}
+
+
+def _to_nm(value: float, unit: object) -> float | None:
+    """Convert an activity value to nanomolar.  Returns None for unknown units."""
+    if pd.isna(unit):
+        return None
+    u = str(unit).strip().lower().replace(" ", "")
+    factor = _UNIT_TO_NM.get(u)
+    if factor is None:
+        return None
+    return value * factor
+
+
 def _source_signature(path: Path) -> tuple[int, int]:
     stat = path.stat()
     return int(stat.st_size), int(stat.st_mtime)
@@ -821,12 +845,10 @@ def run_pubchem_etl(
                     float(r.activity_value) if pd.notna(r.activity_value) else None
                 )
                 pchembl_value = None
-                if (
-                    activity_value is not None
-                    and activity_value > 0
-                    and _is_nm_unit(r.activity_unit)
-                ):
-                    pchembl_value = 9.0 - math.log10(activity_value)
+                if activity_value is not None and activity_value > 0:
+                    nm_value = _to_nm(activity_value, r.activity_unit)
+                    if nm_value is not None and nm_value > 0:
+                        pchembl_value = 9.0 - math.log10(nm_value)
 
                 source_record_id = f"PUBCHEM:{aid}:{int(r.sid)}:{uniprot}"
                 species_tested = None
