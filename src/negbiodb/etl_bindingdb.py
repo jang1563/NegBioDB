@@ -12,7 +12,7 @@ import pandas as pd
 
 from negbiodb.db import connect, create_database, _PROJECT_ROOT
 from negbiodb.download import load_config
-from negbiodb.etl_chembl import refresh_all_pairs
+from negbiodb.db import refresh_all_pairs
 from negbiodb.standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
@@ -195,7 +195,9 @@ def _extract_inactive_rows_from_chunk(
             if val is None:
                 continue
             is_inactive = False
-            if rel in (">", ">=", "=") and val >= inactivity_threshold_nm:
+            if rel in (">", ">=") and val >= inactivity_threshold_nm:
+                is_inactive = True
+            elif rel == "=" and val > inactivity_threshold_nm:
                 is_inactive = True
             if not is_inactive:
                 continue

@@ -20,7 +20,7 @@ import pandas as pd
 
 from negbiodb.db import connect, create_database, _PROJECT_ROOT
 from negbiodb.download import load_config
-from negbiodb.etl_chembl import refresh_all_pairs
+from negbiodb.db import refresh_all_pairs
 from negbiodb.standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
@@ -603,8 +603,16 @@ def _resolve_pubchem_chunk(chunk: pd.DataFrame, confirmatory_aids: set[int]) -> 
     out["cid"] = pd.to_numeric(chunk[cid_col], errors="coerce") if cid_col else pd.NA
     out["activity_outcome"] = chunk[outcome_col].astype(str)
     out["activity_value"] = pd.to_numeric(chunk[value_col], errors="coerce") if value_col else pd.NA
-    out["activity_name"] = chunk[name_col].astype(str) if name_col else "bioactivity"
-    out["activity_unit"] = chunk[unit_col].astype(str) if unit_col else "nM"
+    if name_col:
+        _names = chunk[name_col]
+        out["activity_name"] = _names.where(_names.notna(), "bioactivity").astype(str)
+    else:
+        out["activity_name"] = "bioactivity"
+    if unit_col:
+        _units = chunk[unit_col]
+        out["activity_unit"] = _units.where(_units.notna(), pd.NA)
+    else:
+        out["activity_unit"] = "nM"
     out["target_taxid"] = pd.to_numeric(chunk[taxid_col], errors="coerce") if taxid_col else pd.NA
     out["protein_accession"] = (
         chunk[accession_col].map(_normalize_accession) if accession_col else None
@@ -820,7 +828,7 @@ def run_pubchem_etl(
                 ):
                     pchembl_value = 9.0 - math.log10(activity_value)
 
-                source_record_id = f"PUBCHEM:{aid}:{int(r.sid)}"
+                source_record_id = f"PUBCHEM:{aid}:{int(r.sid)}:{uniprot}"
                 species_tested = None
                 if pd.notna(r.target_taxid):
                     try:

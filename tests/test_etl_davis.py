@@ -14,11 +14,11 @@ from negbiodb.etl_davis import (
     insert_targets,
     load_davis_csvs,
     parse_gene_name,
-    refresh_pairs,
     standardize_all_compounds,
     standardize_compound,
     standardize_all_targets,
 )
+from negbiodb.db import refresh_all_pairs
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
@@ -97,6 +97,21 @@ class TestParseGeneName:
 
     def test_nonphosphorylated(self):
         assert parse_gene_name("ABL1-nonphosphorylated") == ("ABL1", None)
+
+    def test_domain_selector_jh1(self):
+        assert parse_gene_name("JAK1(JH1domain-catalytic)") == ("JAK1", None)
+
+    def test_domain_selector_jh2(self):
+        assert parse_gene_name("TYK2(JH2domain-pseudokinase)") == ("TYK2", None)
+
+    def test_domain_selector_kin_dom(self):
+        assert parse_gene_name("RPS6KA4(Kin.Dom.1-N-terminal)") == ("RPS6KA4", None)
+
+    def test_species_selector(self):
+        assert parse_gene_name("PFCDPK1(P.falciparum)") == ("PFCDPK1", None)
+
+    def test_deletion_mutation(self):
+        assert parse_gene_name("EGFR(E746-A750del)") == ("EGFR", "E746-A750del")
 
 
 # ============================================================
@@ -464,7 +479,7 @@ class TestRefreshPairs:
                         'Kd', 10000.0, 'nM', 5.0,
                         10000.0, 'davis', 'DAVIS:0_0', 'database_direct', 2011)"""
             )
-            count = refresh_pairs(conn, source_db="davis")
+            count = refresh_all_pairs(conn)
             conn.commit()
         assert count == 1
 
@@ -489,7 +504,7 @@ class TestRefreshPairs:
                         'Kd', 10000.0, 'nM', 5.0,
                         10000.0, 'davis', 'DAVIS:0_0', 'database_direct', 2011)"""
             )
-            refresh_pairs(conn, source_db="davis")
+            refresh_all_pairs(conn)
             conn.commit()
             row = conn.execute(
                 "SELECT best_confidence FROM compound_target_pairs"

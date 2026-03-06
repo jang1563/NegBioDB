@@ -85,6 +85,41 @@ def run_migrations(db_path: str | Path,
         conn.close()
 
 
+def refresh_all_pairs(conn: sqlite3.Connection) -> int:
+    """Refresh compound_target_pairs aggregation across ALL sources.
+
+    Deletes all existing pairs and re-aggregates from negative_results,
+    merging cross-source data with best confidence tier selection.
+    """
+    conn.execute("DELETE FROM compound_target_pairs")
+    conn.execute(
+        """INSERT INTO compound_target_pairs
+        (compound_id, target_id, num_assays, num_sources,
+         best_confidence, best_result_type, earliest_year,
+         median_pchembl, min_activity_value, max_activity_value)
+        SELECT
+            compound_id,
+            target_id,
+            COUNT(DISTINCT COALESCE(assay_id, -1)),
+            COUNT(DISTINCT source_db),
+            CASE MIN(CASE confidence_tier
+                WHEN 'gold' THEN 1 WHEN 'silver' THEN 2
+                WHEN 'bronze' THEN 3 WHEN 'copper' THEN 4 END)
+                WHEN 1 THEN 'gold' WHEN 2 THEN 'silver'
+                WHEN 3 THEN 'bronze' WHEN 4 THEN 'copper' END,
+            MIN(result_type),
+            MIN(publication_year),
+            AVG(pchembl_value),
+            MIN(activity_value),
+            MAX(activity_value)
+        FROM negative_results
+        GROUP BY compound_id, target_id"""
+    )
+
+    count = conn.execute("SELECT COUNT(*) FROM compound_target_pairs").fetchone()[0]
+    return count
+
+
 def create_database(db_path: str | Path | None = None,
                     migrations_dir: str | Path | None = None) -> Path:
     """Create a new NegBioDB database by running all migrations.

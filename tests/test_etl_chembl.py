@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from negbiodb.db import connect, create_database
+from negbiodb.db import refresh_all_pairs
 from negbiodb.etl_chembl import (
     extract_chembl_inactives,
     find_chembl_db,
@@ -14,7 +15,6 @@ from negbiodb.etl_chembl import (
     insert_chembl_negative_results,
     insert_chembl_targets,
     prepare_chembl_targets,
-    refresh_all_pairs,
     standardize_chembl_compounds,
 )
 from negbiodb.standardize import standardize_smiles

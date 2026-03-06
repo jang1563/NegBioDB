@@ -347,8 +347,8 @@ class TestRunPubChemETL:
                 """
             ).fetchall()
             assert rows == [
-                ("PUBCHEM:2001:21", "Homo sapiens"),
-                ("PUBCHEM:2004:24", "Homo sapiens"),
+                ("PUBCHEM:2001:21:P20001", "Homo sapiens"),
+                ("PUBCHEM:2004:24:P20004", "Homo sapiens"),
             ]
 
     def test_run_pubchem_etl_uses_aid_map_when_direct_accession_is_non_uniprot(

@@ -22,7 +22,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from negbiodb.db import connect, create_database, _PROJECT_ROOT
+from negbiodb.db import connect, create_database, refresh_all_pairs, _PROJECT_ROOT
 from negbiodb.download import load_config
 from negbiodb.standardize import standardize_smiles
 
@@ -85,17 +85,29 @@ def standardize_all_compounds(drugs_df: pd.DataFrame) -> list[dict]:
 def parse_gene_name(gene_name: str) -> tuple[str, str | None]:
     """Parse DAVIS gene name into (base_gene, mutation).
 
+    Only parenthesised labels that start with an amino-acid letter followed
+    by a position number (e.g. E255K, T315I, L747-E749del) are treated as
+    mutations.  Domain selectors (JH1domain-catalytic, Kin.Dom.1-N-terminal)
+    and species tags (P.falciparum) are NOT mutations.
+
     Examples:
         'ABL1(E255K)-phosphorylated' -> ('ABL1', 'E255K')
         'ABL1(T315I)-phosphorylated' -> ('ABL1', 'T315I')
+        'JAK1(JH1domain-catalytic)'  -> ('JAK1', None)
+        'RPS6KA4(Kin.Dom.1-N-terminal)' -> ('RPS6KA4', None)
         'ABL1-phosphorylated'        -> ('ABL1', None)
         'PIK3CA'                     -> ('PIK3CA', None)
     """
     m = re.match(r"^([A-Za-z0-9_]+)\(([^)]+)\)", gene_name)
     if m:
-        return m.group(1), m.group(2)
+        base, label = m.group(1), m.group(2)
+        # Only treat as mutation if label starts with amino acid + position
+        if re.match(r"^[A-Z]\d", label):
+            return base, label
+        # Domain/species selector — base gene only, no variant
+        return base, None
 
-    # Strip suffixes like '-phosphorylated', '-alpha', '-nonphosphorylated'
+    # Strip suffixes like '-phosphorylated', '-nonphosphorylated'
     base = re.split(r"-(?:phosphorylated|nonphosphorylated)", gene_name)[0]
     return base, None
 
@@ -627,45 +639,6 @@ def insert_negative_results(
     return len(params), skipped
 
 
-def refresh_pairs(conn: sqlite3.Connection, source_db: str = "davis") -> int:
-    """Refresh compound_target_pairs aggregation for a given source."""
-    # Use CASE to map confidence tier rank back to text in the same query
-    conn.execute(
-        """INSERT OR REPLACE INTO compound_target_pairs
-        (compound_id, target_id, num_assays, num_sources,
-         best_confidence, best_result_type, earliest_year,
-         median_pchembl, min_activity_value, max_activity_value)
-        SELECT
-            compound_id,
-            target_id,
-            COUNT(DISTINCT COALESCE(assay_id, -1)),
-            COUNT(DISTINCT source_db),
-            CASE MIN(CASE confidence_tier
-                WHEN 'gold' THEN 1 WHEN 'silver' THEN 2
-                WHEN 'bronze' THEN 3 WHEN 'copper' THEN 4 END)
-                WHEN 1 THEN 'gold' WHEN 2 THEN 'silver'
-                WHEN 3 THEN 'bronze' WHEN 4 THEN 'copper' END,
-            MIN(result_type),
-            MIN(publication_year),
-            AVG(pchembl_value),
-            MIN(activity_value),
-            MAX(activity_value)
-        FROM negative_results
-        WHERE source_db = ?
-        GROUP BY compound_id, target_id""",
-        (source_db,),
-    )
-
-    count = conn.execute(
-        """SELECT COUNT(*) FROM compound_target_pairs
-        WHERE compound_id IN (
-            SELECT DISTINCT compound_id FROM negative_results WHERE source_db = ?
-        )""",
-        (source_db,),
-    ).fetchone()[0]
-    return count
-
-
 # ============================================================
 # ORCHESTRATOR
 # ============================================================
@@ -759,7 +732,7 @@ def run_davis_etl(
         )
 
         logger.info("Refreshing compound-target pairs...")
-        n_pairs = refresh_pairs(conn, source_db="davis")
+        n_pairs = refresh_all_pairs(conn)
 
         conn.commit()
 
