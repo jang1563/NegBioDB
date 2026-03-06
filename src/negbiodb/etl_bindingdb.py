@@ -123,6 +123,7 @@ def _extract_inactive_rows_from_chunk(
     uniprot_col = _find_col(
         cols,
         [
+            "uniprot_swissprot_primary_id_of_target_chain_1",
             "uniprot_swissprot_primary_id_of_target_chain",
             "uniprot_primary_id_of_target_chain",
             "uniprot_id",
@@ -148,7 +149,7 @@ def _extract_inactive_rows_from_chunk(
             "bindingdb_ligand_id",
         ],
     )
-    year_col = _find_col(cols, ["publication_year", "year"])
+    year_col = _find_col(cols, ["date_of_publication", "publication_year", "year"])
 
     metric_cols = [
         ("Ki", _find_col(cols, ["ki_nm", "ki_n_m", "ki"])),
@@ -219,10 +220,14 @@ def _extract_inactive_rows_from_chunk(
         if year_col is not None:
             yv = row.get(year_col)
             if not pd.isna(yv):
+                text = str(yv).strip()
                 try:
-                    pub_year = int(float(yv))
+                    pub_year = int(float(text))
                 except (TypeError, ValueError):
-                    pub_year = None
+                    # Try extracting 4-digit year from date string (e.g., "8/30/1996")
+                    ym = re.search(r"\b((?:19|20)\d{2})\b", text)
+                    if ym:
+                        pub_year = int(ym.group(1))
 
         payload = {
             "smiles": smiles,
