@@ -4,7 +4,7 @@ Provides a single standardize_smiles() function used by all ETL modules
 to ensure consistent InChIKey generation and descriptor computation.
 """
 
-from rdkit import Chem
+from rdkit import Chem, RDLogger
 from rdkit.Chem import Crippen, Descriptors, QED, rdMolDescriptors
 from rdkit.Chem.FilterCatalog import FilterCatalog, FilterCatalogParams
 
@@ -12,6 +12,9 @@ from rdkit.Chem.FilterCatalog import FilterCatalog, FilterCatalogParams
 _pains_params = FilterCatalogParams()
 _pains_params.AddCatalog(FilterCatalogParams.FilterCatalogs.PAINS)
 PAINS_CATALOG = FilterCatalog(_pains_params)
+
+# Suppress verbose per-molecule RDKit warnings during large ETL runs.
+RDLogger.DisableLog("rdApp.warning")
 
 
 def standardize_smiles(smiles: str) -> dict | None:

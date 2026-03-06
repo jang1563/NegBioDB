@@ -25,6 +25,8 @@ from negbiodb.standardize import standardize_smiles
 
 logger = logging.getLogger(__name__)
 _HUMAN_TAXID = 9606
+_UNIPROT_RE_6 = re.compile(r"^[A-NR-Z][0-9][A-Z0-9]{3}[0-9]$|^[OPQ][0-9][A-Z0-9]{3}[0-9]$")
+_UNIPROT_RE_10 = re.compile(r"^[A-NR-Z][0-9][A-Z0-9]{3}[0-9][A-Z0-9]{3}[0-9]$")
 
 
 def _normalize_col_name(name: str) -> str:
@@ -51,7 +53,7 @@ def _extract_accession_token(text: str) -> str:
             token = parts[1]
         else:
             token = parts[0]
-    token = re.split(r"[;,]", token, maxsplit=1)[0].strip()
+    token = re.split(r"[;,/]", token, maxsplit=1)[0].strip()
     token = token.split()[0] if token else token
     return token
 
@@ -64,6 +66,49 @@ def _normalize_accession(value: object) -> str | None:
         return None
     norm = _extract_accession_token(text)
     return norm or None
+
+
+def _is_uniprot_accession(value: object) -> bool:
+    if value is None:
+        return False
+    text = str(value).strip().upper()
+    if text == "":
+        return False
+    return bool(_UNIPROT_RE_6.match(text) or _UNIPROT_RE_10.match(text))
+
+
+def _normalize_uniprot_accession(value: object) -> str | None:
+    accession = _normalize_accession(value)
+    if accession is None:
+        return None
+    accession = accession.upper()
+    if not _is_uniprot_accession(accession):
+        return None
+    return accession
+
+
+def _is_human_taxid_value(value: object) -> bool:
+    if pd.isna(value):
+        return False
+    text = str(value).strip()
+    if text == "":
+        return False
+    # Handle scalar numerics quickly.
+    try:
+        return int(float(text)) == _HUMAN_TAXID
+    except (TypeError, ValueError):
+        pass
+    # Handle multi-value cells: "9606;10090", "9606,10090", "9606|10090", etc.
+    for token in re.split(r"[;,/|\s]+", text):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            if int(float(token)) == _HUMAN_TAXID:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
 
 
 def _is_nm_unit(value: object) -> bool:
@@ -118,7 +163,7 @@ def load_confirmatory_aids(
     )
     aids: set[int] = set()
     aid_col = None
-    assay_type_col = None
+    assay_type_candidates: list[str] = []
     target_cols: list[str] = []
 
     for chunk in reader:
@@ -128,27 +173,38 @@ def load_confirmatory_aids(
             aid_col = _find_col(cols, ["aid"])
             if aid_col is None:
                 raise ValueError(f"Could not find AID column in {bioassays_path}")
-            assay_type_col = _find_col(
-                cols,
-                [
+            assay_type_candidates = [
+                c
+                for c in [
                     "assay_type",
+                    "outcome_type",
+                    "bioassay_type",
+                    "bioassay_types",
                     "aid_type",
                     "activity_type",
                     "screening_type",
-                ],
-            )
+                ]
+                if c in cols
+            ]
             target_cols = [
                 c
                 for c in cols
                 if c
                 in {
                     "protein_accession",
+                    "protein_accessions",
                     "proteinaccession",
                     "uniprot",
                     "uniprot_accession",
+                    "uniprots_id",
+                    "uniprots_ids",
                     "gene_id",
+                    "gene_ids",
                     "target_taxid",
+                    "target_taxids",
                     "target_id",
+                    "taxonomy_id",
+                    "taxonomy_ids",
                 }
             ]
 
@@ -156,6 +212,14 @@ def load_confirmatory_aids(
         if out.empty:
             continue
         out[aid_col] = out[aid_col].astype(int)
+
+        assay_type_col = None
+        for c in assay_type_candidates:
+            if out[c].astype(str).str.contains("confirm", case=False, na=False).any():
+                assay_type_col = c
+                break
+        if assay_type_col is None and assay_type_candidates:
+            assay_type_col = assay_type_candidates[0]
 
         if assay_type_col is not None:
             out = out[
@@ -170,7 +234,15 @@ def load_confirmatory_aids(
             mask = pd.Series(False, index=out.index)
             for c in target_cols:
                 col = out[c]
-                if c in {"protein_accession", "proteinaccession", "uniprot", "uniprot_accession"}:
+                if c in {
+                    "protein_accession",
+                    "protein_accessions",
+                    "proteinaccession",
+                    "uniprot",
+                    "uniprot_accession",
+                    "uniprots_id",
+                    "uniprots_ids",
+                }:
                     mask = mask | col.map(_normalize_accession).notna()
                 else:
                     mask = mask | col.notna()
@@ -180,12 +252,95 @@ def load_confirmatory_aids(
 
         aids.update(int(v) for v in out[aid_col].tolist())
 
-    if assay_type_col is None:
+    if not assay_type_candidates:
         logger.warning("No assay-type column found in bioassays.tsv.gz; using all AIDs.")
     if not target_cols:
         logger.warning("No target annotation columns found in bioassays.tsv.gz.")
 
     logger.info("Loaded %d confirmatory AIDs from %s", len(aids), bioassays_path)
+    return aids
+
+
+def load_confirmatory_human_aids(
+    bioassays_path: Path,
+    chunksize: int = 500_000,
+) -> set[int]:
+    """Load confirmatory AIDs with explicit human taxid evidence."""
+    reader = pd.read_csv(
+        bioassays_path,
+        sep="\t",
+        compression="gzip" if bioassays_path.suffix == ".gz" else None,
+        chunksize=chunksize,
+        low_memory=False,
+    )
+    aids: set[int] = set()
+    aid_col = None
+    assay_type_candidates: list[str] = []
+    taxid_cols: list[str] = []
+
+    for chunk in reader:
+        chunk = _normalize_columns(chunk)
+        cols = list(chunk.columns)
+        if aid_col is None:
+            aid_col = _find_col(cols, ["aid"])
+            if aid_col is None:
+                raise ValueError(f"Could not find AID column in {bioassays_path}")
+            assay_type_candidates = [
+                c
+                for c in [
+                    "assay_type",
+                    "outcome_type",
+                    "bioassay_type",
+                    "bioassay_types",
+                    "aid_type",
+                    "activity_type",
+                    "screening_type",
+                ]
+                if c in cols
+            ]
+            taxid_cols = [
+                c
+                for c in cols
+                if c in {"target_taxid", "target_taxids", "taxonomy_id", "taxonomy_ids"}
+            ]
+
+        out = chunk[pd.to_numeric(chunk[aid_col], errors="coerce").notna()].copy()
+        if out.empty:
+            continue
+        out[aid_col] = out[aid_col].astype(int)
+
+        assay_type_col = None
+        for c in assay_type_candidates:
+            if out[c].astype(str).str.contains("confirm", case=False, na=False).any():
+                assay_type_col = c
+                break
+        if assay_type_col is None and assay_type_candidates:
+            assay_type_col = assay_type_candidates[0]
+
+        if assay_type_col is not None:
+            out = out[
+                out[assay_type_col]
+                .astype(str)
+                .str.contains("confirm", case=False, na=False)
+            ]
+        if out.empty or not taxid_cols:
+            continue
+
+        human_mask = pd.Series(False, index=out.index)
+        for c in taxid_cols:
+            human_mask = human_mask | out[c].map(_is_human_taxid_value)
+        human_rows = out[human_mask]
+        if human_rows.empty:
+            continue
+
+        aids.update(int(v) for v in human_rows[aid_col].tolist())
+
+    if not assay_type_candidates:
+        logger.warning("No assay-type column found in bioassays.tsv.gz; using all AIDs.")
+    if not taxid_cols:
+        logger.warning("No taxid columns found in bioassays.tsv.gz; strict human filtering may be empty.")
+
+    logger.info("Loaded %d confirmatory human AIDs from %s", len(aids), bioassays_path)
     return aids
 
 
@@ -221,6 +376,9 @@ def load_aid_to_uniprot_map(
                 cols,
                 [
                     "uniprot",
+                    "uniprotkb_ac_id",
+                    "uniprotkb_ac",
+                    "uniprotkb_id",
                     "uniprot_accession",
                     "protein_accession",
                     "proteinaccession",
@@ -235,7 +393,7 @@ def load_aid_to_uniprot_map(
         if out.empty:
             continue
         out[aid_col] = out[aid_col].astype(int)
-        out[uniprot_col] = out[uniprot_col].map(_normalize_accession)
+        out[uniprot_col] = out[uniprot_col].map(_normalize_uniprot_accession)
         out = out[out[uniprot_col].notna()]
 
         for r in out.itertuples(index=False):
@@ -285,12 +443,19 @@ def build_sid_lookup_db(sid_map_path: Path, lookup_db_path: Path) -> Path:
             FROM sid_lookup_meta WHERE meta_key = 'sid_cid_map'"""
         ).fetchone()
         existing = conn.execute("SELECT COUNT(*) FROM sid_cid_map").fetchone()[0]
+        has_nonempty_smiles = conn.execute(
+            """SELECT 1
+            FROM sid_cid_map
+            WHERE smiles IS NOT NULL AND TRIM(smiles) <> ''
+            LIMIT 1"""
+        ).fetchone() is not None
         if (
             meta is not None
             and int(meta[2]) == 1
             and int(meta[0]) == source_size
             and int(meta[1]) == source_mtime
             and existing > 0
+            and has_nonempty_smiles
         ):
             logger.info(
                 "Reusing existing SID lookup DB (%d rows): %s",
@@ -299,10 +464,16 @@ def build_sid_lookup_db(sid_map_path: Path, lookup_db_path: Path) -> Path:
             )
             return lookup_db_path
         if existing > 0:
-            logger.warning(
-                "Rebuilding SID lookup DB because source changed or prior build incomplete: %s",
-                lookup_db_path,
-            )
+            if not has_nonempty_smiles:
+                logger.warning(
+                    "Rebuilding SID lookup DB because existing lookup has no SMILES values: %s",
+                    lookup_db_path,
+                )
+            else:
+                logger.warning(
+                    "Rebuilding SID lookup DB because source changed or prior build incomplete: %s",
+                    lookup_db_path,
+                )
         conn.execute("DELETE FROM sid_cid_map")
         conn.execute(
             """INSERT INTO sid_lookup_meta
@@ -338,7 +509,10 @@ def build_sid_lookup_db(sid_map_path: Path, lookup_db_path: Path) -> Path:
             cols = list(chunk.columns)
             sid_col = _find_col(cols, ["sid"])
             cid_col = _find_col(cols, ["cid"])
-            smiles_col = _find_col(cols, ["smiles", "canonical_smiles"])
+            smiles_col = _find_col(
+                cols,
+                ["smiles", "canonical_smiles", "isomeric_smiles"],
+            )
 
             if sid_col is None or cid_col is None:
                 # Fallback for malformed headered files
@@ -476,6 +650,9 @@ def run_pubchem_etl(
     inactivity_threshold_nm = float(cfg.get("inactivity_threshold_nm", 10000))
 
     confirmatory_aids = load_confirmatory_aids(bioassays_path)
+    confirmatory_human_aids: set[int] = set()
+    if human_only:
+        confirmatory_human_aids = load_confirmatory_human_aids(bioassays_path)
     aid_to_uniprot = load_aid_to_uniprot_map(aid_uniprot_path)
     build_sid_lookup_db(sid_cid_smiles_path, sid_lookup_db_path)
 
@@ -501,16 +678,20 @@ def run_pubchem_etl(
         for chunk in reader:
             rows_read += len(chunk)
             filt = _resolve_pubchem_chunk(chunk, confirmatory_aids)
-            if human_only and filt["target_taxid"].notna().any():
-                filt = filt[filt["target_taxid"] == _HUMAN_TAXID]
+            if human_only and not filt.empty:
+                known_taxid = filt["target_taxid"].notna()
+                human_taxid = filt["target_taxid"] == _HUMAN_TAXID
+                human_aid_with_missing_taxid = (~known_taxid) & filt["aid"].isin(confirmatory_human_aids)
+                filt = filt[human_taxid | human_aid_with_missing_taxid]
             rows_filtered += len(filt)
             if filt.empty:
                 continue
 
             sid_lookup = _lookup_sid_rows(sid_conn, filt["sid"].astype(int).tolist())
-            aid_mapped = filt["aid"].map(aid_to_uniprot).map(_normalize_accession)
-            filt["uniprot_accession"] = filt["protein_accession"].where(
-                filt["protein_accession"].notna(),
+            direct_uniprot = filt["protein_accession"].map(_normalize_uniprot_accession)
+            aid_mapped = filt["aid"].map(aid_to_uniprot).map(_normalize_uniprot_accession)
+            filt["uniprot_accession"] = direct_uniprot.where(
+                direct_uniprot.notna(),
                 aid_mapped,
             )
 
@@ -640,7 +821,7 @@ def run_pubchem_etl(
                     pchembl_value = 9.0 - math.log10(activity_value)
 
                 source_record_id = f"PUBCHEM:{aid}:{int(r.sid)}"
-                species_tested = "Homo sapiens" if human_only else None
+                species_tested = None
                 if pd.notna(r.target_taxid):
                     try:
                         taxid = int(r.target_taxid)
@@ -650,6 +831,8 @@ def run_pubchem_etl(
                             species_tested = f"taxid:{taxid}"
                     except (TypeError, ValueError):
                         pass
+                elif human_only and aid in confirmatory_human_aids:
+                    species_tested = "Homo sapiens"
                 insert_params.append(
                     (
                         compound_id,
