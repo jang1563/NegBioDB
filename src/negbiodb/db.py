@@ -89,7 +89,13 @@ def refresh_all_pairs(conn: sqlite3.Connection) -> int:
     """Refresh compound_target_pairs aggregation across ALL sources.
 
     Deletes all existing pairs and re-aggregates from negative_results,
-    merging cross-source data with best confidence tier selection.
+    merging cross-source data with best confidence tier and result type
+    selection.  After inserting pairs, computes compound_degree and
+    target_degree using temp-table joins for performance.
+
+    Note: median_pchembl uses AVG (SQLite lacks MEDIAN).  This is
+    acceptable since the column is informational, not used for
+    thresholding.
     """
     conn.execute("DELETE FROM compound_target_pairs")
     conn.execute(
@@ -107,7 +113,21 @@ def refresh_all_pairs(conn: sqlite3.Connection) -> int:
                 WHEN 'bronze' THEN 3 WHEN 'copper' THEN 4 END)
                 WHEN 1 THEN 'gold' WHEN 2 THEN 'silver'
                 WHEN 3 THEN 'bronze' WHEN 4 THEN 'copper' END,
-            MIN(result_type),
+            CASE
+                WHEN SUM(CASE WHEN result_type = 'hard_negative'
+                              THEN 1 ELSE 0 END) > 0
+                     THEN 'hard_negative'
+                WHEN SUM(CASE WHEN result_type = 'conditional_negative'
+                              THEN 1 ELSE 0 END) > 0
+                     THEN 'conditional_negative'
+                WHEN SUM(CASE WHEN result_type = 'methodological_negative'
+                              THEN 1 ELSE 0 END) > 0
+                     THEN 'methodological_negative'
+                WHEN SUM(CASE WHEN result_type = 'dose_time_negative'
+                              THEN 1 ELSE 0 END) > 0
+                     THEN 'dose_time_negative'
+                ELSE 'hypothesis_negative'
+            END,
             MIN(publication_year),
             AVG(pchembl_value),
             MIN(activity_value),
@@ -115,6 +135,34 @@ def refresh_all_pairs(conn: sqlite3.Connection) -> int:
         FROM negative_results
         GROUP BY compound_id, target_id"""
     )
+
+    # Compute compound_degree (number of distinct targets per compound)
+    conn.execute(
+        """CREATE TEMP TABLE _cdeg AS
+        SELECT compound_id, COUNT(DISTINCT target_id) AS deg
+        FROM compound_target_pairs GROUP BY compound_id"""
+    )
+    conn.execute(
+        """UPDATE compound_target_pairs SET compound_degree = (
+            SELECT deg FROM _cdeg d
+            WHERE d.compound_id = compound_target_pairs.compound_id
+        )"""
+    )
+    conn.execute("DROP TABLE _cdeg")
+
+    # Compute target_degree (number of distinct compounds per target)
+    conn.execute(
+        """CREATE TEMP TABLE _tdeg AS
+        SELECT target_id, COUNT(DISTINCT compound_id) AS deg
+        FROM compound_target_pairs GROUP BY target_id"""
+    )
+    conn.execute(
+        """UPDATE compound_target_pairs SET target_degree = (
+            SELECT deg FROM _tdeg d
+            WHERE d.target_id = compound_target_pairs.target_id
+        )"""
+    )
+    conn.execute("DROP TABLE _tdeg")
 
     count = conn.execute("SELECT COUNT(*) FROM compound_target_pairs").fetchone()[0]
     return count

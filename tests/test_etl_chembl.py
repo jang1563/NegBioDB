@@ -496,6 +496,79 @@ class TestRefreshAllPairs:
             assert count1 == 1
             assert count2 == 1
 
+    def test_best_result_type_hierarchy(self, migrated_db):
+        """hard_negative should win over conditional_negative (not alphabetical)."""
+        with connect(migrated_db) as conn:
+            conn.execute(
+                """INSERT INTO compounds
+                (canonical_smiles, inchikey, inchikey_connectivity)
+                VALUES ('c1ccccc1', 'UHOVQNZJYSORNB-UHFFFAOYSA-N', 'UHOVQNZJYSORNB')"""
+            )
+            conn.execute(
+                """INSERT INTO targets (uniprot_accession) VALUES ('P00001')"""
+            )
+            conn.execute(
+                """INSERT INTO negative_results
+                (compound_id, target_id, result_type, confidence_tier,
+                 activity_type, activity_value, activity_unit,
+                 inactivity_threshold, source_db, source_record_id, extraction_method)
+                VALUES (1, 1, 'conditional_negative', 'silver',
+                        'IC50', 20000.0, 'nM',
+                        10000.0, 'chembl', 'C:1', 'database_direct')"""
+            )
+            conn.execute(
+                """INSERT INTO negative_results
+                (compound_id, target_id, result_type, confidence_tier,
+                 activity_type, activity_value, activity_unit,
+                 inactivity_threshold, source_db, source_record_id, extraction_method)
+                VALUES (1, 1, 'hard_negative', 'bronze',
+                        'Kd', 15000.0, 'nM',
+                        10000.0, 'davis', 'D:1', 'database_direct')"""
+            )
+            refresh_all_pairs(conn)
+            row = conn.execute(
+                "SELECT best_result_type FROM compound_target_pairs"
+            ).fetchone()
+            assert row[0] == "hard_negative"
+
+    def test_compound_degree_populated(self, migrated_db):
+        """compound_degree should count distinct targets per compound."""
+        with connect(migrated_db) as conn:
+            conn.execute(
+                """INSERT INTO compounds
+                (canonical_smiles, inchikey, inchikey_connectivity)
+                VALUES ('c1ccccc1', 'UHOVQNZJYSORNB-UHFFFAOYSA-N', 'UHOVQNZJYSORNB')"""
+            )
+            conn.execute(
+                "INSERT INTO targets (uniprot_accession) VALUES ('P00001')"
+            )
+            conn.execute(
+                "INSERT INTO targets (uniprot_accession) VALUES ('P00002')"
+            )
+            conn.execute(
+                "INSERT INTO targets (uniprot_accession) VALUES ('P00003')"
+            )
+            for tid in (1, 2, 3):
+                conn.execute(
+                    """INSERT INTO negative_results
+                    (compound_id, target_id, result_type, confidence_tier,
+                     activity_type, activity_value, activity_unit,
+                     inactivity_threshold, source_db, source_record_id,
+                     extraction_method)
+                    VALUES (1, ?, 'hard_negative', 'silver',
+                            'IC50', 20000.0, 'nM',
+                            10000.0, 'chembl', 'C:' || ?, 'database_direct')""",
+                    (tid, str(tid)),
+                )
+            refresh_all_pairs(conn)
+            rows = conn.execute(
+                "SELECT compound_degree, target_degree FROM compound_target_pairs"
+            ).fetchall()
+            # Compound 1 paired with 3 targets → degree 3
+            assert all(r[0] == 3 for r in rows)
+            # Each target paired with 1 compound → degree 1
+            assert all(r[1] == 1 for r in rows)
+
 
 # ============================================================
 # TestExtractChEMBLInactives (with mock DB)
