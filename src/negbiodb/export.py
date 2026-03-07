@@ -9,6 +9,9 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from rdkit import Chem
 from rdkit.Chem.Scaffolds.MurckoScaffold import GetScaffoldForMol
 
@@ -479,3 +482,155 @@ def generate_degree_balanced_split(
 
     logger.info("Degree-balanced split done: %s", counts)
     return {"split_id": split_id, "counts": counts}
+
+
+# ------------------------------------------------------------------
+# Dataset export
+# ------------------------------------------------------------------
+
+EXPORT_CHUNKSIZE = 500_000
+
+# Columns in the exported Parquet/CSV
+EXPORT_COLUMNS = [
+    "pair_id", "smiles", "inchikey", "uniprot_id", "target_sequence",
+    "gene_symbol", "Y", "confidence_tier", "best_result_type",
+    "num_assays", "num_sources", "earliest_year",
+    "compound_degree", "target_degree",
+]
+
+# Split strategies in the order they appear as inline columns
+SPLIT_STRATEGIES = [
+    "random", "cold_compound", "cold_target",
+    "temporal", "scaffold", "degree_balanced",
+]
+
+
+def _build_export_query(split_strategies: list[str] | None = None) -> str:
+    """Build the pivot SQL for exporting pairs with inline split columns."""
+    if split_strategies is None:
+        split_strategies = SPLIT_STRATEGIES
+
+    split_cols = []
+    join_clauses = []
+    for i, strategy in enumerate(split_strategies):
+        alias_sa = f"sa{i}"
+        alias_sd = f"sd{i}"
+        col_name = f"split_{strategy}"
+        split_cols.append(f"{alias_sa}.fold AS {col_name}")
+        join_clauses.append(
+            f"LEFT JOIN split_definitions {alias_sd} "
+            f"ON {alias_sd}.split_strategy = '{strategy}' "
+            f"LEFT JOIN split_assignments {alias_sa} "
+            f"ON ctp.pair_id = {alias_sa}.pair_id "
+            f"AND {alias_sa}.split_id = {alias_sd}.split_id"
+        )
+
+    split_select = ",\n       ".join(split_cols) if split_cols else ""
+    join_sql = "\n".join(join_clauses)
+
+    query = f"""SELECT
+       ctp.pair_id,
+       c.canonical_smiles AS smiles,
+       c.inchikey,
+       t.uniprot_accession AS uniprot_id,
+       t.amino_acid_sequence AS target_sequence,
+       t.gene_symbol,
+       0 AS Y,
+       ctp.best_confidence AS confidence_tier,
+       ctp.best_result_type,
+       ctp.num_assays,
+       ctp.num_sources,
+       ctp.earliest_year,
+       ctp.compound_degree,
+       ctp.target_degree,
+       {split_select}
+FROM compound_target_pairs ctp
+JOIN compounds c ON ctp.compound_id = c.compound_id
+JOIN targets t ON ctp.target_id = t.target_id
+{join_sql}
+ORDER BY ctp.pair_id"""
+
+    return query
+
+
+def export_negative_dataset(
+    db_path: str | Path,
+    output_dir: str | Path,
+    split_strategies: list[str] | None = None,
+    chunksize: int = EXPORT_CHUNKSIZE,
+) -> dict:
+    """Export negative DTI pairs as Parquet and lightweight CSV.
+
+    Produces:
+      - negbiodb_dti_pairs.parquet (full dataset with sequences)
+      - negbiodb_splits.csv (pair_id + smiles + uniprot + split columns only)
+
+    Returns dict with file paths and row count.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    parquet_path = output_dir / "negbiodb_dti_pairs.parquet"
+    splits_csv_path = output_dir / "negbiodb_splits.csv"
+
+    if split_strategies is None:
+        split_strategies = SPLIT_STRATEGIES
+
+    query = _build_export_query(split_strategies)
+    split_cols = [f"split_{s}" for s in split_strategies]
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("PRAGMA journal_mode = WAL")
+
+    total_rows = 0
+    pq_writer = None
+
+    try:
+        for chunk in pd.read_sql_query(query, conn, chunksize=chunksize):
+            total_rows += len(chunk)
+
+            table = pa.Table.from_pandas(chunk, preserve_index=False)
+            if pq_writer is None:
+                pq_writer = pq.ParquetWriter(
+                    str(parquet_path), table.schema, compression="zstd"
+                )
+            pq_writer.write_table(table)
+
+            logger.info("Exported %d rows so far...", total_rows)
+
+        if pq_writer is not None:
+            pq_writer.close()
+
+        # Lightweight splits CSV (no target_sequence)
+        splits_columns = ["pair_id", "smiles", "inchikey", "uniprot_id"] + split_cols
+        # Read back from parquet for splits CSV (avoids re-querying)
+        pf = pq.ParquetFile(str(parquet_path))
+        first = True
+        for batch in pf.iter_batches(
+            batch_size=chunksize, columns=splits_columns
+        ):
+            df = batch.to_pandas()
+            df.to_csv(
+                str(splits_csv_path),
+                mode="w" if first else "a",
+                header=first,
+                index=False,
+            )
+            first = False
+
+    finally:
+        conn.close()
+
+    logger.info(
+        "Export complete: %d rows → %s (%.1f MB), %s",
+        total_rows,
+        parquet_path.name,
+        parquet_path.stat().st_size / 1e6 if parquet_path.exists() else 0,
+        splits_csv_path.name,
+    )
+
+    return {
+        "total_rows": total_rows,
+        "parquet_path": str(parquet_path),
+        "splits_csv_path": str(splits_csv_path),
+    }

@@ -3,9 +3,13 @@
 import pytest
 
 from negbiodb.db import connect, create_database, refresh_all_pairs
+import pandas as pd
+import pyarrow.parquet as pq
+
 from negbiodb.export import (
     _compute_scaffolds,
     _register_split,
+    export_negative_dataset,
     generate_cold_compound_split,
     generate_cold_target_split,
     generate_degree_balanced_split,
@@ -459,3 +463,81 @@ class TestDegreeBalancedSplit:
                 ).fetchone()[0]
                 # Mean degree per fold should be within 30% of overall
                 assert abs(fold_mean - overall_mean) / overall_mean < 0.3
+
+
+# ============================================================
+# TestExportNegativeDataset
+# ============================================================
+
+
+class TestExportNegativeDataset:
+
+    def test_parquet_roundtrip(self, migrated_db, tmp_path):
+        """Exported Parquet has correct columns and row count."""
+        with connect(migrated_db) as conn:
+            total = _populate_small_db(conn, 5, 3)
+            generate_random_split(conn)
+
+        export_dir = tmp_path / "exports"
+        result = export_negative_dataset(
+            migrated_db, export_dir,
+            split_strategies=["random"],
+        )
+        assert result["total_rows"] == total
+
+        df = pd.read_parquet(result["parquet_path"])
+        assert len(df) == total
+        assert "smiles" in df.columns
+        assert "uniprot_id" in df.columns
+        assert "split_random" in df.columns
+        assert (df["Y"] == 0).all()
+
+    def test_splits_csv_created(self, migrated_db, tmp_path):
+        """Lightweight splits CSV is created with correct columns."""
+        with connect(migrated_db) as conn:
+            total = _populate_small_db(conn, 5, 3)
+            generate_random_split(conn)
+
+        export_dir = tmp_path / "exports"
+        result = export_negative_dataset(
+            migrated_db, export_dir,
+            split_strategies=["random"],
+        )
+        df = pd.read_csv(result["splits_csv_path"])
+        assert len(df) == total
+        assert "pair_id" in df.columns
+        assert "smiles" in df.columns
+        assert "split_random" in df.columns
+        # target_sequence should NOT be in splits CSV
+        assert "target_sequence" not in df.columns
+
+    def test_multiple_splits(self, migrated_db, tmp_path):
+        """Export works with multiple split strategies."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 5, 3)
+            generate_random_split(conn)
+            generate_cold_compound_split(conn)
+
+        export_dir = tmp_path / "exports"
+        result = export_negative_dataset(
+            migrated_db, export_dir,
+            split_strategies=["random", "cold_compound"],
+        )
+        df = pd.read_parquet(result["parquet_path"])
+        assert "split_random" in df.columns
+        assert "split_cold_compound" in df.columns
+
+    def test_no_splits_present(self, migrated_db, tmp_path):
+        """Export works even when no splits have been generated."""
+        with connect(migrated_db) as conn:
+            total = _populate_small_db(conn, 3, 2)
+
+        export_dir = tmp_path / "exports"
+        result = export_negative_dataset(
+            migrated_db, export_dir,
+            split_strategies=["random"],
+        )
+        df = pd.read_parquet(result["parquet_path"])
+        assert len(df) == total
+        # split_random should be NULL/None for all rows
+        assert df["split_random"].isna().all()
