@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-import math
 import sqlite3
 from collections import defaultdict
+from itertools import groupby
 from pathlib import Path
 
 import numpy as np
@@ -14,9 +14,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from rdkit import Chem
 from rdkit.Chem.Scaffolds.MurckoScaffold import GetScaffoldForMol
-
-from negbiodb.db import connect, create_database, refresh_all_pairs
-from negbiodb.download import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +29,27 @@ def _register_split(
     seed: int | None,
     ratios: dict[str, float],
 ) -> int:
-    """Insert a split definition and return its split_id."""
+    """Insert or retrieve a split definition and return its split_id.
+
+    If a split with this name already exists, deletes its old assignments
+    so the split can be regenerated cleanly.
+    """
+    row = conn.execute(
+        "SELECT split_id FROM split_definitions WHERE split_name = ?",
+        (name,),
+    ).fetchone()
+
+    if row is not None:
+        # Clear old assignments for re-entrancy
+        split_id = int(row[0])
+        conn.execute(
+            "DELETE FROM split_assignments WHERE split_id = ?",
+            (split_id,),
+        )
+        return split_id
+
     conn.execute(
-        """INSERT OR IGNORE INTO split_definitions
+        """INSERT INTO split_definitions
         (split_name, split_strategy, random_seed,
          train_ratio, val_ratio, test_ratio)
         VALUES (?, ?, ?, ?, ?, ?)""",
@@ -85,6 +100,7 @@ def _assign_folds_by_group(
             group_to_fold[gid] = "test"
 
     # Write via temp table + JOIN for performance
+    conn.execute("DROP TABLE IF EXISTS _group_folds")
     conn.execute(
         f"CREATE TEMP TABLE _group_folds ({group_col} INTEGER PRIMARY KEY, fold TEXT)"
     )
@@ -254,7 +270,7 @@ def generate_temporal_split(
     for fold in ("train", "val", "test"):
         pct = counts.get(fold, 0) / total * 100 if total else 0
         logger.info("Temporal %s: %d (%.1f%%)", fold, counts.get(fold, 0), pct)
-    if counts.get("test", 0) / total < 0.05 and total > 0:
+    if total > 0 and counts.get("test", 0) / total < 0.05:
         logger.warning(
             "Temporal test set is very small (%.1f%%). "
             "Consider adjusting cutoff years.",
@@ -264,15 +280,12 @@ def generate_temporal_split(
     return {"split_id": split_id, "counts": counts}
 
 
-SCAFFOLD_BATCH = 100_000
-
-
 def _compute_scaffolds(
     conn: sqlite3.Connection,
 ) -> dict[str, list[int]]:
     """Compute Murcko scaffolds for all compounds, return scaffold→[compound_ids].
 
-    Uses generic scaffolds (all side chains removed, all atoms→carbon).
+    Uses Murcko frameworks (ring systems + linkers, heteroatoms preserved).
     Compounds that fail RDKit parsing get scaffold='NONE'.
     """
     scaffold_to_compounds: dict[str, list[int]] = defaultdict(list)
@@ -351,7 +364,6 @@ def generate_scaffold_split(
     rng = np.random.RandomState(seed)
 
     # Group scaffolds by size, shuffle within each size group
-    from itertools import groupby
     size_groups = []
     for size, group in groupby(sorted_scaffolds, key=lambda x: len(x[1])):
         group_list = list(group)
@@ -374,6 +386,7 @@ def generate_scaffold_split(
             compound_to_fold[cid] = fold
 
     # Write via temp table
+    conn.execute("DROP TABLE IF EXISTS _scaffold_folds")
     conn.execute(
         "CREATE TEMP TABLE _scaffold_folds (compound_id INTEGER PRIMARY KEY, fold TEXT)"
     )
@@ -490,14 +503,6 @@ def generate_degree_balanced_split(
 
 EXPORT_CHUNKSIZE = 500_000
 
-# Columns in the exported Parquet/CSV
-EXPORT_COLUMNS = [
-    "pair_id", "smiles", "inchikey", "uniprot_id", "target_sequence",
-    "gene_symbol", "Y", "confidence_tier", "best_result_type",
-    "num_assays", "num_sources", "earliest_year",
-    "compound_degree", "target_degree",
-]
-
 # Split strategies in the order they appear as inline columns
 SPLIT_STRATEGIES = [
     "random", "cold_compound", "cold_target",
@@ -525,11 +530,9 @@ def _build_export_query(split_strategies: list[str] | None = None) -> str:
             f"AND {alias_sa}.split_id = {alias_sd}.split_id"
         )
 
-    split_select = ",\n       ".join(split_cols) if split_cols else ""
     join_sql = "\n".join(join_clauses)
 
-    query = f"""SELECT
-       ctp.pair_id,
+    base_cols = """ctp.pair_id,
        c.canonical_smiles AS smiles,
        c.inchikey,
        t.uniprot_accession AS uniprot_id,
@@ -542,8 +545,15 @@ def _build_export_query(split_strategies: list[str] | None = None) -> str:
        ctp.num_sources,
        ctp.earliest_year,
        ctp.compound_degree,
-       ctp.target_degree,
-       {split_select}
+       ctp.target_degree"""
+
+    if split_cols:
+        select_clause = base_cols + ",\n       " + ",\n       ".join(split_cols)
+    else:
+        select_clause = base_cols
+
+    query = f"""SELECT
+       {select_clause}
 FROM compound_target_pairs ctp
 JOIN compounds c ON ctp.compound_id = c.compound_id
 JOIN targets t ON ctp.target_id = t.target_id
@@ -602,21 +612,22 @@ def export_negative_dataset(
             pq_writer.close()
 
         # Lightweight splits CSV (no target_sequence)
-        splits_columns = ["pair_id", "smiles", "inchikey", "uniprot_id"] + split_cols
-        # Read back from parquet for splits CSV (avoids re-querying)
-        pf = pq.ParquetFile(str(parquet_path))
-        first = True
-        for batch in pf.iter_batches(
-            batch_size=chunksize, columns=splits_columns
-        ):
-            df = batch.to_pandas()
-            df.to_csv(
-                str(splits_csv_path),
-                mode="w" if first else "a",
-                header=first,
-                index=False,
-            )
-            first = False
+        if total_rows > 0:
+            splits_columns = ["pair_id", "smiles", "inchikey", "uniprot_id"] + split_cols
+            # Read back from parquet for splits CSV (avoids re-querying)
+            pf = pq.ParquetFile(str(parquet_path))
+            first = True
+            for batch in pf.iter_batches(
+                batch_size=chunksize, columns=splits_columns
+            ):
+                df = batch.to_pandas()
+                df.to_csv(
+                    str(splits_csv_path),
+                    mode="w" if first else "a",
+                    header=first,
+                    index=False,
+                )
+                first = False
 
     finally:
         conn.close()
@@ -735,7 +746,11 @@ def extract_chembl_positives(
 
     if not rows:
         logger.warning("No positive records extracted from ChEMBL")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=[
+            "smiles", "inchikey", "uniprot_id", "target_sequence",
+            "pchembl_value", "activity_type", "activity_value_nm",
+            "publication_year",
+        ])
 
     df = pd.DataFrame(rows)
 
@@ -770,7 +785,6 @@ def merge_positive_negative(
     neg_conn = sqlite3.connect(str(negbiodb_path))
     negatives = pd.read_sql_query(
         """SELECT c.canonical_smiles AS smiles, c.inchikey,
-                  SUBSTR(c.inchikey, 1, 14) AS inchikey_connectivity,
                   t.uniprot_accession AS uniprot_id,
                   t.amino_acid_sequence AS target_sequence,
                   ctp.best_confidence AS confidence_tier,
@@ -802,17 +816,11 @@ def merge_positive_negative(
             "Removing from positives.",
             len(overlap),
         )
-        overlap_df = pd.DataFrame(list(overlap), columns=["ik_conn", "uid"])
-        positives = positives.merge(
-            overlap_df,
-            left_on=[positives["inchikey"].str[:14], "uniprot_id"],
-            right_on=["ik_conn", "uid"],
-            how="left",
-            indicator=True,
+        keep_mask = ~pd.Series(
+            [k in overlap for k in zip(positives["inchikey"].str[:14], positives["uniprot_id"])],
+            index=positives.index,
         )
-        positives = positives[positives["_merge"] == "left_only"].drop(
-            columns=["_merge", "ik_conn", "uid"]
-        )
+        positives = positives[keep_mask]
         logger.info("Positives after overlap removal: %d", len(positives))
 
     # Prepare label columns

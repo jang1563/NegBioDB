@@ -4,8 +4,6 @@ import pytest
 
 from negbiodb.db import connect, create_database, refresh_all_pairs
 import pandas as pd
-import pyarrow.parquet as pq
-
 import numpy as np
 
 from negbiodb.export import (
