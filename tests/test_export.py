@@ -15,6 +15,7 @@ from negbiodb.export import (
     generate_cold_compound_split,
     generate_cold_target_split,
     generate_degree_balanced_split,
+    generate_leakage_report,
     generate_random_split,
     generate_scaffold_split,
     generate_temporal_split,
@@ -656,3 +657,63 @@ class TestMergePositiveNegative:
             positives, migrated_db, tmp_path / "m1"
         )
         assert result["balanced"]["total"] == 0
+
+
+# ============================================================
+# TestLeakageReport
+# ============================================================
+
+
+class TestLeakageReport:
+
+    def test_report_structure(self, migrated_db):
+        """Report has all expected top-level keys."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 10, 5)
+            generate_random_split(conn)
+            generate_cold_compound_split(conn)
+            generate_cold_target_split(conn)
+
+        report = generate_leakage_report(migrated_db)
+        assert "db_summary" in report
+        assert "splits" in report
+        assert "cold_split_integrity" in report
+        assert report["db_summary"]["pairs"] == 50
+
+    def test_cold_splits_zero_leakage(self, migrated_db):
+        """Cold splits in report should show zero leakage."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 20, 5)
+            generate_cold_compound_split(conn)
+            generate_cold_target_split(conn)
+
+        report = generate_leakage_report(migrated_db)
+        integrity = report["cold_split_integrity"]
+        assert integrity["cold_compound"]["leaks"] == 0
+        assert integrity["cold_target"]["leaks"] == 0
+
+    def test_writes_json(self, migrated_db, tmp_path):
+        """Report can be written to JSON file."""
+        import json
+
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 5, 3)
+
+        json_path = tmp_path / "report.json"
+        generate_leakage_report(migrated_db, output_path=json_path)
+        assert json_path.exists()
+
+        with open(json_path) as f:
+            data = json.load(f)
+        assert data["db_summary"]["compounds"] == 5
+
+    def test_split_ratios_in_report(self, migrated_db):
+        """Split ratios appear in report."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 20, 10)
+            generate_random_split(conn)
+
+        report = generate_leakage_report(migrated_db)
+        random_split = report["splits"]["random_v1"]
+        assert abs(random_split["ratios"]["train"] - 0.7) < 0.05
+        assert random_split["total"] == 200

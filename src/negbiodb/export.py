@@ -875,3 +875,164 @@ def merge_positive_negative(
     )
 
     return results
+
+
+# ------------------------------------------------------------------
+# Data leakage check
+# ------------------------------------------------------------------
+
+def check_cold_split_integrity(
+    conn: sqlite3.Connection,
+) -> dict:
+    """Verify cold splits have zero entity leakage between train and test.
+
+    Returns dict with per-strategy leak counts (should all be 0).
+    """
+    results = {}
+
+    for strategy, entity_col in [
+        ("cold_compound", "compound_id"),
+        ("cold_target", "target_id"),
+    ]:
+        sid_row = conn.execute(
+            "SELECT split_id FROM split_definitions WHERE split_strategy = ?",
+            (strategy,),
+        ).fetchone()
+        if sid_row is None:
+            results[strategy] = {"status": "not_found"}
+            continue
+
+        sid = sid_row[0]
+        leaks = conn.execute(
+            f"""SELECT COUNT(DISTINCT ctp1.{entity_col})
+            FROM split_assignments sa1
+            JOIN compound_target_pairs ctp1 ON sa1.pair_id = ctp1.pair_id
+            WHERE sa1.split_id = ? AND sa1.fold = 'train'
+            AND ctp1.{entity_col} IN (
+                SELECT ctp2.{entity_col}
+                FROM split_assignments sa2
+                JOIN compound_target_pairs ctp2 ON sa2.pair_id = ctp2.pair_id
+                WHERE sa2.split_id = ? AND sa2.fold = 'test'
+            )""",
+            (sid, sid),
+        ).fetchone()[0]
+
+        results[strategy] = {"split_id": sid, "leaks": leaks}
+
+    return results
+
+
+def check_cross_db_overlap(
+    conn: sqlite3.Connection,
+) -> dict:
+    """Check overlap between sources at compound×target pair level.
+
+    Returns overlap statistics between each pair of sources.
+    """
+    sources = [r[0] for r in conn.execute(
+        "SELECT DISTINCT source_db FROM negative_results ORDER BY source_db"
+    ).fetchall()]
+
+    overlaps = {}
+    for i, s1 in enumerate(sources):
+        for s2 in sources[i + 1:]:
+            count = conn.execute(
+                """SELECT COUNT(DISTINCT nr1.compound_id || ':' || nr1.target_id)
+                FROM negative_results nr1
+                WHERE nr1.source_db = ?
+                AND EXISTS (
+                    SELECT 1 FROM negative_results nr2
+                    WHERE nr2.compound_id = nr1.compound_id
+                    AND nr2.target_id = nr1.target_id
+                    AND nr2.source_db = ?
+                )""",
+                (s1, s2),
+            ).fetchone()[0]
+            overlaps[f"{s1}_vs_{s2}"] = count
+
+    return overlaps
+
+
+def generate_leakage_report(
+    db_path: str | Path,
+    output_path: str | Path | None = None,
+) -> dict:
+    """Generate comprehensive data leakage and integrity report.
+
+    Checks:
+    1. Cold split integrity (zero entity leakage)
+    2. Split fold counts and ratios
+    3. Database summary statistics
+
+    Returns report dict, optionally writes to JSON file.
+    """
+    import json
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("PRAGMA journal_mode = WAL")
+
+    report: dict = {}
+
+    # 1. DB summary
+    report["db_summary"] = {
+        "compounds": conn.execute("SELECT COUNT(*) FROM compounds").fetchone()[0],
+        "targets": conn.execute("SELECT COUNT(*) FROM targets").fetchone()[0],
+        "negative_results": conn.execute("SELECT COUNT(*) FROM negative_results").fetchone()[0],
+        "pairs": conn.execute("SELECT COUNT(*) FROM compound_target_pairs").fetchone()[0],
+    }
+
+    # 2. Source breakdown
+    source_counts = {}
+    for source, cnt in conn.execute(
+        "SELECT source_db, COUNT(*) FROM negative_results GROUP BY source_db"
+    ).fetchall():
+        source_counts[source] = cnt
+    report["source_counts"] = source_counts
+
+    # 3. Split summary
+    split_summary = {}
+    for sid, name, strategy in conn.execute(
+        "SELECT split_id, split_name, split_strategy FROM split_definitions"
+    ).fetchall():
+        fold_counts = {}
+        for fold, cnt in conn.execute(
+            "SELECT fold, COUNT(*) FROM split_assignments WHERE split_id = ? GROUP BY fold",
+            (sid,),
+        ).fetchall():
+            fold_counts[fold] = cnt
+        total = sum(fold_counts.values())
+        split_summary[name] = {
+            "strategy": strategy,
+            "fold_counts": fold_counts,
+            "total": total,
+            "ratios": {
+                f: round(c / total, 4) if total > 0 else 0
+                for f, c in fold_counts.items()
+            },
+        }
+    report["splits"] = split_summary
+
+    # 4. Cold split integrity
+    report["cold_split_integrity"] = check_cold_split_integrity(conn)
+
+    # 5. Cross-source overlap
+    report["cross_source_overlap"] = check_cross_db_overlap(conn)
+
+    # 6. Pairs by num_sources
+    multi_source = {}
+    for ns, cnt in conn.execute(
+        "SELECT num_sources, COUNT(*) FROM compound_target_pairs GROUP BY num_sources ORDER BY num_sources"
+    ).fetchall():
+        multi_source[str(ns)] = cnt
+    report["pairs_by_num_sources"] = multi_source
+
+    conn.close()
+
+    if output_path is not None:
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(report, f, indent=2)
+        logger.info("Leakage report written to %s", output_path)
+
+    return report
