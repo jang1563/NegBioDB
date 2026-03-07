@@ -6,6 +6,8 @@ from negbiodb.db import connect, create_database, refresh_all_pairs
 import pandas as pd
 import pyarrow.parquet as pq
 
+import numpy as np
+
 from negbiodb.export import (
     _compute_scaffolds,
     _register_split,
@@ -16,6 +18,7 @@ from negbiodb.export import (
     generate_random_split,
     generate_scaffold_split,
     generate_temporal_split,
+    merge_positive_negative,
 )
 
 MIGRATIONS_DIR = "migrations"
@@ -541,3 +544,115 @@ class TestExportNegativeDataset:
         assert len(df) == total
         # split_random should be NULL/None for all rows
         assert df["split_random"].isna().all()
+
+
+# ============================================================
+# TestMergePositiveNegative
+# ============================================================
+
+
+def _make_positives(n=20, uniprot_ids=None):
+    """Create a synthetic positives DataFrame for testing."""
+    if uniprot_ids is None:
+        uniprot_ids = [f"P{i:05d}" for i in range(1, 4)]
+    rows = []
+    for i in range(n):
+        rows.append({
+            "smiles": f"POS_C{i}",
+            "inchikey": f"POS{i:020d}SA-N",
+            "uniprot_id": uniprot_ids[i % len(uniprot_ids)],
+            "target_sequence": "MAAAA",
+            "pchembl_value": 7.0 + i * 0.01,
+            "activity_type": "IC50",
+            "activity_value_nm": 100.0,
+            "publication_year": 2020,
+        })
+    return pd.DataFrame(rows)
+
+
+class TestMergePositiveNegative:
+
+    def test_balanced_output(self, migrated_db, tmp_path):
+        """Balanced merge produces equal pos/neg counts."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 10, 5)
+
+        positives = _make_positives(n=15)
+        result = merge_positive_negative(
+            positives, migrated_db, tmp_path / "m1"
+        )
+        df = pd.read_parquet(result["balanced"]["path"])
+        assert result["balanced"]["n_pos"] == result["balanced"]["n_neg"]
+        assert (df["Y"].isin([0, 1])).all()
+        assert df["Y"].sum() == result["balanced"]["n_pos"]
+
+    def test_realistic_ratio(self, migrated_db, tmp_path):
+        """Realistic merge has ~1:10 pos:neg ratio."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 20, 10)  # 200 negatives
+
+        positives = _make_positives(n=15)
+        result = merge_positive_negative(
+            positives, migrated_db, tmp_path / "m1"
+        )
+        assert result["realistic"]["n_neg"] == result["realistic"]["n_pos"] * 10
+
+    def test_overlap_removal(self, migrated_db, tmp_path):
+        """Overlapping pairs are removed from positives."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 5, 3)
+            # Get actual inchikeys and uniprots from DB
+            neg_pairs = conn.execute(
+                """SELECT c.inchikey, t.uniprot_accession
+                FROM compound_target_pairs ctp
+                JOIN compounds c ON ctp.compound_id = c.compound_id
+                JOIN targets t ON ctp.target_id = t.target_id
+                LIMIT 2"""
+            ).fetchall()
+
+        # Create positives that overlap with 2 negatives
+        pos_data = []
+        for ik, uid in neg_pairs:
+            pos_data.append({
+                "smiles": "OVERLAP",
+                "inchikey": ik,
+                "uniprot_id": uid,
+                "target_sequence": "MAAAA",
+                "pchembl_value": 8.0,
+                "activity_type": "IC50",
+                "activity_value_nm": 10.0,
+                "publication_year": 2022,
+            })
+        # Add non-overlapping positives
+        for i in range(10):
+            pos_data.append({
+                "smiles": f"UNIQUE_C{i}",
+                "inchikey": f"UNIQ{i:020d}SA-N",
+                "uniprot_id": "P00001",
+                "target_sequence": "MAAAA",
+                "pchembl_value": 7.5,
+                "activity_type": "IC50",
+                "activity_value_nm": 30.0,
+                "publication_year": 2021,
+            })
+        positives = pd.DataFrame(pos_data)
+
+        result = merge_positive_negative(
+            positives, migrated_db, tmp_path / "m1"
+        )
+        # The 2 overlapping should have been removed
+        # Balanced should use non-overlapping positives only
+        assert result["balanced"]["n_pos"] <= 10
+
+    def test_empty_positives(self, migrated_db, tmp_path):
+        """Empty positives produces empty datasets."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 5, 3)
+
+        positives = pd.DataFrame(columns=[
+            "smiles", "inchikey", "uniprot_id", "target_sequence", "Y",
+        ])
+        result = merge_positive_negative(
+            positives, migrated_db, tmp_path / "m1"
+        )
+        assert result["balanced"]["total"] == 0

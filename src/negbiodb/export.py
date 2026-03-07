@@ -634,3 +634,244 @@ def export_negative_dataset(
         "parquet_path": str(parquet_path),
         "splits_csv_path": str(splits_csv_path),
     }
+
+
+# ------------------------------------------------------------------
+# ChEMBL positive extraction + M1 merge
+# ------------------------------------------------------------------
+
+_CHEMBL_POSITIVE_SQL = """
+SELECT
+    cs.canonical_smiles,
+    cs.standard_inchi_key AS inchikey,
+    cp.accession AS uniprot_id,
+    cp.sequence AS target_sequence,
+    a.pchembl_value,
+    a.standard_type AS activity_type,
+    a.standard_value AS activity_value_nm,
+    docs.year AS publication_year
+FROM activities a
+JOIN assays ass ON a.assay_id = ass.assay_id
+JOIN target_dictionary td ON ass.tid = td.tid
+JOIN target_components tc ON td.tid = tc.tid
+JOIN component_sequences cp ON tc.component_id = cp.component_id
+JOIN molecule_dictionary md ON a.molregno = md.molregno
+JOIN compound_structures cs ON md.molregno = cs.molregno
+LEFT JOIN docs ON a.doc_id = docs.doc_id
+WHERE a.pchembl_value >= ?
+  AND a.standard_type IN ('IC50', 'Ki', 'Kd', 'EC50')
+  AND td.target_type = 'SINGLE PROTEIN'
+  AND td.organism = 'Homo sapiens'
+  AND a.data_validity_comment IS NULL
+  AND cs.canonical_smiles IS NOT NULL
+  AND cp.accession IS NOT NULL
+"""
+
+
+def extract_chembl_positives(
+    chembl_db_path: str | Path,
+    negbiodb_path: str | Path,
+    pchembl_min: float = 6.0,
+    chunksize: int = 100_000,
+) -> pd.DataFrame:
+    """Extract active compounds from ChEMBL for M1 binary task.
+
+    Filters:
+    - pChEMBL >= pchembl_min (default 6.0 = IC50 <= 1 uM)
+    - Single protein, human, valid data
+    - Target must exist in NegBioDB target pool
+    - Deduplicates by (inchikey_connectivity, uniprot_id), keeping max pChEMBL
+
+    Returns DataFrame with columns matching negative export format.
+    """
+    from negbiodb.standardize import standardize_smiles
+
+    # Load NegBioDB target pool
+    neg_conn = sqlite3.connect(str(negbiodb_path))
+    neg_targets = {
+        r[0] for r in neg_conn.execute(
+            "SELECT uniprot_accession FROM targets"
+        ).fetchall()
+    }
+    neg_conn.close()
+    logger.info("NegBioDB target pool: %d targets", len(neg_targets))
+
+    # Query ChEMBL
+    chembl_conn = sqlite3.connect(str(chembl_db_path))
+    rows = []
+
+    for chunk in pd.read_sql_query(
+        _CHEMBL_POSITIVE_SQL, chembl_conn,
+        params=(pchembl_min,), chunksize=chunksize,
+    ):
+        # Filter to shared target pool
+        chunk = chunk[chunk["uniprot_id"].isin(neg_targets)]
+        if chunk.empty:
+            continue
+
+        # Standardize SMILES → canonical + InChIKey
+        std_results = []
+        for _, row in chunk.iterrows():
+            result = standardize_smiles(row["canonical_smiles"])
+            if result is None:
+                continue
+            std_results.append({
+                "smiles": result["canonical_smiles"],
+                "inchikey": result["inchikey"],
+                "inchikey_connectivity": result["inchikey"][:14],
+                "uniprot_id": row["uniprot_id"],
+                "target_sequence": row["target_sequence"],
+                "pchembl_value": row["pchembl_value"],
+                "activity_type": row["activity_type"],
+                "activity_value_nm": row["activity_value_nm"],
+                "publication_year": row["publication_year"],
+            })
+        if std_results:
+            rows.extend(std_results)
+
+        logger.info("Processed %d positive candidates so far...", len(rows))
+
+    chembl_conn.close()
+
+    if not rows:
+        logger.warning("No positive records extracted from ChEMBL")
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+
+    # Deduplicate: keep highest pChEMBL per (inchikey_connectivity, uniprot_id)
+    df = df.sort_values("pchembl_value", ascending=False)
+    df = df.drop_duplicates(subset=["inchikey_connectivity", "uniprot_id"], keep="first")
+    df = df.drop(columns=["inchikey_connectivity"])
+
+    logger.info("ChEMBL positives after dedup: %d unique pairs", len(df))
+    return df
+
+
+def merge_positive_negative(
+    positives: pd.DataFrame,
+    negbiodb_path: str | Path,
+    output_dir: str | Path,
+    seed: int = 42,
+) -> dict:
+    """Merge positives (Y=1) and negatives (Y=0) for M1 binary DTI task.
+
+    Validates zero overlap between positives and negatives by InChIKey
+    connectivity × UniProt, then creates:
+    - Balanced (1:1) dataset
+    - Realistic (1:10 pos:neg) dataset
+
+    Returns dict with file paths and statistics.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load negatives from NegBioDB
+    neg_conn = sqlite3.connect(str(negbiodb_path))
+    negatives = pd.read_sql_query(
+        """SELECT c.canonical_smiles AS smiles, c.inchikey,
+                  SUBSTR(c.inchikey, 1, 14) AS inchikey_connectivity,
+                  t.uniprot_accession AS uniprot_id,
+                  t.amino_acid_sequence AS target_sequence,
+                  ctp.best_confidence AS confidence_tier,
+                  ctp.num_assays, ctp.num_sources, ctp.earliest_year
+        FROM compound_target_pairs ctp
+        JOIN compounds c ON ctp.compound_id = c.compound_id
+        JOIN targets t ON ctp.target_id = t.target_id""",
+        neg_conn,
+    )
+    neg_conn.close()
+
+    # Overlap check: InChIKey connectivity × UniProt
+    pos_keys = set(
+        zip(
+            positives["inchikey"].str[:14],
+            positives["uniprot_id"],
+        )
+    )
+    neg_keys = set(
+        zip(
+            negatives["inchikey"].str[:14],
+            negatives["uniprot_id"],
+        )
+    )
+    overlap = pos_keys & neg_keys
+    if overlap:
+        logger.warning(
+            "Found %d overlapping (inchikey_conn, uniprot) pairs! "
+            "Removing from positives.",
+            len(overlap),
+        )
+        overlap_df = pd.DataFrame(list(overlap), columns=["ik_conn", "uid"])
+        positives = positives.merge(
+            overlap_df,
+            left_on=[positives["inchikey"].str[:14], "uniprot_id"],
+            right_on=["ik_conn", "uid"],
+            how="left",
+            indicator=True,
+        )
+        positives = positives[positives["_merge"] == "left_only"].drop(
+            columns=["_merge", "ik_conn", "uid"]
+        )
+        logger.info("Positives after overlap removal: %d", len(positives))
+
+    # Prepare label columns
+    positives = positives.copy()
+    positives["Y"] = 1
+    negatives = negatives.copy()
+    negatives["Y"] = 0
+
+    # Common columns for merge
+    common_cols = ["smiles", "inchikey", "uniprot_id", "target_sequence", "Y"]
+    pos_export = positives[common_cols]
+    neg_export = negatives[common_cols]
+
+    rng = np.random.RandomState(seed)
+    results = {}
+
+    # Balanced (1:1)
+    n_pos = len(pos_export)
+    n_neg = len(neg_export)
+    n_balanced = min(n_pos, n_neg)
+
+    pos_balanced = pos_export.sample(n=n_balanced, random_state=rng)
+    neg_balanced = neg_export.sample(n=n_balanced, random_state=rng)
+    balanced = pd.concat([pos_balanced, neg_balanced], ignore_index=True)
+    balanced = balanced.sample(frac=1, random_state=rng).reset_index(drop=True)
+
+    balanced_path = output_dir / "negbiodb_m1_balanced.parquet"
+    balanced.to_parquet(str(balanced_path), index=False, compression="zstd")
+    results["balanced"] = {
+        "path": str(balanced_path),
+        "n_pos": n_balanced,
+        "n_neg": n_balanced,
+        "total": len(balanced),
+    }
+
+    # Realistic (1:10 pos:neg)
+    n_realistic_neg = min(n_pos * 10, n_neg)
+    n_realistic_pos = min(n_pos, n_realistic_neg // 10) if n_realistic_neg >= 10 else n_pos
+
+    rng2 = np.random.RandomState(seed)
+    pos_realistic = pos_export.sample(n=n_realistic_pos, random_state=rng2)
+    neg_realistic = neg_export.sample(n=n_realistic_neg, random_state=rng2)
+    realistic = pd.concat([pos_realistic, neg_realistic], ignore_index=True)
+    realistic = realistic.sample(frac=1, random_state=rng2).reset_index(drop=True)
+
+    realistic_path = output_dir / "negbiodb_m1_realistic.parquet"
+    realistic.to_parquet(str(realistic_path), index=False, compression="zstd")
+    results["realistic"] = {
+        "path": str(realistic_path),
+        "n_pos": n_realistic_pos,
+        "n_neg": n_realistic_neg,
+        "total": len(realistic),
+    }
+
+    logger.info(
+        "M1 merge done: balanced=%d (1:1), realistic=%d (1:%d)",
+        len(balanced),
+        len(realistic),
+        n_realistic_neg // n_realistic_pos if n_realistic_pos > 0 else 0,
+    )
+
+    return results
