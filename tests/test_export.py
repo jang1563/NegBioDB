@@ -9,14 +9,20 @@ import numpy as np
 from negbiodb.export import (
     _compute_scaffolds,
     _register_split,
+    add_cold_compound_split,
+    add_cold_target_split,
+    add_random_split,
+    apply_m1_splits,
     export_negative_dataset,
     generate_cold_compound_split,
     generate_cold_target_split,
     generate_degree_balanced_split,
+    generate_degree_matched_negatives,
     generate_leakage_report,
     generate_random_split,
     generate_scaffold_split,
     generate_temporal_split,
+    generate_uniform_random_negatives,
     merge_positive_negative,
 )
 
@@ -60,6 +66,47 @@ def _populate_small_db(conn, n_compounds=10, n_targets=5):
     refresh_all_pairs(conn)
     conn.commit()
     return n_compounds * n_targets
+
+
+def _populate_partial_db(conn, n_compounds=20, n_targets=10, pairs_per_compound=3):
+    """Insert compounds and targets with partial pairing.
+
+    Each compound is paired with only ``pairs_per_compound`` targets
+    (rotating window), leaving most of the compound×target space
+    untested.  Needed for testing random negative generation where
+    untested pairs must exist within the DB compound space.
+    """
+    for i in range(1, n_compounds + 1):
+        conn.execute(
+            """INSERT INTO compounds
+            (canonical_smiles, inchikey, inchikey_connectivity)
+            VALUES (?, ?, ?)""",
+            (f"C{i}", f"KEY{i:020d}SA-N", f"KEY{i:020d}"),
+        )
+    for j in range(1, n_targets + 1):
+        conn.execute(
+            "INSERT INTO targets (uniprot_accession) VALUES (?)",
+            (f"P{j:05d}",),
+        )
+    count = 0
+    for i in range(1, n_compounds + 1):
+        for k in range(pairs_per_compound):
+            j = ((i - 1 + k) % n_targets) + 1
+            conn.execute(
+                """INSERT INTO negative_results
+                (compound_id, target_id, result_type, confidence_tier,
+                 activity_type, activity_value, activity_unit,
+                 inactivity_threshold, source_db, source_record_id,
+                 extraction_method, publication_year)
+                VALUES (?, ?, 'hard_negative', 'silver',
+                        'IC50', 20000.0, 'nM',
+                        10000.0, 'chembl', ?, 'database_direct', ?)""",
+                (i, j, f"C:{i}:{j}", 2015 + (i % 10)),
+            )
+            count += 1
+    refresh_all_pairs(conn)
+    conn.commit()
+    return count
 
 
 # ============================================================
@@ -558,7 +605,7 @@ def _make_positives(n=20, uniprot_ids=None):
     for i in range(n):
         rows.append({
             "smiles": f"POS_C{i}",
-            "inchikey": f"POS{i:020d}SA-N",
+            "inchikey": f"POS{i:011d}SA-N",
             "uniprot_id": uniprot_ids[i % len(uniprot_ids)],
             "target_sequence": "MAAAA",
             "pchembl_value": 7.0 + i * 0.01,
@@ -714,4 +761,299 @@ class TestLeakageReport:
         report = generate_leakage_report(migrated_db)
         random_split = report["splits"]["random_v1"]
         assert abs(random_split["ratios"]["train"] - 0.7) < 0.05
-        assert random_split["total"] == 200
+
+
+# ============================================================
+# TestDataFrameSplits (M1 split functions)
+# ============================================================
+
+
+def _make_m1_df(n_pos=100, n_neg=100, n_compounds=20, n_targets=5):
+    """Create a synthetic M1-like DataFrame for testing splits."""
+    rows = []
+    for i in range(n_pos):
+        cid = i % n_compounds
+        tid = i % n_targets
+        rows.append({
+            "smiles": f"POS{cid}",
+            "inchikey": f"POS{cid:020d}SA-N",
+            "uniprot_id": f"P{tid:05d}",
+            "target_sequence": "MAAAA",
+            "Y": 1,
+        })
+    for i in range(n_neg):
+        cid = i % n_compounds
+        tid = i % n_targets
+        rows.append({
+            "smiles": f"NEG{cid}",
+            "inchikey": f"NEG{cid:020d}SA-N",
+            "uniprot_id": f"P{tid:05d}",
+            "target_sequence": "MAAAA",
+            "Y": 0,
+        })
+    return pd.DataFrame(rows)
+
+
+class TestDataFrameSplits:
+
+    def test_random_split_columns(self):
+        """add_random_split adds split_random column."""
+        df = _make_m1_df()
+        result = add_random_split(df)
+        assert "split_random" in result.columns
+        assert set(result["split_random"].unique()) == {"train", "val", "test"}
+
+    def test_random_split_ratios(self):
+        """Random split has approximately 70/10/20 ratios."""
+        df = _make_m1_df(n_pos=500, n_neg=500)
+        result = add_random_split(df)
+        counts = result["split_random"].value_counts()
+        total = len(result)
+        assert abs(counts["train"] / total - 0.7) < 0.05
+        assert abs(counts["val"] / total - 0.1) < 0.05
+        assert abs(counts["test"] / total - 0.2) < 0.05
+
+    def test_random_split_deterministic(self):
+        """Same seed produces identical splits."""
+        df = _make_m1_df()
+        r1 = add_random_split(df, seed=42)
+        r2 = add_random_split(df, seed=42)
+        assert (r1["split_random"] == r2["split_random"]).all()
+
+    def test_cold_compound_no_leak(self):
+        """Cold-compound split: no compound in both train and test."""
+        df = _make_m1_df(n_pos=200, n_neg=200, n_compounds=30)
+        result = add_cold_compound_split(df)
+        train_compounds = set(
+            result[result["split_cold_compound"] == "train"]["inchikey"].str[:14]
+        )
+        test_compounds = set(
+            result[result["split_cold_compound"] == "test"]["inchikey"].str[:14]
+        )
+        assert len(train_compounds & test_compounds) == 0
+
+    def test_cold_compound_no_leak_val(self):
+        """Cold-compound split: no compound in both val and test."""
+        df = _make_m1_df(n_pos=200, n_neg=200, n_compounds=30)
+        result = add_cold_compound_split(df)
+        val_compounds = set(
+            result[result["split_cold_compound"] == "val"]["inchikey"].str[:14]
+        )
+        test_compounds = set(
+            result[result["split_cold_compound"] == "test"]["inchikey"].str[:14]
+        )
+        assert len(val_compounds & test_compounds) == 0
+
+    def test_cold_target_no_leak(self):
+        """Cold-target split: no target in both train and test."""
+        df = _make_m1_df(n_pos=200, n_neg=200, n_targets=10)
+        result = add_cold_target_split(df)
+        train_targets = set(
+            result[result["split_cold_target"] == "train"]["uniprot_id"]
+        )
+        test_targets = set(
+            result[result["split_cold_target"] == "test"]["uniprot_id"]
+        )
+        assert len(train_targets & test_targets) == 0
+
+    def test_apply_m1_splits_all_columns(self):
+        """apply_m1_splits adds all 3 split columns."""
+        df = _make_m1_df()
+        result = apply_m1_splits(df)
+        assert "split_random" in result.columns
+        assert "split_cold_compound" in result.columns
+        assert "split_cold_target" in result.columns
+
+    def test_empty_dataframe(self):
+        """Split functions handle empty DataFrames gracefully."""
+        df = pd.DataFrame(columns=[
+            "smiles", "inchikey", "uniprot_id", "target_sequence", "Y",
+        ])
+        result = apply_m1_splits(df)
+        assert len(result) == 0
+        assert "split_random" in result.columns
+
+    def test_original_not_modified(self):
+        """Split functions do not modify the original DataFrame."""
+        df = _make_m1_df()
+        original_cols = set(df.columns)
+        _ = add_random_split(df)
+        assert set(df.columns) == original_cols
+
+
+class TestMergeWithSplits:
+
+    def test_balanced_has_split_columns(self, migrated_db, tmp_path):
+        """Balanced merge output has split columns."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 10, 5)
+
+        positives = _make_positives(n=15)
+        result = merge_positive_negative(
+            positives, migrated_db, tmp_path / "m1"
+        )
+        df = pd.read_parquet(result["balanced"]["path"])
+        assert "split_random" in df.columns
+        assert "split_cold_compound" in df.columns
+        assert "split_cold_target" in df.columns
+
+    def test_realistic_has_split_columns(self, migrated_db, tmp_path):
+        """Realistic merge output has split columns."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 20, 10)
+
+        positives = _make_positives(n=15)
+        result = merge_positive_negative(
+            positives, migrated_db, tmp_path / "m1"
+        )
+        df = pd.read_parquet(result["realistic"]["path"])
+        assert "split_random" in df.columns
+        assert "split_cold_compound" in df.columns
+        assert "split_cold_target" in df.columns
+
+
+# ============================================================
+# TestRandomNegatives (Exp 1 controls)
+# ============================================================
+
+
+class TestUniformRandomNegatives:
+
+    def test_generates_correct_count(self, migrated_db, tmp_path):
+        """Uniform random generates requested number of negatives."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 10, 5)
+
+        positives = _make_positives(n=10, uniprot_ids=[f"P{i:05d}" for i in range(1, 6)])
+        result = generate_uniform_random_negatives(
+            migrated_db, positives, n_samples=20,
+            output_dir=tmp_path / "rand",
+        )
+        df = pd.read_parquet(result["path"])
+        # balanced: min(10 pos, 20 neg) = 10 each → 20 total
+        assert result["n_pos"] == 10
+        assert result["n_neg"] == 10
+        assert result["total"] == 20
+
+    def test_no_overlap_with_tested(self, migrated_db, tmp_path):
+        """Generated pairs do not exist in NegBioDB or positives."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 10, 5)
+            # Load tested pairs
+            tested = set()
+            for row in conn.execute(
+                """SELECT c.inchikey_connectivity, t.uniprot_accession
+                FROM compound_target_pairs ctp
+                JOIN compounds c ON ctp.compound_id = c.compound_id
+                JOIN targets t ON ctp.target_id = t.target_id"""
+            ):
+                tested.add((row[0], row[1]))
+
+        positives = _make_positives(n=10, uniprot_ids=[f"P{i:05d}" for i in range(1, 6)])
+        for ik, uid in zip(positives["inchikey"].str[:14], positives["uniprot_id"]):
+            tested.add((ik, uid))
+
+        result = generate_uniform_random_negatives(
+            migrated_db, positives, n_samples=30,
+            output_dir=tmp_path / "rand",
+        )
+        df = pd.read_parquet(result["path"])
+        neg_df = df[df["Y"] == 0]
+        for _, row in neg_df.iterrows():
+            key = (row["inchikey"][:14], row["uniprot_id"])
+            assert key not in tested, f"Generated pair {key} is in tested set"
+
+    def test_has_split_columns(self, migrated_db, tmp_path):
+        """Output has M1 split columns."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 10, 5)
+
+        positives = _make_positives(n=10, uniprot_ids=[f"P{i:05d}" for i in range(1, 6)])
+        result = generate_uniform_random_negatives(
+            migrated_db, positives, n_samples=20,
+            output_dir=tmp_path / "rand",
+        )
+        df = pd.read_parquet(result["path"])
+        assert "split_random" in df.columns
+        assert "split_cold_compound" in df.columns
+        assert "split_cold_target" in df.columns
+
+    def test_deterministic(self, migrated_db, tmp_path):
+        """Same seed produces identical output."""
+        with connect(migrated_db) as conn:
+            _populate_small_db(conn, 10, 5)
+
+        positives = _make_positives(n=10, uniprot_ids=[f"P{i:05d}" for i in range(1, 6)])
+        r1 = generate_uniform_random_negatives(
+            migrated_db, positives, n_samples=15,
+            output_dir=tmp_path / "r1", seed=42,
+        )
+        r2 = generate_uniform_random_negatives(
+            migrated_db, positives, n_samples=15,
+            output_dir=tmp_path / "r2", seed=42,
+        )
+        df1 = pd.read_parquet(r1["path"])
+        df2 = pd.read_parquet(r2["path"])
+        pd.testing.assert_frame_equal(df1, df2)
+
+
+class TestDegreeMatchedNegatives:
+    """Degree-matched tests use _populate_partial_db (sparse graph)
+    because generate_degree_matched_negatives only samples from DB
+    compounds.  _populate_small_db creates ALL pairs → 0 untested.
+    """
+
+    def test_generates_output(self, migrated_db, tmp_path):
+        """Degree-matched generates a non-empty output."""
+        with connect(migrated_db) as conn:
+            _populate_partial_db(conn, 20, 10, pairs_per_compound=3)
+
+        positives = _make_positives(n=10, uniprot_ids=[f"P{i:05d}" for i in range(1, 11)])
+        result = generate_degree_matched_negatives(
+            migrated_db, positives, n_samples=20,
+            output_dir=tmp_path / "deg",
+        )
+        df = pd.read_parquet(result["path"])
+        assert len(df) > 0
+        assert (df["Y"].isin([0, 1])).all()
+
+    def test_has_split_columns(self, migrated_db, tmp_path):
+        """Output has M1 split columns."""
+        with connect(migrated_db) as conn:
+            _populate_partial_db(conn, 20, 10, pairs_per_compound=3)
+
+        positives = _make_positives(n=10, uniprot_ids=[f"P{i:05d}" for i in range(1, 11)])
+        result = generate_degree_matched_negatives(
+            migrated_db, positives, n_samples=20,
+            output_dir=tmp_path / "deg",
+        )
+        df = pd.read_parquet(result["path"])
+        assert "split_random" in df.columns
+        assert "split_cold_compound" in df.columns
+
+    def test_no_overlap_with_tested(self, migrated_db, tmp_path):
+        """Generated pairs do not exist in tested set."""
+        with connect(migrated_db) as conn:
+            _populate_partial_db(conn, 20, 10, pairs_per_compound=3)
+            tested = set()
+            for row in conn.execute(
+                """SELECT c.inchikey_connectivity, t.uniprot_accession
+                FROM compound_target_pairs ctp
+                JOIN compounds c ON ctp.compound_id = c.compound_id
+                JOIN targets t ON ctp.target_id = t.target_id"""
+            ):
+                tested.add((row[0], row[1]))
+
+        positives = _make_positives(n=10, uniprot_ids=[f"P{i:05d}" for i in range(1, 11)])
+        for ik, uid in zip(positives["inchikey"].str[:14], positives["uniprot_id"]):
+            tested.add((ik, uid))
+
+        result = generate_degree_matched_negatives(
+            migrated_db, positives, n_samples=20,
+            output_dir=tmp_path / "deg",
+        )
+        df = pd.read_parquet(result["path"])
+        neg_df = df[df["Y"] == 0]
+        for _, row in neg_df.iterrows():
+            key = (row["inchikey"][:14], row["uniprot_id"])
+            assert key not in tested

@@ -651,6 +651,125 @@ def export_negative_dataset(
 # ChEMBL positive extraction + M1 merge
 # ------------------------------------------------------------------
 
+# ------------------------------------------------------------------
+# DataFrame-level split helpers (for M1 / random negative datasets)
+# ------------------------------------------------------------------
+
+_DEFAULT_RATIOS = {"train": 0.7, "val": 0.1, "test": 0.2}
+
+
+def add_random_split(
+    df: pd.DataFrame,
+    seed: int = 42,
+    ratios: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """Add split_random column with deterministic 70/10/20 assignment."""
+    if ratios is None:
+        ratios = _DEFAULT_RATIOS
+    rng = np.random.RandomState(seed)
+    n = len(df)
+    if n == 0:
+        df = df.copy()
+        df["split_random"] = pd.Series(dtype=str)
+        return df
+    indices = np.arange(n)
+    rng.shuffle(indices)
+    folds = np.empty(n, dtype=object)
+    n_train = int(n * ratios["train"])
+    n_val = int(n * ratios["val"])
+    folds[indices[:n_train]] = "train"
+    folds[indices[n_train:n_train + n_val]] = "val"
+    folds[indices[n_train + n_val:]] = "test"
+    df = df.copy()
+    df["split_random"] = folds
+    return df
+
+
+def add_cold_compound_split(
+    df: pd.DataFrame,
+    seed: int = 42,
+    ratios: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """Add split_cold_compound column — group by InChIKey connectivity.
+
+    All rows sharing the same InChIKey[:14] get the same fold,
+    ensuring no compound leaks between train and test.
+    """
+    if ratios is None:
+        ratios = _DEFAULT_RATIOS
+    if len(df) == 0:
+        df = df.copy()
+        df["split_cold_compound"] = pd.Series(dtype=str)
+        return df
+    compounds = np.array(df["inchikey"].str[:14].unique())
+    rng = np.random.RandomState(seed)
+    rng.shuffle(compounds)
+    n = len(compounds)
+    n_train = int(n * ratios["train"])
+    n_val = int(n * ratios["val"])
+    comp_fold = {}
+    for i, c in enumerate(compounds):
+        if i < n_train:
+            comp_fold[c] = "train"
+        elif i < n_train + n_val:
+            comp_fold[c] = "val"
+        else:
+            comp_fold[c] = "test"
+    df = df.copy()
+    df["split_cold_compound"] = df["inchikey"].str[:14].map(comp_fold)
+    return df
+
+
+def add_cold_target_split(
+    df: pd.DataFrame,
+    seed: int = 42,
+    ratios: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """Add split_cold_target column — group by UniProt accession.
+
+    All rows sharing the same uniprot_id get the same fold,
+    ensuring no target leaks between train and test.
+    """
+    if ratios is None:
+        ratios = _DEFAULT_RATIOS
+    if len(df) == 0:
+        df = df.copy()
+        df["split_cold_target"] = pd.Series(dtype=str)
+        return df
+    targets = np.array(df["uniprot_id"].unique())
+    rng = np.random.RandomState(seed)
+    rng.shuffle(targets)
+    n = len(targets)
+    n_train = int(n * ratios["train"])
+    n_val = int(n * ratios["val"])
+    tgt_fold = {}
+    for i, t in enumerate(targets):
+        if i < n_train:
+            tgt_fold[t] = "train"
+        elif i < n_train + n_val:
+            tgt_fold[t] = "val"
+        else:
+            tgt_fold[t] = "test"
+    df = df.copy()
+    df["split_cold_target"] = df["uniprot_id"].map(tgt_fold)
+    return df
+
+
+def apply_m1_splits(
+    df: pd.DataFrame,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Apply all three M1 split strategies to a DataFrame.
+
+    Adds columns: split_random, split_cold_compound, split_cold_target.
+    Uses the same seed for reproducibility across conditions.
+    """
+    df = add_random_split(df, seed=seed)
+    df = add_cold_compound_split(df, seed=seed)
+    df = add_cold_target_split(df, seed=seed)
+    return df
+
+
 _CHEMBL_POSITIVE_SQL = """
 SELECT
     cs.canonical_smiles,
@@ -847,6 +966,9 @@ def merge_positive_negative(
     balanced = pd.concat([pos_balanced, neg_balanced], ignore_index=True)
     balanced = balanced.sample(frac=1, random_state=rng).reset_index(drop=True)
 
+    # Apply M1 splits (random, cold-compound, cold-target)
+    balanced = apply_m1_splits(balanced, seed=seed)
+
     balanced_path = output_dir / "negbiodb_m1_balanced.parquet"
     balanced.to_parquet(str(balanced_path), index=False, compression="zstd")
     results["balanced"] = {
@@ -866,6 +988,9 @@ def merge_positive_negative(
     realistic = pd.concat([pos_realistic, neg_realistic], ignore_index=True)
     realistic = realistic.sample(frac=1, random_state=rng2).reset_index(drop=True)
 
+    # Apply M1 splits (random, cold-compound, cold-target)
+    realistic = apply_m1_splits(realistic, seed=seed)
+
     realistic_path = output_dir / "negbiodb_m1_realistic.parquet"
     realistic.to_parquet(str(realistic_path), index=False, compression="zstd")
     results["realistic"] = {
@@ -883,6 +1008,329 @@ def merge_positive_negative(
     )
 
     return results
+
+
+# ------------------------------------------------------------------
+# Random negative generation (Exp 1)
+# ------------------------------------------------------------------
+
+def _load_tested_pairs(
+    negbiodb_path: str | Path,
+    positives: pd.DataFrame | None = None,
+) -> set[tuple[str, str]]:
+    """Load all tested (compound, target) pairs as (inchikey_conn, uniprot_id).
+
+    Includes NegBioDB negative pairs and optionally positive pairs.
+    """
+    conn = sqlite3.connect(str(negbiodb_path))
+    tested = set()
+    for row in conn.execute(
+        """SELECT c.inchikey_connectivity, t.uniprot_accession
+        FROM compound_target_pairs ctp
+        JOIN compounds c ON ctp.compound_id = c.compound_id
+        JOIN targets t ON ctp.target_id = t.target_id"""
+    ):
+        tested.add((row[0], row[1]))
+    conn.close()
+
+    if positives is not None:
+        for ik, uid in zip(positives["inchikey"].str[:14], positives["uniprot_id"]):
+            tested.add((ik, uid))
+
+    return tested
+
+
+def _load_compound_target_pools(
+    negbiodb_path: str | Path,
+    positives: pd.DataFrame | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Load compound and target pools with SMILES/sequence for output.
+
+    Returns (compounds_list, targets_list) where each element is a dict
+    with the fields needed for M1 output.
+    """
+    conn = sqlite3.connect(str(negbiodb_path))
+
+    # Compounds: inchikey_connectivity → {smiles, inchikey}
+    compound_map: dict[str, dict] = {}
+    for row in conn.execute(
+        "SELECT inchikey_connectivity, canonical_smiles, inchikey FROM compounds"
+    ):
+        compound_map[row[0]] = {"smiles": row[1], "inchikey": row[2]}
+
+    # Add compounds from positives that might not be in NegBioDB
+    if positives is not None:
+        for _, r in positives[["smiles", "inchikey"]].drop_duplicates(
+            subset=["inchikey"]
+        ).iterrows():
+            ik_conn = r["inchikey"][:14]
+            if ik_conn not in compound_map:
+                compound_map[ik_conn] = {
+                    "smiles": r["smiles"],
+                    "inchikey": r["inchikey"],
+                }
+
+    # Targets: uniprot_accession → {target_sequence}
+    target_map: dict[str, dict] = {}
+    for row in conn.execute(
+        "SELECT uniprot_accession, amino_acid_sequence FROM targets"
+    ):
+        target_map[row[0]] = {"target_sequence": row[1]}
+
+    conn.close()
+
+    compounds = [
+        {"inchikey_conn": k, **v} for k, v in compound_map.items()
+    ]
+    targets = [
+        {"uniprot_id": k, **v} for k, v in target_map.items()
+    ]
+    return compounds, targets
+
+
+def generate_uniform_random_negatives(
+    negbiodb_path: str | Path,
+    positives: pd.DataFrame,
+    n_samples: int,
+    output_dir: str | Path,
+    seed: int = 42,
+) -> dict:
+    """Generate uniform random negative pairs for Exp 1 control.
+
+    Samples untested compound-target pairs uniformly from the cross-product
+    of all compounds × all targets, excluding any tested pairs (both
+    NegBioDB negatives and ChEMBL positives).
+
+    Merges with the same positive set and applies M1 splits.
+
+    Returns dict with file path and statistics.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Loading tested pairs for exclusion...")
+    tested = _load_tested_pairs(negbiodb_path, positives)
+    logger.info("Tested pairs: %d", len(tested))
+
+    logger.info("Loading compound/target pools...")
+    compounds, targets = _load_compound_target_pools(negbiodb_path, positives)
+    logger.info("Compound pool: %d, Target pool: %d", len(compounds), len(targets))
+
+    # Rejection sampling
+    rng = np.random.RandomState(seed)
+    neg_rows = []
+    attempts = 0
+    max_attempts = n_samples * 100  # safety limit
+
+    while len(neg_rows) < n_samples and attempts < max_attempts:
+        batch = min((n_samples - len(neg_rows)) * 2, 1_000_000)
+        c_idx = rng.randint(0, len(compounds), batch)
+        t_idx = rng.randint(0, len(targets), batch)
+
+        for ci, ti in zip(c_idx, t_idx):
+            comp = compounds[ci]
+            tgt = targets[ti]
+            key = (comp["inchikey_conn"], tgt["uniprot_id"])
+            if key not in tested:
+                neg_rows.append({
+                    "smiles": comp["smiles"],
+                    "inchikey": comp["inchikey"],
+                    "uniprot_id": tgt["uniprot_id"],
+                    "target_sequence": tgt["target_sequence"],
+                    "Y": 0,
+                })
+                tested.add(key)  # prevent duplicate negatives
+                if len(neg_rows) >= n_samples:
+                    break
+            attempts += 1
+
+    if len(neg_rows) == 0:
+        logger.warning("Uniform random: 0 negatives generated (pool exhausted)")
+    else:
+        logger.info(
+            "Uniform random: generated %d negatives (rejection rate: %.2f%%)",
+            len(neg_rows),
+            (1 - len(neg_rows) / max(attempts, 1)) * 100,
+        )
+
+    neg_df = pd.DataFrame(neg_rows)
+
+    # Merge with positives (same as M1 balanced)
+    pos_export = positives[["smiles", "inchikey", "uniprot_id", "target_sequence"]].copy()
+    pos_export["Y"] = 1
+
+    n_balanced = min(len(pos_export), len(neg_df))
+    rng2 = np.random.RandomState(seed)
+    pos_sample = pos_export.sample(n=n_balanced, random_state=rng2)
+    neg_sample = neg_df.sample(n=n_balanced, random_state=rng2)
+
+    merged = pd.concat([pos_sample, neg_sample], ignore_index=True)
+    merged = merged.sample(frac=1, random_state=rng2).reset_index(drop=True)
+    merged = apply_m1_splits(merged, seed=seed)
+
+    out_path = output_dir / "negbiodb_m1_uniform_random.parquet"
+    merged.to_parquet(str(out_path), index=False, compression="zstd")
+
+    result = {
+        "path": str(out_path),
+        "n_pos": n_balanced,
+        "n_neg": n_balanced,
+        "total": len(merged),
+    }
+    logger.info("Uniform random M1: %d total → %s", len(merged), out_path.name)
+    return result
+
+
+def generate_degree_matched_negatives(
+    negbiodb_path: str | Path,
+    positives: pd.DataFrame,
+    n_samples: int,
+    output_dir: str | Path,
+    seed: int = 42,
+) -> dict:
+    """Generate degree-matched random negatives for Exp 1 control.
+
+    Samples untested pairs whose compounds and targets have degree
+    distributions matching NegBioDB's, isolating the effect of
+    experimental confirmation vs. degree bias.
+
+    Uses log-scale binning of compound_degree × target_degree.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Loading tested pairs and degree info...")
+    tested = _load_tested_pairs(negbiodb_path, positives)
+
+    conn = sqlite3.connect(str(negbiodb_path))
+
+    # Load compound/target degree from DB
+    degree_df = pd.read_sql_query(
+        """SELECT c.inchikey_connectivity, c.canonical_smiles, c.inchikey,
+                  t.uniprot_accession AS uniprot_id,
+                  t.amino_acid_sequence AS target_sequence,
+                  ctp.compound_degree, ctp.target_degree
+        FROM compound_target_pairs ctp
+        JOIN compounds c ON ctp.compound_id = c.compound_id
+        JOIN targets t ON ctp.target_id = t.target_id""",
+        conn,
+    )
+    conn.close()
+
+    # Build per-compound and per-target degree lookup
+    comp_deg = degree_df.groupby("inchikey_connectivity")["compound_degree"].first()
+    tgt_deg = degree_df.groupby("uniprot_id")["target_degree"].first()
+
+    # Log-scale binning of NegBioDB degree distribution
+    degree_df["cdeg_bin"] = np.floor(
+        np.log2(degree_df["compound_degree"].clip(lower=1))
+    ).astype(int)
+    degree_df["tdeg_bin"] = np.floor(
+        np.log2(degree_df["target_degree"].clip(lower=1))
+    ).astype(int)
+
+    bin_counts = degree_df.groupby(["cdeg_bin", "tdeg_bin"]).size()
+    total_pairs = bin_counts.sum()
+
+    # Compute target samples per bin
+    bin_targets = {}
+    remaining = n_samples
+    for (cb, tb), count in bin_counts.items():
+        n = int(round(count / total_pairs * n_samples))
+        bin_targets[(cb, tb)] = n
+        remaining -= n
+    # Distribute remainder to largest bins
+    if remaining > 0:
+        for key in bin_counts.sort_values(ascending=False).index:
+            if remaining <= 0:
+                break
+            bin_targets[key] = bin_targets.get(key, 0) + 1
+            remaining -= 1
+
+    # Build per-bin compound and target pools
+    compounds_by_bin: dict[int, list[dict]] = defaultdict(list)
+    for ik_conn, row in degree_df.drop_duplicates("inchikey_connectivity").iterrows():
+        cb = int(np.floor(np.log2(max(comp_deg.get(row["inchikey_connectivity"], 1), 1))))
+        compounds_by_bin[cb].append({
+            "inchikey_conn": row["inchikey_connectivity"],
+            "smiles": row["canonical_smiles"],
+            "inchikey": row["inchikey"],
+        })
+
+    targets_by_bin: dict[int, list[dict]] = defaultdict(list)
+    for uid, row in degree_df.drop_duplicates("uniprot_id").set_index("uniprot_id").iterrows():
+        tb = int(np.floor(np.log2(max(tgt_deg.get(uid, 1), 1))))
+        targets_by_bin[tb].append({
+            "uniprot_id": uid,
+            "target_sequence": row["target_sequence"],
+        })
+
+    # Rejection sampling per bin
+    rng = np.random.RandomState(seed)
+    neg_rows = []
+
+    for (cb, tb), target_n in bin_targets.items():
+        if target_n <= 0:
+            continue
+        c_pool = compounds_by_bin.get(cb, [])
+        t_pool = targets_by_bin.get(tb, [])
+        if not c_pool or not t_pool:
+            logger.warning("Empty pool for bin (%d, %d), skipping %d samples", cb, tb, target_n)
+            continue
+
+        sampled = 0
+        attempts = 0
+        max_attempts = target_n * 200
+
+        while sampled < target_n and attempts < max_attempts:
+            ci = rng.randint(0, len(c_pool))
+            ti = rng.randint(0, len(t_pool))
+            comp = c_pool[ci]
+            tgt = t_pool[ti]
+            key = (comp["inchikey_conn"], tgt["uniprot_id"])
+            if key not in tested:
+                neg_rows.append({
+                    "smiles": comp["smiles"],
+                    "inchikey": comp["inchikey"],
+                    "uniprot_id": tgt["uniprot_id"],
+                    "target_sequence": tgt["target_sequence"],
+                    "Y": 0,
+                })
+                tested.add(key)  # prevent duplicate negatives
+                sampled += 1
+            attempts += 1
+
+    if len(neg_rows) == 0:
+        logger.warning("Degree-matched: 0 negatives generated (pool exhausted)")
+    else:
+        logger.info("Degree-matched: generated %d negatives", len(neg_rows))
+
+    neg_df = pd.DataFrame(neg_rows)
+
+    # Merge with positives (same as M1 balanced)
+    pos_export = positives[["smiles", "inchikey", "uniprot_id", "target_sequence"]].copy()
+    pos_export["Y"] = 1
+
+    n_balanced = min(len(pos_export), len(neg_df))
+    rng2 = np.random.RandomState(seed)
+    pos_sample = pos_export.sample(n=n_balanced, random_state=rng2)
+    neg_sample = neg_df.iloc[:n_balanced]
+
+    merged = pd.concat([pos_sample, neg_sample], ignore_index=True)
+    merged = merged.sample(frac=1, random_state=rng2).reset_index(drop=True)
+    merged = apply_m1_splits(merged, seed=seed)
+
+    out_path = output_dir / "negbiodb_m1_degree_matched.parquet"
+    merged.to_parquet(str(out_path), index=False, compression="zstd")
+
+    result = {
+        "path": str(out_path),
+        "n_pos": n_balanced,
+        "n_neg": n_balanced,
+        "total": len(merged),
+    }
+    logger.info("Degree-matched M1: %d total → %s", len(merged), out_path.name)
+    return result
 
 
 # ------------------------------------------------------------------
