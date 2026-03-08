@@ -137,9 +137,14 @@ def refresh_all_pairs(conn: sqlite3.Connection) -> int:
     )
 
     # Compute compound_degree (number of distinct targets per compound)
+    conn.execute("DROP TABLE IF EXISTS _cdeg")
     conn.execute(
-        """CREATE TEMP TABLE _cdeg AS
-        SELECT compound_id, COUNT(DISTINCT target_id) AS deg
+        """CREATE TEMP TABLE _cdeg (
+            compound_id INTEGER PRIMARY KEY, deg INTEGER)"""
+    )
+    conn.execute(
+        """INSERT INTO _cdeg
+        SELECT compound_id, COUNT(DISTINCT target_id)
         FROM compound_target_pairs GROUP BY compound_id"""
     )
     conn.execute(
@@ -151,9 +156,14 @@ def refresh_all_pairs(conn: sqlite3.Connection) -> int:
     conn.execute("DROP TABLE _cdeg")
 
     # Compute target_degree (number of distinct compounds per target)
+    conn.execute("DROP TABLE IF EXISTS _tdeg")
     conn.execute(
-        """CREATE TEMP TABLE _tdeg AS
-        SELECT target_id, COUNT(DISTINCT compound_id) AS deg
+        """CREATE TEMP TABLE _tdeg (
+            target_id INTEGER PRIMARY KEY, deg INTEGER)"""
+    )
+    conn.execute(
+        """INSERT INTO _tdeg
+        SELECT target_id, COUNT(DISTINCT compound_id)
         FROM compound_target_pairs GROUP BY target_id"""
     )
     conn.execute(
