@@ -44,21 +44,25 @@ logger = logging.getLogger(__name__)
 
 def _generate_all_splits(db_path: Path, seed: int) -> None:
     """Generate all 6 DB-level split strategies."""
-    split_fns = [
+    seeded_fns = [
         ("random_v1", generate_random_split),
         ("cold_compound_v1", generate_cold_compound_split),
         ("cold_target_v1", generate_cold_target_split),
-        ("temporal_v1", generate_temporal_split),
         ("scaffold_v1", generate_scaffold_split),
         ("degree_balanced_v1", generate_degree_balanced_split),
     ]
     with connect(db_path) as conn:
-        for name, fn in split_fns:
+        for name, fn in seeded_fns:
             t0 = time.time()
             logger.info("Generating split: %s", name)
             fn(conn, seed=seed)
-            conn.commit()
             logger.info("  %s done (%.1f min)", name, (time.time() - t0) / 60)
+
+        # temporal split has no seed (deterministic cutoff-based)
+        t0 = time.time()
+        logger.info("Generating split: temporal_v1")
+        generate_temporal_split(conn)
+        logger.info("  temporal_v1 done (%.1f min)", (time.time() - t0) / 60)
 
 
 def main():
@@ -66,7 +70,7 @@ def main():
         description="Export NegBioDB ML benchmark datasets"
     )
     parser.add_argument(
-        "--db", type=Path, default=DEFAULT_DB_PATH,
+        "--db-path", type=Path, default=DEFAULT_DB_PATH,
         help="Path to NegBioDB SQLite database",
     )
     parser.add_argument(
@@ -95,6 +99,12 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.random_negatives and args.skip_positives:
+        parser.error(
+            "--random-negatives requires positives "
+            "(incompatible with --skip-positives)"
+        )
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -105,7 +115,7 @@ def main():
 
     # Step 1: Generate splits
     logger.info("=== Step 1: Generating DB-level splits ===")
-    _generate_all_splits(args.db, args.seed)
+    _generate_all_splits(args.db_path, args.seed)
 
     if args.splits_only:
         logger.info("Done (splits-only mode).")
@@ -114,7 +124,7 @@ def main():
     # Step 2: Export negative dataset
     logger.info("=== Step 2: Exporting negative dataset ===")
     t0 = time.time()
-    export_result = export_negative_dataset(args.db, args.output_dir)
+    export_result = export_negative_dataset(args.db_path, args.output_dir)
     logger.info(
         "Exported %d pairs (%.1f min)",
         export_result["total_rows"],
@@ -127,7 +137,7 @@ def main():
 
         # 3a: Extract positives
         t0 = time.time()
-        positives = extract_chembl_positives(args.chembl_db, args.db)
+        positives = extract_chembl_positives(args.chembl_db, args.db_path)
         logger.info(
             "Extracted %d positives (%.1f min)",
             len(positives), (time.time() - t0) / 60,
@@ -136,7 +146,7 @@ def main():
         # 3b: Merge
         t0 = time.time()
         m1_result = merge_positive_negative(
-            positives, args.db, args.output_dir, seed=args.seed,
+            positives, args.db_path, args.output_dir, seed=args.seed,
         )
         for variant in ("balanced", "realistic"):
             info = m1_result[variant]
@@ -156,7 +166,7 @@ def main():
             logger.info("Target: %d random negatives (matching M1 balanced)", n_neg)
 
             uniform_result = generate_uniform_random_negatives(
-                args.db, positives, n_samples=n_neg,
+                args.db_path, positives, n_samples=n_neg,
                 output_dir=args.output_dir, seed=args.seed,
             )
             logger.info(
@@ -167,7 +177,7 @@ def main():
 
             t0 = time.time()
             degree_result = generate_degree_matched_negatives(
-                args.db, positives, n_samples=n_neg,
+                args.db_path, positives, n_samples=n_neg,
                 output_dir=args.output_dir, seed=args.seed,
             )
             logger.info(
@@ -178,13 +188,14 @@ def main():
 
     # Step 5: Leakage report
     logger.info("=== Step 5: Generating leakage report ===")
-    report = generate_leakage_report(args.db, args.output_dir)
+    report_path = args.output_dir / "leakage_report.json"
+    report = generate_leakage_report(args.db_path, report_path)
     logger.info(
         "Report: %d compounds, %d targets, %d pairs → %s",
         report["db_summary"]["compounds"],
         report["db_summary"]["targets"],
         report["db_summary"]["pairs"],
-        Path(report["report_path"]).name,
+        report_path.name,
     )
 
     logger.info(

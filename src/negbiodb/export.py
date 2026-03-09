@@ -1023,15 +1023,17 @@ def _load_tested_pairs(
     Includes NegBioDB negative pairs and optionally positive pairs.
     """
     conn = sqlite3.connect(str(negbiodb_path))
-    tested = set()
-    for row in conn.execute(
-        """SELECT c.inchikey_connectivity, t.uniprot_accession
-        FROM compound_target_pairs ctp
-        JOIN compounds c ON ctp.compound_id = c.compound_id
-        JOIN targets t ON ctp.target_id = t.target_id"""
-    ):
-        tested.add((row[0], row[1]))
-    conn.close()
+    try:
+        tested = set()
+        for row in conn.execute(
+            """SELECT c.inchikey_connectivity, t.uniprot_accession
+            FROM compound_target_pairs ctp
+            JOIN compounds c ON ctp.compound_id = c.compound_id
+            JOIN targets t ON ctp.target_id = t.target_id"""
+        ):
+            tested.add((row[0], row[1]))
+    finally:
+        conn.close()
 
     if positives is not None:
         for ik, uid in zip(positives["inchikey"].str[:14], positives["uniprot_id"]):
@@ -1050,13 +1052,22 @@ def _load_compound_target_pools(
     with the fields needed for M1 output.
     """
     conn = sqlite3.connect(str(negbiodb_path))
+    try:
+        # Compounds: inchikey_connectivity → {smiles, inchikey}
+        compound_map: dict[str, dict] = {}
+        for row in conn.execute(
+            "SELECT inchikey_connectivity, canonical_smiles, inchikey FROM compounds"
+        ):
+            compound_map[row[0]] = {"smiles": row[1], "inchikey": row[2]}
 
-    # Compounds: inchikey_connectivity → {smiles, inchikey}
-    compound_map: dict[str, dict] = {}
-    for row in conn.execute(
-        "SELECT inchikey_connectivity, canonical_smiles, inchikey FROM compounds"
-    ):
-        compound_map[row[0]] = {"smiles": row[1], "inchikey": row[2]}
+        # Targets: uniprot_accession → {target_sequence}
+        target_map: dict[str, dict] = {}
+        for row in conn.execute(
+            "SELECT uniprot_accession, amino_acid_sequence FROM targets"
+        ):
+            target_map[row[0]] = {"target_sequence": row[1]}
+    finally:
+        conn.close()
 
     # Add compounds from positives that might not be in NegBioDB
     if positives is not None:
@@ -1069,15 +1080,6 @@ def _load_compound_target_pools(
                     "smiles": r["smiles"],
                     "inchikey": r["inchikey"],
                 }
-
-    # Targets: uniprot_accession → {target_sequence}
-    target_map: dict[str, dict] = {}
-    for row in conn.execute(
-        "SELECT uniprot_accession, amino_acid_sequence FROM targets"
-    ):
-        target_map[row[0]] = {"target_sequence": row[1]}
-
-    conn.close()
 
     compounds = [
         {"inchikey_conn": k, **v} for k, v in compound_map.items()
@@ -1203,19 +1205,20 @@ def generate_degree_matched_negatives(
     tested = _load_tested_pairs(negbiodb_path, positives)
 
     conn = sqlite3.connect(str(negbiodb_path))
-
-    # Load compound/target degree from DB
-    degree_df = pd.read_sql_query(
-        """SELECT c.inchikey_connectivity, c.canonical_smiles, c.inchikey,
-                  t.uniprot_accession AS uniprot_id,
-                  t.amino_acid_sequence AS target_sequence,
-                  ctp.compound_degree, ctp.target_degree
-        FROM compound_target_pairs ctp
-        JOIN compounds c ON ctp.compound_id = c.compound_id
-        JOIN targets t ON ctp.target_id = t.target_id""",
-        conn,
-    )
-    conn.close()
+    try:
+        # Load compound/target degree from DB
+        degree_df = pd.read_sql_query(
+            """SELECT c.inchikey_connectivity, c.canonical_smiles, c.inchikey,
+                      t.uniprot_accession AS uniprot_id,
+                      t.amino_acid_sequence AS target_sequence,
+                      ctp.compound_degree, ctp.target_degree
+            FROM compound_target_pairs ctp
+            JOIN compounds c ON ctp.compound_id = c.compound_id
+            JOIN targets t ON ctp.target_id = t.target_id""",
+            conn,
+        )
+    finally:
+        conn.close()
 
     # Build per-compound and per-target degree lookup
     comp_deg = degree_df.groupby("inchikey_connectivity")["compound_degree"].first()
@@ -1236,7 +1239,7 @@ def generate_degree_matched_negatives(
     bin_targets = {}
     remaining = n_samples
     for (cb, tb), count in bin_counts.items():
-        n = int(round(count / total_pairs * n_samples))
+        n = int(count / total_pairs * n_samples)
         bin_targets[(cb, tb)] = n
         remaining -= n
     # Distribute remainder to largest bins
@@ -1249,10 +1252,10 @@ def generate_degree_matched_negatives(
 
     # Build per-bin compound and target pools
     compounds_by_bin: dict[int, list[dict]] = defaultdict(list)
-    for ik_conn, row in degree_df.drop_duplicates("inchikey_connectivity").iterrows():
-        cb = int(np.floor(np.log2(max(comp_deg.get(row["inchikey_connectivity"], 1), 1))))
+    for ik_conn, row in degree_df.drop_duplicates("inchikey_connectivity").set_index("inchikey_connectivity").iterrows():
+        cb = int(np.floor(np.log2(max(comp_deg.get(ik_conn, 1), 1))))
         compounds_by_bin[cb].append({
-            "inchikey_conn": row["inchikey_connectivity"],
+            "inchikey_conn": ik_conn,
             "smiles": row["canonical_smiles"],
             "inchikey": row["inchikey"],
         })
@@ -1300,6 +1303,12 @@ def generate_degree_matched_negatives(
                 sampled += 1
             attempts += 1
 
+        if sampled < target_n:
+            logger.warning(
+                "Bin (%d, %d): sampled %d/%d (max_attempts reached)",
+                cb, tb, sampled, target_n,
+            )
+
     if len(neg_rows) == 0:
         logger.warning("Degree-matched: 0 negatives generated (pool exhausted)")
     else:
@@ -1314,7 +1323,7 @@ def generate_degree_matched_negatives(
     n_balanced = min(len(pos_export), len(neg_df))
     rng2 = np.random.RandomState(seed)
     pos_sample = pos_export.sample(n=n_balanced, random_state=rng2)
-    neg_sample = neg_df.iloc[:n_balanced]
+    neg_sample = neg_df.sample(n=n_balanced, random_state=rng2) if len(neg_df) > n_balanced else neg_df
 
     merged = pd.concat([pos_sample, neg_sample], ignore_index=True)
     merged = merged.sample(frac=1, random_state=rng2).reset_index(drop=True)

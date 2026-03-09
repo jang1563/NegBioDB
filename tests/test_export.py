@@ -43,7 +43,7 @@ def _populate_small_db(conn, n_compounds=10, n_targets=5):
             """INSERT INTO compounds
             (canonical_smiles, inchikey, inchikey_connectivity)
             VALUES (?, ?, ?)""",
-            (f"C{i}", f"KEY{i:020d}SA-N", f"KEY{i:020d}"),
+            (f"C{i}", f"KEY{i:011d}SA-N", f"KEY{i:011d}"),
         )
     for j in range(1, n_targets + 1):
         conn.execute(
@@ -81,7 +81,7 @@ def _populate_partial_db(conn, n_compounds=20, n_targets=10, pairs_per_compound=
             """INSERT INTO compounds
             (canonical_smiles, inchikey, inchikey_connectivity)
             VALUES (?, ?, ?)""",
-            (f"C{i}", f"KEY{i:020d}SA-N", f"KEY{i:020d}"),
+            (f"C{i}", f"KEY{i:011d}SA-N", f"KEY{i:011d}"),
         )
     for j in range(1, n_targets + 1):
         conn.execute(
@@ -309,7 +309,7 @@ def _populate_with_real_smiles(conn, n_targets=3, years=None):
             """INSERT INTO compounds
             (canonical_smiles, inchikey, inchikey_connectivity)
             VALUES (?, ?, ?)""",
-            (smi, f"REAL{i:020d}SA-N", f"REAL{i:020d}"),
+            (smi, f"REAL{i:011d}SA-N", f"REAL{i:011d}"),
         )
     for j in range(1, n_targets + 1):
         conn.execute(
@@ -673,7 +673,7 @@ class TestMergePositiveNegative:
         for i in range(10):
             pos_data.append({
                 "smiles": f"UNIQUE_C{i}",
-                "inchikey": f"UNIQ{i:020d}SA-N",
+                "inchikey": f"UNIQ{i:011d}SA-N",
                 "uniprot_id": "P00001",
                 "target_sequence": "MAAAA",
                 "pchembl_value": 7.5,
@@ -688,7 +688,7 @@ class TestMergePositiveNegative:
         )
         # The 2 overlapping should have been removed
         # Balanced should use non-overlapping positives only
-        assert result["balanced"]["n_pos"] <= 10
+        assert result["balanced"]["n_pos"] == 10
 
     def test_empty_positives(self, migrated_db, tmp_path):
         """Empty positives produces empty datasets."""
@@ -776,7 +776,7 @@ def _make_m1_df(n_pos=100, n_neg=100, n_compounds=20, n_targets=5):
         tid = i % n_targets
         rows.append({
             "smiles": f"POS{cid}",
-            "inchikey": f"POS{cid:020d}SA-N",
+            "inchikey": f"POS{cid:011d}SA-N",
             "uniprot_id": f"P{tid:05d}",
             "target_sequence": "MAAAA",
             "Y": 1,
@@ -786,7 +786,7 @@ def _make_m1_df(n_pos=100, n_neg=100, n_compounds=20, n_targets=5):
         tid = i % n_targets
         rows.append({
             "smiles": f"NEG{cid}",
-            "inchikey": f"NEG{cid:020d}SA-N",
+            "inchikey": f"NEG{cid:011d}SA-N",
             "uniprot_id": f"P{tid:05d}",
             "target_sequence": "MAAAA",
             "Y": 0,
@@ -1057,3 +1057,21 @@ class TestDegreeMatchedNegatives:
         for _, row in neg_df.iterrows():
             key = (row["inchikey"][:14], row["uniprot_id"])
             assert key not in tested
+
+    def test_deterministic(self, migrated_db, tmp_path):
+        """Same seed produces identical output."""
+        with connect(migrated_db) as conn:
+            _populate_partial_db(conn, 20, 10, pairs_per_compound=3)
+
+        positives = _make_positives(n=10, uniprot_ids=[f"P{i:05d}" for i in range(1, 11)])
+        r1 = generate_degree_matched_negatives(
+            migrated_db, positives, n_samples=15,
+            output_dir=tmp_path / "r1", seed=42,
+        )
+        r2 = generate_degree_matched_negatives(
+            migrated_db, positives, n_samples=15,
+            output_dir=tmp_path / "r2", seed=42,
+        )
+        df1 = pd.read_parquet(r1["path"])
+        df2 = pd.read_parquet(r2["path"])
+        pd.testing.assert_frame_equal(df1, df2)
