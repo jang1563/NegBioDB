@@ -92,23 +92,32 @@ class DTIDataset:
         split_col: str,
         fold: str,
         model_type: str,
-        graph_cache_path: Path | None = None,
+        graph_cache_path: "Path | dict | None" = None,
     ) -> None:
         self.model_type = model_type
         df_full = pd.read_parquet(parquet_path)
         self.df = df_full[df_full[split_col] == fold].reset_index(drop=True)
+        before = len(self.df)
+        self.df = self.df.dropna(subset=["smiles", "target_sequence"]).reset_index(drop=True)
+        if len(self.df) < before:
+            logger.warning("Dropped %d rows with NaN smiles/target_sequence", before - len(self.df))
         logger.info("Fold '%s': %d rows (label 1: %d)", fold, len(self.df), (self.df["Y"] == 1).sum())
 
         self._graphs: dict[str, object] | None = None
         if model_type in ("graphdta", "drugban"):
             self._load_graphs(graph_cache_path)
 
-    def _load_graphs(self, cache_path: Path | None) -> None:
+    def _load_graphs(self, cache_path: "Path | dict | None") -> None:
         try:
             import torch
             from negbiodb.models.graphdta import smiles_to_graph
         except ImportError as e:
             raise RuntimeError("torch_geometric required for GraphDTA/DrugBAN.") from e
+
+        # Accept a pre-loaded dict to avoid reloading the cache for each fold.
+        if isinstance(cache_path, dict):
+            self._graphs = cache_path
+            return
 
         smiles_list = self.df["smiles"].unique().tolist()
 
@@ -218,8 +227,8 @@ def _run_epoch(model, loader, criterion, optimizer, device, train: bool):
                 optimizer.step()
 
             total_loss += loss.item()
-            all_labels.extend(labels.cpu().numpy().tolist())
-            all_preds.extend(torch.sigmoid(logits).detach().cpu().numpy().tolist())
+            all_labels.extend(labels.cpu().tolist())
+            all_preds.extend(torch.sigmoid(logits).detach().cpu().tolist())
             n_batches += 1
 
     avg_loss = total_loss / max(n_batches, 1)
@@ -394,8 +403,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     logger.info("Device: %s", device)
 
-    # Graph cache path (shared across runs to avoid recomputation)
-    graph_cache = args.data_dir / "graph_cache.pt" if args.model in ("graphdta", "drugban") else None
+    # Graph cache — load once and share across all three folds to avoid tripling RAM usage.
+    graph_cache: "Path | dict | None" = None
+    if args.model in ("graphdta", "drugban"):
+        import torch as _torch
+        cache_path = args.data_dir / "graph_cache.pt"
+        if cache_path.exists():
+            logger.info("Loading graph cache (once): %s", cache_path)
+            graph_cache = _torch.load(cache_path, weights_only=False)
+            logger.info("Graph cache loaded: %d entries", len(graph_cache))
+        else:
+            graph_cache = cache_path  # DTIDataset will build it on-the-fly
 
     # Build datasets
     train_ds = DTIDataset(parquet_path, split_col, "train", args.model, graph_cache)
