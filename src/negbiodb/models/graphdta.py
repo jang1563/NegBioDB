@@ -44,8 +44,9 @@ ATOM_TYPES = [
 ATOM_DEGREES = list(range(11))  # 0-10 → 11 values
 ATOM_H_COUNTS = list(range(11))  # 0-10 → 11 values
 ATOM_VALENCES = list(range(11))  # 0-10 → 11 values
-# Total: 44 + 11 + 11 + 11 + 1 (aromaticity) = 78
-NODE_FEATURE_DIM = 78
+# _one_hot returns len(choices)+1 (includes unknown bucket).
+# Total: (44+1) + (11+1) + (11+1) + (11+1) + 1 (aromaticity) = 82
+NODE_FEATURE_DIM = 82
 
 
 def _one_hot(value: int | str, choices: list) -> list[int]:
@@ -61,8 +62,9 @@ def smiles_to_graph(smiles: str) -> "Data | None":
 
     Returns None if the SMILES is invalid.
 
-    Node features (78-dim):
-        44 atom type + 11 degree + 11 H-count + 11 valence + 1 aromaticity
+    Node features (82-dim):
+        (44+1) atom type + (11+1) degree + (11+1) H-count + (11+1) valence + 1 aromaticity
+        Each _one_hot adds +1 unknown bucket, giving 82 total.
     """
     if not HAS_TORCH_GEOMETRIC:
         raise RuntimeError("torch_geometric required for GraphDTA.")
@@ -89,7 +91,7 @@ def smiles_to_graph(smiles: str) -> "Data | None":
     if len(node_features) == 0:
         return None  # Mol with no atoms — treat as invalid
 
-    x = torch.tensor(node_features, dtype=torch.float)  # (N_atoms, 78)
+    x = torch.tensor(node_features, dtype=torch.float)  # (N_atoms, 82)
 
     edges = []
     for bond in mol.GetBonds():
