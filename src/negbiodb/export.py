@@ -1162,12 +1162,12 @@ def generate_uniform_random_negatives(
     pos_export["Y"] = 1
 
     n_balanced = min(len(pos_export), len(neg_df))
-    rng2 = np.random.RandomState(seed)
-    pos_sample = pos_export.sample(n=n_balanced, random_state=rng2)
-    neg_sample = neg_df.sample(n=n_balanced, random_state=rng2)
+    # Use independent RNG streams for pos/neg sampling to avoid correlated draws.
+    pos_sample = pos_export.sample(n=n_balanced, random_state=np.random.RandomState(seed))
+    neg_sample = neg_df.sample(n=n_balanced, random_state=np.random.RandomState(seed + 1))
 
     merged = pd.concat([pos_sample, neg_sample], ignore_index=True)
-    merged = merged.sample(frac=1, random_state=rng2).reset_index(drop=True)
+    merged = merged.sample(frac=1, random_state=np.random.RandomState(seed + 2)).reset_index(drop=True)
     merged = apply_m1_splits(merged, seed=seed)
 
     out_path = output_dir / "negbiodb_m1_uniform_random.parquet"
@@ -1321,12 +1321,12 @@ def generate_degree_matched_negatives(
     pos_export["Y"] = 1
 
     n_balanced = min(len(pos_export), len(neg_df))
-    rng2 = np.random.RandomState(seed)
-    pos_sample = pos_export.sample(n=n_balanced, random_state=rng2)
-    neg_sample = neg_df.sample(n=n_balanced, random_state=rng2) if len(neg_df) > n_balanced else neg_df
+    # Use independent RNG streams for pos/neg sampling to avoid correlated draws.
+    pos_sample = pos_export.sample(n=n_balanced, random_state=np.random.RandomState(seed))
+    neg_sample = neg_df.sample(n=n_balanced, random_state=np.random.RandomState(seed + 1)) if len(neg_df) > n_balanced else neg_df
 
     merged = pd.concat([pos_sample, neg_sample], ignore_index=True)
-    merged = merged.sample(frac=1, random_state=rng2).reset_index(drop=True)
+    merged = merged.sample(frac=1, random_state=np.random.RandomState(seed + 2)).reset_index(drop=True)
     merged = apply_m1_splits(merged, seed=seed)
 
     out_path = output_dir / "negbiodb_m1_degree_matched.parquet"

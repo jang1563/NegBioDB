@@ -160,7 +160,6 @@ def _collate_graph(batch, device):
     from negbiodb.models.deepdta import seq_to_tensor
 
     graphs, smiles_list, seqs, labels = zip(*batch)
-    valid_graphs = [g for g in graphs if g is not None]
     # Replace None graphs with a minimal placeholder (single isolated node)
     from negbiodb.models.graphdta import NODE_FEATURE_DIM
     from torch_geometric.data import Data
@@ -209,11 +208,8 @@ def _run_epoch(model, loader, criterion, optimizer, device, train: bool):
 
     with torch.set_grad_enabled(train):
         for batch in loader:
-            if len(batch) == 3:
-                inputs, targets_or_seq, labels = batch
-                logits = model(inputs, targets_or_seq)
-            else:
-                raise ValueError(f"Unexpected batch length {len(batch)}")
+            inputs, targets_or_seq, labels = batch
+            logits = model(inputs, targets_or_seq)
 
             loss = criterion(logits, labels)
             if train:
@@ -354,7 +350,12 @@ def main(argv: list[str] | None = None) -> int:
     set_seed(args.seed)
 
     # Resolve dataset file
-    dataset_key = (args.dataset, args.negative)
+    # DDB split requires its own parquet (with split_degree_balanced column),
+    # regardless of the --negative flag.
+    if args.split == "ddb":
+        dataset_key = (args.dataset, "ddb")
+    else:
+        dataset_key = (args.dataset, args.negative)
     if dataset_key not in _DATASET_MAP:
         available = list(_DATASET_MAP.keys())
         logger.error(

@@ -9,14 +9,15 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-# Vocabulary for SMILES characters (64 unique + 1 padding)
+# Vocabulary for SMILES characters (75 unique + 1 padding index 0).
+# Note: Öztürk et al. 2018 used 64 chars; we use 75 to cover a broader chemical space.
 SMILES_CHARS = (
     "#%()+-./0123456789=@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]abcdefghijklmnopqrstuvwxyz"
 )
 SMILES_VOCAB: dict[str, int] = {c: i + 1 for i, c in enumerate(SMILES_CHARS)}
 SMILES_VOCAB_SIZE = len(SMILES_VOCAB) + 1  # +1 for padding index 0
 
-# Vocabulary for amino acid single-letter codes (25 standard + X + padding)
+# Vocabulary for amino acid single-letter codes (20 standard + X = 21, + 1 padding index 0)
 AA_CHARS = "ACDEFGHIKLMNPQRSTVWXY"
 AA_VOCAB: dict[str, int] = {c: i + 1 for i, c in enumerate(AA_CHARS)}
 AA_VOCAB_SIZE = len(AA_VOCAB) + 1  # +1 for padding index 0

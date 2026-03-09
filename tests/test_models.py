@@ -167,6 +167,7 @@ class TestDeepDTA:
 
     def test_training_loss_decreases(self, tiny_drug_tokens, tiny_target_tokens, tiny_labels):
         """3 gradient steps should reduce BCE loss."""
+        torch.manual_seed(0)
         model = DeepDTA()
         model.train()
         optimizer = optim.Adam(model.parameters(), lr=1e-2)
@@ -249,6 +250,7 @@ class TestGraphDTA:
         assert any(g.abs().sum().item() > 0 for g in grads)
 
     def test_training_loss_decreases(self, tiny_drug_graphs, tiny_target_tokens, tiny_labels):
+        torch.manual_seed(0)
         model = GraphDTA()
         model.train()
         optimizer = optim.Adam(model.parameters(), lr=1e-2)
@@ -312,6 +314,7 @@ class TestDrugBAN:
         assert any(g.abs().sum().item() > 0 for g in grads)
 
     def test_training_loss_decreases(self, tiny_drug_graphs, tiny_target_tokens, tiny_labels):
+        torch.manual_seed(0)
         model = DrugBAN()
         model.train()
         optimizer = optim.Adam(model.parameters(), lr=1e-2)

@@ -36,15 +36,21 @@ fi
 submit() {
     local model=$1 split=$2 neg=$3
     local name="negbio_${model}_${split}_${neg}"
-    local job_id
-    job_id=$(
+    local sbatch_out job_id
+    sbatch_out=$(
         "$SBATCH" \
             --job-name="$name" \
             --output="$LOGDIR/${name}_%j.out" \
             --error="$LOGDIR/${name}_%j.err" \
             --export=MODEL="$model",SPLIT="$split",NEG="$neg" \
-            "$SCRIPT" | grep -oP 'batch job \K\d+'
+            "$SCRIPT" 2>&1
     )
+    job_id=$(echo "$sbatch_out" | grep -oP 'batch job \K\d+')
+    if [[ -z "$job_id" ]]; then
+        echo "ERROR: Failed to submit $name"
+        echo "$sbatch_out"
+        exit 1
+    fi
     echo "Submitted $name → job $job_id"
 }
 

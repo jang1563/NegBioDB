@@ -28,10 +28,14 @@
 NEGBIODB=/athena/masonlab/scratch/users/jak4013/negbiodb
 CONDA_SH=/home/fs01/jak4013/miniconda3/miniconda3/etc/profile.d/conda.sh
 
+# ---------- validate required variables -------------------------------------
+if [[ -z "${MODEL:-}" ]] || [[ -z "${SPLIT:-}" ]] || [[ -z "${NEG:-}" ]]; then
+    echo "ERROR: Required variables not set. Expected MODEL, SPLIT, NEG via --export."
+    echo "  MODEL=${MODEL:-<unset>}  SPLIT=${SPLIT:-<unset>}  NEG=${NEG:-<unset>}"
+    exit 1
+fi
+
 # ---------- defaults --------------------------------------------------------
-MODEL=${MODEL:-deepdta}
-SPLIT=${SPLIT:-random}
-NEG=${NEG:-negbiodb}
 DATASET=${DATASET:-balanced}
 EPOCHS=${EPOCHS:-100}
 PATIENCE=${PATIENCE:-10}
