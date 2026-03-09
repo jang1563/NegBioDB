@@ -365,6 +365,7 @@ source = { editable = "." }
 dependencies = [
     { name = "chembl-downloader" },
     { name = "mlcroissant" },
+    { name = "numpy" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pyyaml" },
@@ -384,6 +385,7 @@ dev = [
 requires-dist = [
     { name = "chembl-downloader", specifier = ">=0.4" },
     { name = "mlcroissant", specifier = ">=1.0" },
+    { name = "numpy", specifier = ">=2.0" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pyarrow", specifier = ">=14.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
