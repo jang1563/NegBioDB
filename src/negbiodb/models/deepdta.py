@@ -49,7 +49,8 @@ def smiles_to_tensor(smiles: list[str], max_len: int = MAX_SMILES_LEN) -> torch.
         s = smi[:max_len]
         codes = np.frombuffer(s.encode("ascii", errors="replace"), dtype=np.uint8)
         result[i, : len(codes)] = _SMILES_LUT[codes]
-    return torch.from_numpy(result)
+    # torch.frombuffer bypasses the broken torch-numpy bridge (torch 2.2.2 + NumPy 2.x).
+    return torch.frombuffer(result.tobytes(), dtype=torch.int64).reshape(len(smiles), max_len).clone()
 
 
 def seq_to_tensor(seqs: list[str], max_len: int = MAX_SEQ_LEN) -> torch.Tensor:
@@ -63,7 +64,8 @@ def seq_to_tensor(seqs: list[str], max_len: int = MAX_SEQ_LEN) -> torch.Tensor:
         s = seq[:max_len]
         codes = np.frombuffer(s.encode("ascii", errors="replace"), dtype=np.uint8)
         result[i, : len(codes)] = _AA_LUT[codes]
-    return torch.from_numpy(result)
+    # torch.frombuffer bypasses the broken torch-numpy bridge (torch 2.2.2 + NumPy 2.x).
+    return torch.frombuffer(result.tobytes(), dtype=torch.int64).reshape(len(seqs), max_len).clone()
 
 
 class _CNNEncoder(nn.Module):
