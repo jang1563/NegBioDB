@@ -87,3 +87,73 @@ downloads:
       - drug_protein_affinity.csv
     dest_dir: data/davis
     min_rows: 25000
+
+# ============================================================
+# Clinical Trial Failure Domain
+# ============================================================
+
+ct_domain:
+  # === Paths ===
+  paths:
+    database: data/negbiodb_ct.db
+    migrations_dir: migrations_ct
+    data_dir: data/ct
+
+  # === Downloads ===
+  downloads:
+    aact:
+      # AACT pipe-delimited snapshot; URL changes monthly — update as needed
+      # Get latest from: https://aact.ctti-clinicaltrials.org/pipe_files
+      dest_dir: data/ct/aact
+      required_disk_gb: 6.0
+      # 13 of 46 AACT tables needed for v1
+      tables:
+        - studies
+        - interventions
+        - conditions
+        - outcomes
+        - outcome_analyses
+        - outcome_measurements
+        - designs
+        - sponsors
+        - calculated_values
+        - browse_interventions
+        - browse_conditions
+        - drop_withdrawals
+        - documents
+    opentargets:
+      url: "https://huggingface.co/api/datasets/opentargets/clinical_trial_reason_to_stop/parquet/default/train/0000.parquet"
+      dest: data/ct/opentargets/stop_reasons.parquet
+    cto:
+      url: "https://huggingface.co/api/datasets/chufangao/CTO/parquet/human_labels/test/0.parquet"
+      dest: data/ct/cto/cto_outcomes.parquet
+    shi_du:
+      # Figshare: Shi & Du 2024, doi:10.6084/m9.figshare.c.6860254.v1
+      efficacy_url: "https://ndownloader.figshare.com/files/42520528"
+      efficacy_dest: data/ct/shi_du/efficacy_df.csv
+      safety_url: "https://ndownloader.figshare.com/files/42520534"
+      safety_dest: data/ct/shi_du/safety_df.csv
+
+  # === Failure Classification ===
+  failure_category_precedence:
+    - safety
+    - efficacy
+    - pharmacokinetic
+    - enrollment
+    - strategic
+    - regulatory
+    - design
+    - other
+
+  # === Drug Name Resolution ===
+  drug_resolution:
+    fuzzy_threshold: 0.90
+    pubchem_rate_limit_per_sec: 5
+    pubchem_cache: data/ct/pubchem_name_cache.json
+    overrides_file: data/ct/drug_name_overrides.csv
+
+  # === NLP Classifier ===
+  classifier:
+    max_features: 10000
+    ngram_range: [1, 2]
+    cv_folds: 5

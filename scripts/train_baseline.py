@@ -15,7 +15,7 @@ Usage:
         --output_dir results/baselines/
 
 Outputs:
-    results/baselines/{model}_{split}_{negative}/
+    results/baselines/{model}_{dataset}_{split}_{negative}_seed{seed}/
         best.pt          — best model checkpoint (val LogAUC)
         results.json     — test-set metrics (7 metrics)
         training_log.csv — per-epoch train/val metrics
@@ -29,9 +29,7 @@ import json
 import logging
 import random
 import sys
-import warnings
 from pathlib import Path
-from typing import Iterator
 
 import numpy as np
 import pandas as pd
@@ -51,9 +49,7 @@ _DATASET_MAP: dict[tuple[str, str], str] = {
     ("balanced", "negbiodb"):       "negbiodb_m1_balanced.parquet",
     ("realistic", "negbiodb"):      "negbiodb_m1_realistic.parquet",
     ("balanced", "uniform_random"): "negbiodb_m1_uniform_random.parquet",
-    ("realistic", "uniform_random"): "negbiodb_m1_uniform_random.parquet",
     ("balanced", "degree_matched"): "negbiodb_m1_degree_matched.parquet",
-    ("realistic", "degree_matched"): "negbiodb_m1_degree_matched.parquet",
     ("balanced", "ddb"):            "negbiodb_m1_balanced_ddb.parquet",
 }
 
@@ -76,6 +72,81 @@ def set_seed(seed: int) -> None:
             torch.cuda.manual_seed_all(seed)
     except ImportError:
         pass
+
+
+def _resolve_dataset_file(dataset: str, split: str, negative: str) -> str | None:
+    """Resolve the parquet filename for a valid experiment configuration."""
+    if split == "ddb":
+        if negative != "negbiodb":
+            return None
+        return _DATASET_MAP.get((dataset, "ddb"))
+    if negative in {"uniform_random", "degree_matched"} and dataset != "balanced":
+        return None
+    return _DATASET_MAP.get((dataset, negative))
+
+
+def _build_run_name(model: str, dataset: str, split: str, negative: str, seed: int) -> str:
+    """Build a unique output directory name for a training run."""
+    return f"{model}_{dataset}_{split}_{negative}_seed{seed}"
+
+
+def _json_safe(value):
+    """Convert NaN/Inf values to JSON-safe nulls."""
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, tuple):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, (np.floating, float)):
+        value = float(value)
+        return value if np.isfinite(value) else None
+    if isinstance(value, np.integer):
+        return int(value)
+    return value
+
+
+def write_results_json(path: Path, payload: dict) -> None:
+    """Write strict JSON results, normalising non-finite floats to null."""
+    with open(path, "w") as f:
+        json.dump(_json_safe(payload), f, indent=2, allow_nan=False)
+
+
+def _prepare_graph_cache(parquet_path: Path, cache_path: Path) -> dict[str, object]:
+    """Load or build a graph cache that covers every SMILES in parquet_path."""
+    import torch
+    from negbiodb.models.graphdta import smiles_to_graph
+
+    smiles_series = pd.read_parquet(parquet_path, columns=["smiles"])["smiles"].dropna()
+    smiles_list = smiles_series.unique().tolist()
+
+    cache: dict[str, object]
+    if cache_path.exists():
+        logger.info("Loading graph cache (once): %s", cache_path)
+        cache = torch.load(cache_path, weights_only=False)
+        logger.info("Graph cache loaded: %d entries", len(cache))
+    else:
+        cache = {}
+
+    missing = [smi for smi in smiles_list if smi not in cache]
+    if missing:
+        logger.info("Backfilling graph cache for %d missing SMILES...", len(missing))
+        failed = 0
+        for smi in missing:
+            graph = smiles_to_graph(smi)
+            cache[smi] = graph
+            if graph is None:
+                failed += 1
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(cache, cache_path)
+        logger.info(
+            "Saved graph cache → %s (%d total entries, %d failed parses)",
+            cache_path,
+            len(cache),
+            failed,
+        )
+
+    return cache
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +195,17 @@ class DTIDataset:
         if cache_path and cache_path.exists():
             logger.info("Loading graph cache: %s", cache_path)
             self._graphs = torch.load(cache_path, weights_only=False)
+            missing = [smi for smi in smiles_list if smi not in self._graphs]
+            if missing:
+                logger.info("Backfilling %d missing SMILES into graph cache...", len(missing))
+                failed = 0
+                for smi in missing:
+                    g = smiles_to_graph(smi)
+                    self._graphs[smi] = g
+                    if g is None:
+                        failed += 1
+                torch.save(self._graphs, cache_path)
+                logger.info("Graph cache updated. %d failed parses.", failed)
         else:
             logger.info("Building graph cache for %d unique SMILES...", len(smiles_list))
             self._graphs = {}
@@ -345,7 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", required=True, choices=["deepdta", "graphdta", "drugban"])
     parser.add_argument("--split", required=True, choices=list(_SPLIT_COL_MAP))
     parser.add_argument("--negative", required=True,
-                        choices=["negbiodb", "uniform_random", "degree_matched", "ddb"])
+                        choices=["negbiodb", "uniform_random", "degree_matched"])
     parser.add_argument("--dataset", default="balanced", choices=["balanced", "realistic"])
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--patience", type=int, default=10)
@@ -358,22 +440,19 @@ def main(argv: list[str] | None = None) -> int:
 
     set_seed(args.seed)
 
-    # Resolve dataset file
-    # DDB split requires its own parquet (with split_degree_balanced column),
-    # regardless of the --negative flag.
-    if args.split == "ddb":
-        dataset_key = (args.dataset, "ddb")
-    else:
-        dataset_key = (args.dataset, args.negative)
-    if dataset_key not in _DATASET_MAP:
+    if args.split == "ddb" and args.dataset != "balanced":
+        logger.error("DDB split is only supported for dataset=balanced.")
+        return 1
+
+    filename = _resolve_dataset_file(args.dataset, args.split, args.negative)
+    if filename is None:
         available = list(_DATASET_MAP.keys())
         logger.error(
-            "Dataset combination not supported: dataset=%s, negative=%s. "
+            "Dataset combination not supported: dataset=%s, split=%s, negative=%s. "
             "Available: %s",
-            args.dataset, args.negative, available,
+            args.dataset, args.split, args.negative, available,
         )
         return 1
-    filename = _DATASET_MAP[dataset_key]
 
     parquet_path = args.data_dir / filename
     if not parquet_path.exists():
@@ -384,7 +463,9 @@ def main(argv: list[str] | None = None) -> int:
     split_col = _SPLIT_COL_MAP[args.split]
 
     # Output directory
-    run_name = f"{args.model}_{args.split}_{args.negative}"
+    run_name = _build_run_name(
+        args.model, args.dataset, args.split, args.negative, args.seed
+    )
     out_dir = args.output_dir / run_name
     out_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Run: %s → %s", run_name, out_dir)
@@ -406,14 +487,8 @@ def main(argv: list[str] | None = None) -> int:
     # Graph cache — load once and share across all three folds to avoid tripling RAM usage.
     graph_cache: "Path | dict | None" = None
     if args.model in ("graphdta", "drugban"):
-        import torch as _torch
         cache_path = args.data_dir / "graph_cache.pt"
-        if cache_path.exists():
-            logger.info("Loading graph cache (once): %s", cache_path)
-            graph_cache = _torch.load(cache_path, weights_only=False)
-            logger.info("Graph cache loaded: %d entries", len(graph_cache))
-        else:
-            graph_cache = cache_path  # DTIDataset will build it on-the-fly
+        graph_cache = _prepare_graph_cache(parquet_path, cache_path)
 
     # Build datasets
     train_ds = DTIDataset(parquet_path, split_col, "train", args.model, graph_cache)
@@ -469,8 +544,7 @@ def main(argv: list[str] | None = None) -> int:
         "n_test": len(test_ds),
     }
     results_path = out_dir / "results.json"
-    with open(results_path, "w") as f:
-        json.dump(results, f, indent=2)
+    write_results_json(results_path, results)
 
     logger.info("Test metrics:")
     for k, v in test_metrics.items():

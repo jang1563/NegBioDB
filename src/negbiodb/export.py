@@ -510,24 +510,48 @@ SPLIT_STRATEGIES = [
 ]
 
 
-def _build_export_query(split_strategies: list[str] | None = None) -> str:
-    """Build the pivot SQL for exporting pairs with inline split columns."""
-    if split_strategies is None:
-        split_strategies = SPLIT_STRATEGIES
+def _resolve_split_id(conn: sqlite3.Connection, strategy: str) -> int | None:
+    """Resolve the preferred split_id for a strategy using version-aware ordering."""
+    rows = conn.execute(
+        """SELECT split_id, split_name, version
+        FROM split_definitions
+        WHERE split_strategy = ?""",
+        (strategy,),
+    ).fetchall()
+    if not rows:
+        return None
 
+    def sort_key(row: tuple[int, str, str | None]) -> tuple[int, str, int]:
+        split_id, split_name, version = row
+        version_num = -1
+        if version:
+            try:
+                version_num = int(str(version).split(".")[0])
+            except ValueError:
+                version_num = -1
+        if "_v" in split_name:
+            suffix = split_name.rsplit("_v", 1)[1]
+            if suffix.isdigit():
+                version_num = max(version_num, int(suffix))
+        return (version_num, split_name, split_id)
+
+    return sorted(rows, key=sort_key)[-1][0]
+
+
+def _build_export_query(split_ids: dict[str, int | None]) -> str:
+    """Build the pivot SQL for exporting pairs with inline split columns."""
     split_cols = []
     join_clauses = []
-    for i, strategy in enumerate(split_strategies):
+    for i, strategy in enumerate(split_ids):
         alias_sa = f"sa{i}"
-        alias_sd = f"sd{i}"
         col_name = f"split_{strategy}"
         split_cols.append(f"{alias_sa}.fold AS {col_name}")
+        split_id = split_ids[strategy]
+        split_id_sql = "NULL" if split_id is None else str(int(split_id))
         join_clauses.append(
-            f"LEFT JOIN split_definitions {alias_sd} "
-            f"ON {alias_sd}.split_strategy = '{strategy}' "
             f"LEFT JOIN split_assignments {alias_sa} "
             f"ON ctp.pair_id = {alias_sa}.pair_id "
-            f"AND {alias_sa}.split_id = {alias_sd}.split_id"
+            f"AND {alias_sa}.split_id = {split_id_sql}"
         )
 
     join_sql = "\n".join(join_clauses)
@@ -586,11 +610,14 @@ def export_negative_dataset(
     if split_strategies is None:
         split_strategies = SPLIT_STRATEGIES
 
-    query = _build_export_query(split_strategies)
-    split_cols = [f"split_{s}" for s in split_strategies]
-
     conn = sqlite3.connect(str(db_path))
     conn.execute("PRAGMA journal_mode = WAL")
+    split_ids = {
+        strategy: _resolve_split_id(conn, strategy)
+        for strategy in split_strategies
+    }
+    query = _build_export_query(split_ids)
+    split_cols = [f"split_{s}" for s in split_strategies]
 
     total_rows = 0
     pq_writer = None
@@ -752,6 +779,59 @@ def add_cold_target_split(
             tgt_fold[t] = "test"
     df = df.copy()
     df["split_cold_target"] = df["uniprot_id"].map(tgt_fold)
+    return df
+
+
+def add_degree_balanced_split(
+    df: pd.DataFrame,
+    seed: int = 42,
+    ratios: dict[str, float] | None = None,
+    n_bins: int = 10,
+) -> pd.DataFrame:
+    """Add split_degree_balanced using the full benchmark graph degrees.
+
+    This is the DataFrame analogue of the DB-level DDB split, but operates on a
+    merged benchmark table so both positives and negatives are assigned using the
+    same degree distribution.
+    """
+    if ratios is None:
+        ratios = _DEFAULT_RATIOS
+    if len(df) == 0:
+        df = df.copy()
+        df["split_degree_balanced"] = pd.Series(dtype=str)
+        return df
+
+    df = df.copy()
+    compound_keys = df["inchikey"].str[:14]
+    target_keys = df["uniprot_id"]
+
+    compound_degree = compound_keys.map(compound_keys.value_counts()).to_numpy(dtype=np.float64)
+    target_degree = target_keys.map(target_keys.value_counts()).to_numpy(dtype=np.float64)
+
+    c_log = np.log1p(compound_degree)
+    t_log = np.log1p(target_degree)
+
+    c_bins = np.minimum(
+        (c_log / (c_log.max() + 1e-9) * n_bins).astype(int), n_bins - 1
+    )
+    t_bins = np.minimum(
+        (t_log / (t_log.max() + 1e-9) * n_bins).astype(int), n_bins - 1
+    )
+    bin_labels = c_bins * n_bins + t_bins
+
+    rng = np.random.RandomState(seed)
+    fold_labels = np.empty(len(df), dtype=object)
+    for bin_id in np.unique(bin_labels):
+        idx = np.where(bin_labels == bin_id)[0]
+        rng.shuffle(idx)
+        n = len(idx)
+        n_train = int(n * ratios["train"])
+        n_val = int(n * ratios["val"])
+        fold_labels[idx[:n_train]] = "train"
+        fold_labels[idx[n_train:n_train + n_val]] = "val"
+        fold_labels[idx[n_train + n_val:]] = "test"
+
+    df["split_degree_balanced"] = fold_labels
     return df
 
 
@@ -1206,34 +1286,51 @@ def generate_degree_matched_negatives(
 
     conn = sqlite3.connect(str(negbiodb_path))
     try:
-        # Load compound/target degree from DB
-        degree_df = pd.read_sql_query(
-            """SELECT c.inchikey_connectivity, c.canonical_smiles, c.inchikey,
-                      t.uniprot_accession AS uniprot_id,
-                      t.amino_acid_sequence AS target_sequence,
-                      ctp.compound_degree, ctp.target_degree
-            FROM compound_target_pairs ctp
-            JOIN compounds c ON ctp.compound_id = c.compound_id
-            JOIN targets t ON ctp.target_id = t.target_id""",
+        # Query 1: degree distribution only (no strings — fast, ~200 MB RAM)
+        logger.info("Loading degree distribution from pairs table...")
+        deg_dist = pd.read_sql_query(
+            "SELECT compound_degree, target_degree FROM compound_target_pairs",
+            conn,
+        )
+        # Query 2: unique compounds with smiles (919K rows × small strings)
+        logger.info("Loading unique compound pool...")
+        comp_df = pd.read_sql_query(
+            """SELECT inchikey_connectivity, canonical_smiles, inchikey,
+                      MAX(ctp.compound_degree) AS compound_degree
+               FROM compounds c
+               JOIN compound_target_pairs ctp ON c.compound_id = ctp.compound_id
+               GROUP BY c.compound_id""",
+            conn,
+        )
+        # Query 3: unique targets with sequences (3711 rows × long strings, ~3 MB)
+        logger.info("Loading unique target pool...")
+        tgt_df = pd.read_sql_query(
+            """SELECT t.uniprot_accession AS uniprot_id, t.amino_acid_sequence AS target_sequence,
+                      MAX(ctp.target_degree) AS target_degree
+               FROM targets t
+               JOIN compound_target_pairs ctp ON t.target_id = ctp.target_id
+               GROUP BY t.target_id""",
             conn,
         )
     finally:
         conn.close()
 
-    # Build per-compound and per-target degree lookup
-    comp_deg = degree_df.groupby("inchikey_connectivity")["compound_degree"].first()
-    tgt_deg = degree_df.groupby("uniprot_id")["target_degree"].first()
+    logger.info(
+        "Loaded: %d pair-degree rows, %d unique compounds, %d unique targets",
+        len(deg_dist), len(comp_df), len(tgt_df),
+    )
 
     # Log-scale binning of NegBioDB degree distribution
-    degree_df["cdeg_bin"] = np.floor(
-        np.log2(degree_df["compound_degree"].clip(lower=1))
+    deg_dist["cdeg_bin"] = np.floor(
+        np.log2(deg_dist["compound_degree"].clip(lower=1))
     ).astype(int)
-    degree_df["tdeg_bin"] = np.floor(
-        np.log2(degree_df["target_degree"].clip(lower=1))
+    deg_dist["tdeg_bin"] = np.floor(
+        np.log2(deg_dist["target_degree"].clip(lower=1))
     ).astype(int)
 
-    bin_counts = degree_df.groupby(["cdeg_bin", "tdeg_bin"]).size()
+    bin_counts = deg_dist.groupby(["cdeg_bin", "tdeg_bin"]).size()
     total_pairs = bin_counts.sum()
+    del deg_dist  # free memory
 
     # Compute target samples per bin
     bin_targets = {}
@@ -1252,19 +1349,19 @@ def generate_degree_matched_negatives(
 
     # Build per-bin compound and target pools
     compounds_by_bin: dict[int, list[dict]] = defaultdict(list)
-    for ik_conn, row in degree_df.drop_duplicates("inchikey_connectivity").set_index("inchikey_connectivity").iterrows():
-        cb = int(np.floor(np.log2(max(comp_deg.get(ik_conn, 1), 1))))
+    for _, row in comp_df.iterrows():
+        cb = int(np.floor(np.log2(max(row["compound_degree"], 1))))
         compounds_by_bin[cb].append({
-            "inchikey_conn": ik_conn,
+            "inchikey_conn": row["inchikey_connectivity"],
             "smiles": row["canonical_smiles"],
             "inchikey": row["inchikey"],
         })
 
     targets_by_bin: dict[int, list[dict]] = defaultdict(list)
-    for uid, row in degree_df.drop_duplicates("uniprot_id").set_index("uniprot_id").iterrows():
-        tb = int(np.floor(np.log2(max(tgt_deg.get(uid, 1), 1))))
+    for _, row in tgt_df.iterrows():
+        tb = int(np.floor(np.log2(max(row["target_degree"], 1))))
         targets_by_bin[tb].append({
-            "uniprot_id": uid,
+            "uniprot_id": row["uniprot_id"],
             "target_sequence": row["target_sequence"],
         })
 
@@ -1359,15 +1456,11 @@ def check_cold_split_integrity(
         ("cold_compound", "compound_id"),
         ("cold_target", "target_id"),
     ]:
-        sid_row = conn.execute(
-            "SELECT split_id FROM split_definitions WHERE split_strategy = ?",
-            (strategy,),
-        ).fetchone()
-        if sid_row is None:
+        sid = _resolve_split_id(conn, strategy)
+        if sid is None:
             results[strategy] = {"status": "not_found"}
             continue
 
-        sid = sid_row[0]
         leaks = conn.execute(
             f"""SELECT COUNT(DISTINCT ctp1.{entity_col})
             FROM split_assignments sa1

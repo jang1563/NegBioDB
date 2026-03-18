@@ -7,7 +7,7 @@
 #   MODEL     : deepdta | graphdta | drugban
 #   SPLIT     : random | cold_compound | cold_target | ddb
 #   NEG       : negbiodb | uniform_random | degree_matched
-#   DATASET   : balanced (default) | realistic
+#   DATASET   : balanced | realistic (random controls support balanced only)
 #
 # Optional:
 #   EPOCHS    : number of training epochs (default: 100)
@@ -50,7 +50,7 @@ conda activate negbiodb-ml
 echo "Job started: $(date)"
 echo "Node: $(hostname)"
 echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'n/a')"
-echo "Model=$MODEL  Split=$SPLIT  Neg=$NEG  Dataset=$DATASET"
+echo "Model=$MODEL  Split=$SPLIT  Neg=$NEG  Dataset=$DATASET  Seed=$SEED"
 
 cd "$NEGBIODB"
 

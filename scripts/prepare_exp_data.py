@@ -15,8 +15,7 @@ Usage:
 Prerequisite:
     - exports/negbiodb_m1_balanced.parquet (from export_ml_dataset.py)
     - exports/chembl_positives_pchembl6.parquet
-    - exports/negbiodb_dti_pairs.parquet
-    - data/negbiodb.db
+    - data/negbiodb.db (Exp 1 only)
 """
 
 from __future__ import annotations
@@ -90,51 +89,32 @@ def prepare_exp1_degree_matched(
 
 
 def prepare_exp4_ddb(
-    m1_path: Path, pairs_path: Path, output_dir: Path
+    m1_path: Path, output_dir: Path, seed: int = 42
 ) -> Path:
-    """Add split_degree_balanced column to M1 balanced for Exp 4 (DDB split).
+    """Add full-task split_degree_balanced column to M1 balanced for Exp 4.
 
-    Strategy:
-    - Negatives (Y=0): join with negbiodb_dti_pairs.parquet on (inchikey, uniprot_id)
-      to get their pre-computed split_degree_balanced assignment.
-    - Positives (Y=1): ChEMBL actives have no degree_balanced assignment;
-      use split_random as a proxy (same compounds, same random split logic).
+    The DDB split is computed on the merged M1 benchmark graph itself so both
+    positives and negatives are assigned under the same degree-balanced policy.
     """
+    from negbiodb.export import add_degree_balanced_split
+
     logger.info("Building M1 balanced + DDB split (Exp 4)...")
 
     m1 = pd.read_parquet(m1_path)
     logger.info("M1 balanced loaded: %d rows", len(m1))
+    m1_ddb = add_degree_balanced_split(m1, seed=seed)
 
-    # Load only the columns we need from the large pairs file
-    pairs_cols = ["inchikey", "uniprot_id", "split_degree_balanced"]
-    pairs = pd.read_parquet(pairs_path, columns=pairs_cols)
-    logger.info("Pairs loaded: %d rows", len(pairs))
-
-    m1_neg = m1[m1["Y"] == 0].copy()
-    m1_pos = m1[m1["Y"] == 1].copy()
-
-    # Join negatives with DDB split
-    m1_neg = m1_neg.merge(pairs, on=["inchikey", "uniprot_id"], how="left")
-    n_null = m1_neg["split_degree_balanced"].isna().sum()
-    if n_null > 0:
-        logger.warning(
-            "%d negatives (%.1f%%) have no DDB split assignment; "
-            "falling back to split_random.",
-            n_null,
-            100 * n_null / len(m1_neg),
-        )
-        m1_neg["split_degree_balanced"] = m1_neg["split_degree_balanced"].fillna(
-            m1_neg["split_random"]
-        )
-
-    # Positives: use split_random as DDB split proxy
-    m1_pos["split_degree_balanced"] = m1_pos["split_random"]
-
-    m1_ddb = pd.concat([m1_neg, m1_pos], ignore_index=True)
     logger.info(
-        "DDB split distribution (negatives): %s",
-        m1_neg["split_degree_balanced"].value_counts().to_dict(),
+        "DDB split distribution (all rows): %s",
+        m1_ddb["split_degree_balanced"].value_counts().to_dict(),
     )
+    by_label_same = (
+        m1_ddb.assign(same_as_random=m1_ddb["split_degree_balanced"] == m1_ddb["split_random"])
+        .groupby("Y", dropna=False)["same_as_random"]
+        .mean()
+        .to_dict()
+    )
+    logger.info("Fraction matching split_random by label: %s", by_label_same)
 
     out_path = output_dir / "negbiodb_m1_balanced_ddb.parquet"
     m1_ddb.to_parquet(out_path, index=False)
@@ -190,24 +170,27 @@ def main(argv: list[str] | None = None) -> int:
     # Verify inputs exist
     m1_balanced = data_dir / "negbiodb_m1_balanced.parquet"
     positives_path = data_dir / "chembl_positives_pchembl6.parquet"
-    pairs_path = data_dir / "negbiodb_dti_pairs.parquet"
 
-    for p in [m1_balanced, positives_path, pairs_path]:
+    required_inputs = [m1_balanced]
+    if not args.skip_exp1:
+        required_inputs.append(positives_path)
+
+    for p in required_inputs:
         if not p.exists():
             logger.error("Required file missing: %s", p)
             return 1
 
-    if not db_path.exists():
+    if not args.skip_exp1 and not db_path.exists():
         logger.error("Database not found: %s", db_path)
         return 1
 
     logger.info("Using data_dir=%s, db=%s, seed=%d", data_dir, db_path, args.seed)
 
-    positives = pd.read_parquet(positives_path)
-    logger.info("Loaded %d ChEMBL positives", len(positives))
-
     # --- Exp 1: random negatives ----------------------------------------
     if not args.skip_exp1:
+        positives = pd.read_parquet(positives_path)
+        logger.info("Loaded %d ChEMBL positives", len(positives))
+
         out_uniform = prepare_exp1_uniform(db_path, positives, data_dir, args.seed)
         verify_schema(out_uniform, m1_balanced)
 
@@ -218,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- Exp 4: DDB split -----------------------------------------------
     if not args.skip_exp4:
-        out_ddb = prepare_exp4_ddb(m1_balanced, pairs_path, data_dir)
+        out_ddb = prepare_exp4_ddb(m1_balanced, data_dir, args.seed)
     else:
         logger.info("Skipping Exp 4 (--skip-exp4)")
 

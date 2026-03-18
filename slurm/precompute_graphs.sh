@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-SBATCH=/opt/ohpc/pub/software/slurm/24.05.2/bin/sbatch
+SBATCH=${SBATCH_BIN:-/opt/ohpc/pub/software/slurm/24.05.2/bin/sbatch}
 NEGBIODB=/athena/masonlab/scratch/users/jak4013/negbiodb
 LOGDIR=$NEGBIODB/logs
 mkdir -p "$LOGDIR"
@@ -60,4 +60,4 @@ logger.info('Saved graph_cache.pt (%d entries, %d failed)', len(cache), failed)
 )
 echo "Submitted precompute_graphs → job $JOB_ID"
 echo "Wait for completion before running submit_all.sh:"
-echo "  /opt/ohpc/pub/software/slurm/24.05.2/bin/squeue -j $JOB_ID"
+echo "  ${SQUEUE_BIN:-/opt/ohpc/pub/software/slurm/24.05.2/bin/squeue} -j $JOB_ID"
