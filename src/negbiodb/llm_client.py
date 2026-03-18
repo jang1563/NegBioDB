@@ -7,11 +7,19 @@ Includes rate limiter for Gemini free tier (250 RPD Flash, 1000 RPD Flash-Lite).
 import fcntl
 import json
 import os
+import ssl
 import time
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Build SSL context using certifi CA bundle (system certs may be missing on HPC)
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _SSL_CTX = None
 
 # Rate limit state file (survives crashes)
 _RATE_LIMIT_DIR = Path.home() / ".config" / "negbiodb"
@@ -140,7 +148,7 @@ class LLMClient:
                 },
             )
             try:
-                with urllib.request.urlopen(req, timeout=120) as resp:
+                with urllib.request.urlopen(req, timeout=120, context=_SSL_CTX) as resp:
                     result = json.loads(resp.read())
                 return result["choices"][0]["message"]["content"]
             except urllib.error.HTTPError as e:
@@ -192,7 +200,7 @@ class LLMClient:
                 headers={"Content-Type": "application/json"},
             )
             try:
-                with urllib.request.urlopen(req, timeout=120) as resp:
+                with urllib.request.urlopen(req, timeout=120, context=_SSL_CTX) as resp:
                     result = json.loads(resp.read())
                 break
             except urllib.error.HTTPError as e:

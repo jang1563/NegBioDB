@@ -15,8 +15,9 @@
 
 set -euo pipefail
 
-CONDA_BASE="/home/fs01/jak4013/miniconda3/miniconda3"
+# Use scratch conda env copy to bypass NFS /home degradation
 SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 MODEL_DIR="${SCRATCH}/models"
 # Unique port per job to avoid conflicts when multiple jobs share a node
@@ -51,9 +52,9 @@ case "${MODEL}" in
         ;;
 esac
 
-# Init
-source "${CONDA_BASE}/etc/profile.d/conda.sh"
-conda activate negbiodb-llm
+# Init — use scratch env via PATH (no conda activate, no NFS /home)
+export PATH="${SCRATCH_ENV}/bin:${PATH}"
+export CONDA_PREFIX="${SCRATCH_ENV}"
 
 echo "=== LLM Local Benchmark ==="
 echo "Task: ${TASK}, Model: ${MODEL}, Config: ${CONFIG}, FS: ${FS}"

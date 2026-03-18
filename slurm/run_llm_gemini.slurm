@@ -13,8 +13,9 @@
 
 set -euo pipefail
 
-CONDA_BASE="/home/fs01/jak4013/miniconda3/miniconda3"
+# Use scratch conda env copy to bypass NFS /home degradation
 SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 
 # Defaults
@@ -23,9 +24,9 @@ MODEL="${MODEL:-gemini-2.5-flash}"
 CONFIG="${CONFIG:-zero-shot}"
 FS="${FS:-0}"
 
-# Init
-source "${CONDA_BASE}/etc/profile.d/conda.sh"
-conda activate negbiodb-llm
+# Init — use scratch env via PATH (no conda activate, no NFS /home)
+export PATH="${SCRATCH_ENV}/bin:${PATH}"
+export CONDA_PREFIX="${SCRATCH_ENV}"
 
 echo "=== LLM Gemini Benchmark ==="
 echo "Task: ${TASK}, Model: ${MODEL}, Config: ${CONFIG}, FS: ${FS}"

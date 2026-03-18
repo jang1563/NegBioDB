@@ -34,11 +34,20 @@ def load_all_results(results_dir: Path) -> list[dict]:
     for run_dir in sorted(results_dir.iterdir()):
         if not run_dir.is_dir():
             continue
+        # Skip judged directories (handled by L3 judge pipeline)
+        if run_dir.name.endswith("_judged"):
+            continue
         results_file = run_dir / "results.json"
         meta_file = run_dir / "run_meta.json"
 
         if not results_file.exists():
             continue
+
+        # For L3, prefer judged results (judge pipeline adds overall score)
+        judged_dir = results_dir / f"{run_dir.name}_judged"
+        judged_results = judged_dir / "results.json"
+        if run_dir.name.startswith("l3_") and judged_results.exists():
+            results_file = judged_results
 
         with open(results_file) as f:
             metrics = json.load(f)

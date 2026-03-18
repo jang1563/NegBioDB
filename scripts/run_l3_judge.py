@@ -91,8 +91,10 @@ def judge_run(
         with open(scores_path) as f:
             for line in f:
                 rec = json.loads(line)
-                completed[rec["question_id"]] = rec
-        print(f"  Resume: {len(completed)} already judged")
+                # Only count entries with valid scores as completed
+                if rec.get("scores") is not None:
+                    completed[rec["question_id"]] = rec
+        print(f"  Resume: {len(completed)} already judged (with valid scores)")
 
     # Judge remaining predictions
     remaining = [p for p in predictions if p["question_id"] not in completed]
