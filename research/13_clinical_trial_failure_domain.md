@@ -743,19 +743,19 @@ This is the hardest technical challenge. ClinicalTrials.gov uses free-text inter
 - [ ] Paper writing
 - [ ] Integration with NegBioDB DTI paper (if timing allows)
 
-### 8.4 Timeline vs NeurIPS Sprint
+### 8.4 Timeline
 
-This work is **independent** of the NeurIPS DTI paper (due ~May 15, 2026). Two options:
+This work is **independent** of the DTI paper. Two options:
 
-**Option A: Separate paper** — Submit Clinical Trial Failure domain as standalone paper to ICLR 2027 D&B or Scientific Data
+**Option A: Separate paper** — Submit Clinical Trial Failure domain as standalone paper to a datasets & benchmarks venue or Scientific Data
 - Pro: No time pressure, can be thorough
 - Con: Delayed impact
 
-**Option B: Integrated section** — Add a "Domain Expansion: Clinical Trial Failure" section to the NeurIPS DTI paper as proof of extensibility
+**Option B: Integrated section** — Add a "Domain Expansion: Clinical Trial Failure" section to the DTI paper as proof of extensibility
 - Pro: Strengthens the "extensible architecture" claim
 - Con: Tight timeline, may dilute DTI focus
 
-**Recommendation: Option A** — focus the NeurIPS paper on DTI, use Clinical Trial Failure as a follow-up publication demonstrating extensibility.
+**Recommendation: Option A** — focus the DTI paper on DTI, use Clinical Trial Failure as a follow-up publication demonstrating extensibility.
 
 ---
 

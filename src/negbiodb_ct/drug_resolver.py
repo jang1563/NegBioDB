@@ -750,11 +750,14 @@ def run_drug_resolution(
                 resolutions[interv_id]["inchikey"] = ik
                 resolutions[interv_id]["inchikey_connectivity"] = ik.split("-")[0] if ik else None
 
-        # Add override data
+        # Add override data (skip entries with no useful values)
         for name, override in step4.items():
             interv_id = id_map.get(name)
             if interv_id is None:
                 continue
+            has_data = any(v is not None for v in override.values())
+            if not has_data:
+                continue  # Skip entry (placebo, generic class, etc.)
             if interv_id not in resolutions:
                 resolutions[interv_id] = {}
             for k, v in override.items():

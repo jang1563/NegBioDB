@@ -54,7 +54,6 @@ Biology-first, Science-extensible Architecture
 | **License** | CC BY-SA 4.0 for NegBioDB (compatible with ChEMBL CC BY-SA 3.0) |
 | **HCDT 2.0** | CC BY-NC-ND — cannot integrate directly; independently recreate from underlying sources |
 | **LLM Pipeline** | Mistral 7B (ollama) + Gemini 2.5 Flash free tier |
-| **Primary Deadline** | NeurIPS 2026 D&B Track (~May 15, 2026) |
 
 ## Project Documents
 
@@ -65,12 +64,12 @@ Biology-first, Science-extensible Architecture
 | [research/03_data_collection_methodology.md](research/03_data_collection_methodology.md) | Data collection, curation, and structuring methodologies |
 | [research/04_publication_commercial_strategy.md](research/04_publication_commercial_strategy.md) | Academic publication and commercialization strategy |
 | [research/05_technical_deep_dive.md](research/05_technical_deep_dive.md) | Data access APIs, license analysis, deduplication, baselines, metrics |
-| [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, NeurIPS strategy, competitive positioning |
+| [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, competitive positioning |
 | [research/07a_llm_benchmark_landscape_survey.md](research/07a_llm_benchmark_landscape_survey.md) | Survey of existing bio/chem LLM benchmarks and evaluation methods |
 | [research/07b_llm_benchmark_design.md](research/07b_llm_benchmark_design.md) | LLM benchmark: 6 tasks, evaluation methods, dual-track architecture |
 | [research/08_expert_review_and_feasibility.md](research/08_expert_review_and_feasibility.md) | Expert review responses, feasibility analysis, revised scope |
 | [research/09_schema_and_ml_export_design.md](research/09_schema_and_ml_export_design.md) | SQLite schema DDL, ML export patterns, Croissant metadata, Datasheet for Datasets |
-| [research/10_expert_panel_review.md](research/10_expert_panel_review.md) | 6-expert panel review: NeurIPS reviewer, data eng, ML, domain, SW arch, PM |
+| [research/10_expert_panel_review.md](research/10_expert_panel_review.md) | 6-expert panel review: reviewer, data eng, ML, domain, SW arch, PM |
 | [research/11_full_plan_review.md](research/11_full_plan_review.md) | Pre-implementation audit: 16 issues found, feasibility ratings, execution adjustments |
 | [research/12_review_findings_summary.md](research/12_review_findings_summary.md) | Schema/pipeline implementation review: 9 issues (3 critical, 3 high, 2 moderate, 1 low) |
 | [ROADMAP.md](ROADMAP.md) | Execution roadmap (v10 — ML baselines 18/18, LLM infra complete) |
@@ -99,5 +98,4 @@ Biology-first, Science-extensible Architecture
 
 ## Timeline
 - Project initiated: 2026-03-02
-- Primary target: NeurIPS 2026 D&B Track (~May 15, 2026)
 - Last updated: 2026-03-13

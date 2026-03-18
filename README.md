@@ -43,8 +43,6 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 | LLM benchmark execution (Cayuga) | ⏳ Pending |
 | Paper writing | Planned |
 
-**Target:** NeurIPS 2026 Datasets & Benchmarks Track (~May 15, 2026)
-
 ## Key ML Results (18/18 runs complete)
 
 **Exp 1 — Negative type matters (random split, LogAUC):**
@@ -231,6 +229,3 @@ NegBioDB/
 
 This license is required by the viral clause in ChEMBL's CC BY-SA 3.0 license.
 
-## Target Publication
-
-NeurIPS 2026 Datasets & Benchmarks Track

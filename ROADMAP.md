@@ -8,7 +8,7 @@
 
 1. **HCDT 2.0 License: CC BY-NC-ND 4.0** — Cannot redistribute derivatives. Must independently recreate from underlying sources (BindingDB, ChEMBL, GtoPdb, PubChem, TTD). Use 10 uM primary threshold (not 100 uM) to differentiate.
 2. **InertDB License: CC BY-NC** — Cannot include in commercial track. Provide optional download script only.
-3. **NeurIPS 2026 D&B deadline: ~May 15, 2026** (~11 weeks from project start). Requires: downloadable data, Croissant metadata, code available, Datasheet for Datasets.
+3. **Submission requirements**: downloadable data, Croissant metadata, code available, Datasheet for Datasets.
 4. **LIT-PCBA compromised** (2025 audit found data leakage) — Creates urgency for NegBioDB as replacement gold-standard.
 5. **Recommended NegBioDB License: CC BY-SA 4.0** — Compatible with ChEMBL (CC BY-SA 3.0) via one-way upgrade.
 6. **No direct competitor exists** as of March 2026.
@@ -20,7 +20,7 @@
 12. **Paper narrative must be problem-first** — "Existing benchmarks are broken" (Exp 1 + Exp 4), not "Here's a database." Database is the solution, not the contribution.
 13. **Positive data protocol required** — NegBioDB is negative-only. For ML benchmarking (M1), positive data must be sourced from ChEMBL (pChEMBL ≥ 6). Report two class ratios: balanced (1:1) and realistic (1:10). See §Positive Data Protocol below.
 14. **Random negative baseline must be precisely defined** — Exp 1 compares NegBioDB negatives against random negatives. Random = uniform sampling from untested compound-target pairs (TDC standard). See §Random Negative Control Design.
-15. **NeurIPS 2026 page limit is 9 pages** (not 8), unlimited appendix. Croissant is **mandatory** (desk rejection if missing/invalid). 1-6 scoring scale. ~25% acceptance rate.
+15. **Paper format: 9 pages** + unlimited appendix. Croissant is **mandatory** (desk rejection if missing/invalid).
 16. **GPU strategy: Kaggle free tier** (30 hrs/week) is sufficient for 18 ML baseline runs (~36-72 GPU-hours over 4 weeks). Fallback: Colab Pro ($10/month).
 17. **ChEMBL v36** (Sep 2025, 24.3M activities) should be used, not v35. `chembl_downloader` fetches latest by default.
 18. **[UNVERIFIED] Nature MI 2025 validates our premise** — Biologically driven negative subsampling paper independently shows "assumed negatives" distort DTI models. Must cite in Related Work alongside Science 2025 editorial on negative results in AI. **Both citations need verification in Week 1.** If not found, substitute: EviDTI (Nature Comms 2025), DDB paper (BMC Biology 2025), LIT-PCBA audit (2025).
@@ -59,7 +59,7 @@ Stage 3: Validation
 ### Only Paid Cost: Publication
 - OA APC: ~$2,500-3,000 (J. Cheminformatics or Nature Sci Data)
 - Conference registration: ~$200-400
-- NeurIPS D&B: No publication fee (if accepted)
+- D&B track: No publication fee (if accepted)
 
 ---
 
@@ -136,9 +136,7 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 ---
 
-## Accelerated Phase 1: NeurIPS 2026 Sprint (Weeks 0-11)
-
-**Deadline: ~May 15, 2026 (paper) | ~May 1, 2026 (abstract)**
+## Phase 1: Implementation Sprint (Weeks 0-11)
 
 ### Week 1: Scaffolding + Download + Schema ✅ COMPLETE
 
@@ -151,7 +149,7 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - [x] **[B7] Verify PubChem bioactivities.tsv.gz column names** after download
 - [ ] **[B4] Hardware decision**: Test local RAM/GPU. If < 32GB RAM → use Llama 3.1 8B + Mistral 7B (not 70B). If ≥ 32GB → quantized Llama 3.3 70B (Q4). Document choice.
 - [ ] **[B2] Verify citations**: Search for Nature MI 2025 negative subsampling paper + Science 2025 editorial. If not found → substitute with EviDTI, DDB paper, LIT-PCBA audit
-- [ ] **[B3] Start NeurIPS 2026 CFP monitoring**: Check neurips.cc weekly. CFP expected ~mid-March 2026.
+- [ ] **[B3] Monitor submission deadlines**
 
 ### Week 2: Standardization + Extraction Start ✅ COMPLETE
 
@@ -226,8 +224,8 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - [ ] **L2 gold annotation**: 15–20h human review needed for `l2_gold.jsonl`
 
 **Shared:**
-- [ ] Generate Croissant machine-readable metadata (NeurIPS mandatory)
-- [ ] **Validate Croissant** with `mlcroissant` library — desk rejection if invalid. Gate: `mlcroissant.Dataset('metadata.json')` runs without errors
+- [ ] Generate Croissant machine-readable metadata (mandatory for submission)
+- [ ] **Validate Croissant** with `mlcroissant` library. Gate: `mlcroissant.Dataset('metadata.json')` runs without errors
 - [ ] Write Datasheet for Datasets (Gebru et al. template)
 
 ### Week 5-7: Baseline Experiments (ML + LLM)
@@ -260,7 +258,7 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 **Must-have LLM: 3 models × 3 tasks (L1,L2,L4) × 2 configs (zero-shot, 3-shot) = 18 eval runs (all automated)**
 
-**Flagship models (post-stabilization, NOT for NeurIPS sprint):**
+**Flagship models (post-stabilization):**
 - GPT-4/4.1, Claude Sonnet/Opus, Gemini Pro — added to leaderboard later
 
 **Must-have experiments (minimum for paper):**
@@ -283,14 +281,14 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 ### Week 8-10: Paper Writing
 
-- [ ] Write NeurIPS D&B paper (**9 pages** + unlimited appendix)
+- [ ] Write benchmark paper (**9 pages** + unlimited appendix)
 - [ ] Create key figures (see research/06_paper_narrative.md for figure plan)
 - [ ] **Paper structure (9 pages)**: Intro (1.5) → DB Design (1.5) → Benchmark (1.5) → Experiments (3) → Discussion (1.5)
 - [ ] **Appendix contents**: Full schema DDL, all metric tables, L2 annotation details, few-shot examples, Datasheet
 - [ ] Python download script: `pip install negbiodb` or simple wget script
 - [ ] Host dataset (HuggingFace primary + Zenodo DOI for archival)
 - [ ] Author ethical statement
-- [ ] **Dockerfile** for full pipeline reproducibility (critical for solo author credibility): Python 3.11, rdkit, torch, chembl_downloader, pyarrow, mlcroissant. Must reproduce full pipeline from raw data → final benchmark export
+- [ ] **Dockerfile** for full pipeline reproducibility: Python 3.11, rdkit, torch, chembl_downloader, pyarrow, mlcroissant. Must reproduce full pipeline from raw data → final benchmark export
 
 ### Week 10-11: Review & Submit
 
@@ -335,20 +333,18 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - [ ] GitHub repository with documentation and tutorials
 - [ ] Partner with SGC and Target 2035/AIRCHECK for data access
 - [ ] Engage with DREAM challenge community
-- [ ] Tutorial at relevant workshop (ICLR/ICML)
+- [ ] Tutorial at relevant workshop
 - [ ] Researcher incentive design (citation credit, DOI per submission)
 
 ### 2.3 Publication Strategy
 
-| Month | Target | Type |
-|-------|--------|------|
-| 2-3 | ArXiv preprint | Establish priority (concurrent with NeurIPS) |
-| 3 | NeurIPS 2026 D&B Track | Primary benchmark paper (~May 15) |
-| 3-6 | Perspective paper | Publication bias in DTI (parallel) |
-| 8-12 | J. Cheminformatics / Nature Sci Data | Database descriptor |
-| 12-18 | NAR Database Issue | Contact editor July; publish January |
-
-**Backup if NeurIPS rejects:** ICLR 2027 D&B (submission ~Oct 2026) or ICML 2027
+| Target | Type |
+|--------|------|
+| ArXiv preprint | Establish priority |
+| Datasets & Benchmarks Track | Primary benchmark paper |
+| Perspective paper | Publication bias in DTI |
+| J. Cheminformatics / Nature Sci Data | Database descriptor |
+| NAR Database Issue | Database recognition |
 
 ### 2.4 Funding Applications
 
@@ -489,7 +485,7 @@ DTIContext {
 
 ### LLM Evaluation Configuration
 - **Full benchmark** (5 configs): zero-shot, 3-shot, 5-shot, CoT, CoT+3-shot
-- **NeurIPS sprint must-have** (2 configs): zero-shot, 3-shot only (see research/08 §3)
+- **Must-have** (2 configs): zero-shot, 3-shot only (see research/08 §3)
 - **Should-have** (add CoT): 3 configs total for Exp 11 (prompt strategy comparison)
 - 3 runs per evaluation, report mean ± std
 - Temperature = 0, prompts version-controlled
@@ -558,11 +554,11 @@ DTI (Phase 1-3)
 | ML baseline experiments | Week 5 (Mar 2026) | 18/18 runs complete, key findings confirmed | ✅ Done |
 | LLM benchmark infrastructure | Week 5 (Mar 2026) | L1–L4 datasets, prompts, eval, SLURM templates | ✅ Done |
 | LLM benchmark execution | Week 6-7 (Mar-Apr 2026) | 3 models × 3 tasks × 2 configs on Cayuga | ⏳ Pending |
-| **ArXiv preprint** | **Week 9 (May 2026)** | **Priority establishment** |
-| **NeurIPS 2026 submission** | **Week 11 (~May 15, 2026)** | **Benchmark paper** |
+| **ArXiv preprint** | **Week 9** | **Priority establishment** |
+| **Paper submission** | **Week 11** | **Benchmark paper** |
 | Perspective paper submitted | Month 4-6 | Publication bias in DTI |
 | Python library v0.1 | Month 8 | `pip install negbiodb` |
-| NeurIPS decision | Month 7 (~Sep 2026) | Accept/reject notification |
+| Decision notification | Month 7 | Accept/reject notification |
 | Web platform launch | Month 12 | Public access + leaderboard |
 | Database descriptor paper | Month 8-12 | J. Cheminformatics or Nature Sci Data |
 | NIH R24 funding | Month 12-18 | Multi-year sustainability |
@@ -579,7 +575,7 @@ Exp 1 result determines the paper's primary narrative. Check at Week 6:
 |----------|-------------|--------|
 | **A: Strong** | NegBioDB > Random by ≥10% (p < 0.05) | Narrative holds: "benchmarks are broken." Add should-have experiments |
 | **B: Moderate** | NegBioDB > Random by 3-8% (p < 0.1) | Co-primary with Exp 4 (DDB bias). Reframe: "bias-free evaluation" |
-| **C: Null** | NegBioDB ≈ Random | Major pivot: LLM track (L1, L2, L4) as primary contribution. "Database + novel evaluation tasks" framing. Consider ICLR 2027 backup |
+| **C: Null** | NegBioDB ≈ Random | Major pivot: LLM track (L1, L2, L4) as primary contribution. "Database + novel evaluation tasks" framing |
 
 ### Milestone Checkpoints
 
@@ -598,7 +594,7 @@ Exp 1 result determines the paper's primary narrative. Check at Week 6:
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| NeurIPS 2026 deadline too tight (11 weeks) | Medium-High | High | Focus on core experiments; ArXiv as fallback; ICLR 2027 backup |
+| Submission deadline tight (11 weeks) | Medium-High | High | Focus on core experiments; ArXiv as fallback |
 | **Exp 1 results weak or null** | **Medium** | **Critical** | Week 6 Go/No-Go framework; Exp 4 as backup primary; LLM track pivot |
 | **Solo author credibility** | **Medium** | **High** | Dockerfile + full reproducibility scripts + detailed supplement |
 | **GPU unavailability** | **Medium** | **High** | Kaggle free (30h/wk) as primary; Colab Pro ($10) fallback |
@@ -606,8 +602,8 @@ Exp 1 result determines the paper's primary narrative. Check at Week 6:
 | **Positive data protocol undefined** | **Resolved** | — | See §Positive Data Protocol (ChEMBL pChEMBL ≥ 6, shared targets) |
 | Insufficient data quality | Medium | High | Strict QC pipeline + confidence tiers |
 | Low community adoption | Medium | High | TDC-style easy access + workshop tutorials |
-| Competitive entry before NeurIPS | Low | Medium | First-mover advantage + ArXiv priority |
-| **Croissant validation failure** | Low | **Critical** | Week 7 `mlcroissant` validation; HuggingFace auto-generation as fallback |
+| Competitive entry before submission | Low | Medium | First-mover advantage + ArXiv priority |
+| **Croissant validation failure** | Low | **Critical** | `mlcroissant` validation; HuggingFace auto-generation as fallback |
 | **PubChem OOM during processing** | Medium | Medium | Streaming (chunksize=100K or polars lazy); resolved in pipeline design |
 | Funding gap | Medium | High | Multiple funding sources + early commercial track |
 | Schema over-engineering | Medium | Medium | Start minimal (SQLite), iterate based on user feedback |
@@ -625,11 +621,11 @@ Exp 1 result determines the paper's primary narrative. Check at Week 6:
 | [research/03_data_collection_methodology.md](research/03_data_collection_methodology.md) | Methodologies for collecting and curating negative data |
 | [research/04_publication_commercial_strategy.md](research/04_publication_commercial_strategy.md) | Publication venues, funding, commercialization |
 | [research/05_technical_deep_dive.md](research/05_technical_deep_dive.md) | Data access APIs, license analysis, dedup, ML baselines, metrics |
-| [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, NeurIPS strategy, competitive positioning |
+| [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, competitive positioning |
 | [research/07a_llm_benchmark_landscape_survey.md](research/07a_llm_benchmark_landscape_survey.md) | Survey of existing bio/chem LLM benchmarks and evaluation methods |
 | [research/07b_llm_benchmark_design.md](research/07b_llm_benchmark_design.md) | LLM benchmark tasks, evaluation methods, dual-track architecture |
 | [research/08_expert_review_and_feasibility.md](research/08_expert_review_and_feasibility.md) | Expert review responses, feasibility analysis, concrete decisions |
 | [research/09_schema_and_ml_export_design.md](research/09_schema_and_ml_export_design.md) | SQLite schema DDL, ML export patterns, Croissant metadata, Datasheet |
-| [research/10_expert_panel_review.md](research/10_expert_panel_review.md) | 6-expert panel review: NeurIPS reviewer, data eng, ML, domain, SW arch, PM |
+| [research/10_expert_panel_review.md](research/10_expert_panel_review.md) | 6-expert panel review: reviewer, data eng, ML, domain, SW arch, PM |
 | [research/11_full_plan_review.md](research/11_full_plan_review.md) | Pre-implementation audit: 16 issues found, feasibility ratings, execution adjustments |
 | [research/12_review_findings_summary.md](research/12_review_findings_summary.md) | Schema/pipeline implementation review: 9 issues (3 critical, 3 high, 2 moderate, 1 low) |
