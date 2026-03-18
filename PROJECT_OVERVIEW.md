@@ -36,7 +36,7 @@ Biology-first, Science-extensible Architecture
 └────────┘ └────────┘  └──────────┘
 ```
 
-**Expansion Path:** DTI → Gene Function → Clinical Trial → Chemistry → Materials Science
+**Expansion Path:** DTI → Clinical Trial Failure → Gene Function → Chemistry → Materials Science
 
 ## Key Decisions
 
@@ -55,6 +55,110 @@ Biology-first, Science-extensible Architecture
 | **HCDT 2.0** | CC BY-NC-ND — cannot integrate directly; independently recreate from underlying sources |
 | **LLM Pipeline** | Mistral 7B (ollama) + Gemini 2.5 Flash free tier |
 
+## DTI Domain Implementation Progress (as of 2026-03-13)
+
+| Step | Component | Status |
+|------|-----------|--------|
+| 1 | Schema & scaffolding | ✅ Complete |
+| 2a | Data download (4 sources) | ✅ Complete |
+| 2b | ETL: DAVIS, ChEMBL, PubChem, BindingDB | ✅ Complete |
+| 3 | ML export & splits (6 strategies) | ✅ Complete |
+| 4 | ML baseline models + SLURM harness | ✅ Complete |
+| 5 | ML evaluation metrics (7 metrics, 329 tests) | ✅ Complete |
+| 6a | ML baseline experiments (18/18 runs on Cayuga) | ✅ Complete |
+| 6b | LLM benchmark infrastructure (L1–L4 datasets, prompts, eval, SLURM) | ✅ Complete |
+| 6c | LLM benchmark execution (81/81 complete) | ✅ Complete |
+| 7 | Paper writing & submission | Planned |
+
+**DB:** 30.5M negative_results · 919K compounds · 3.7K targets · 13.22 GB
+
+### Key ML Results (18/18 complete)
+- **Exp 1:** Degree-matched negatives inflate LogAUC by +0.112 avg → benchmark inflation confirmed
+- **Split effect:** Cold-target LogAUC drops to 0.15–0.33 while AUROC stays 0.76–0.89 → AUROC misleading
+- **Exp 4:** DDB ≈ random (≤0.010 diff) → degree balancing alone is not harder
+
+### Key LLM Results (81/81 complete)
+- **L4:** All models near random (MCC ≤ 0.18) → LLMs cannot distinguish tested from untested pairs
+
+---
+
+## Clinical Trial Failure Domain (NegBioDB-CT)
+
+The second domain extends NegBioDB to clinical trial failures, capturing why drugs fail in human trials.
+
+### Architecture
+
+```
+Data Sources                    Pipeline                      Database
+┌──────────┐    ┌────────────────────────────┐    ┌─────────────────────┐
+│ AACT     │───→│ etl_aact.py (13 tables)    │───→│ clinical_trials     │
+│ CTO      │───→│ etl_classify.py (3-tier)   │───→│ trial_failure_results│
+│ Open Tgt │───→│ drug_resolver.py (4-step)  │───→│ interventions       │
+│ Shi & Du │───→│ etl_outcomes.py (enrich)   │───→│ conditions          │
+└──────────┘    └────────────────────────────┘    └─────────────────────┘
+```
+
+**5 modules:** AACT ETL → Failure Classification → Drug Resolution → Outcome Enrichment → DB Layer
+
+### Database State (as of 2026-03-18)
+
+| Metric | Value |
+|--------|-------|
+| Clinical trials | 216,987 |
+| Failure results | 132,925 |
+| Interventions | 176,741 |
+| Conditions | 55,915 |
+| Intervention-condition pairs | 102,850 |
+
+**Tier distribution:** gold 23,570 (17.7%) / silver 28,505 (21.4%) / bronze 60,223 (45.3%) / copper 20,627 (15.5%)
+
+**Category distribution:** efficacy 42.6% / enrollment 23.0% / other 21.0% / strategic 7.1% / safety 3.9% / design 1.8% / regulatory 0.7% / PK 0.0%
+
+**Drug resolution:** 36,361/176,741 interventions (20.6%) have ChEMBL IDs; 27,534 (15.6%) have SMILES; 66,393 intervention-target mappings
+
+### Data Sources
+
+| Source | License | Records | Purpose |
+|--------|---------|---------|---------|
+| AACT (ClinicalTrials.gov) | Public domain | 216,987 trials | Trial metadata, outcomes |
+| CTO (Clinical Trial Outcome) | MIT | 20,627 records | Binary success/failure labels |
+| Open Targets | Apache 2.0 | 32,782 targets | Drug-target mappings |
+| Shi & Du 2024 | CC BY 4.0 | 119K efficacy + 803K safety rows | P-values, SAE data |
+
+### Key Design Decisions
+
+- **Failure taxonomy:** 8 categories (safety > efficacy > PK > enrollment > strategic > regulatory > design > other)
+- **3-tier detection:** Tier 1 NLP on `why_stopped` (bronze) → Tier 2 p-value analysis (silver/gold) → Tier 3 CTO labels (copper)
+- **Drug resolution:** ChEMBL exact → PubChem API → fuzzy (JaroWinkler > 0.90) → manual CSV overrides
+- **Tier upgrades:** Bronze + p-value → Silver, Silver + Phase III + PubMed → Gold
+
+### Benchmark Design
+
+**ML Benchmark** (3 tasks × 3 models × 6 splits): See [research/14](research/14_ct_ml_benchmark_design.md)
+- CT-M1: Drug-condition failure prediction (binary)
+- CT-M2: Failure category classification (7-way)
+- CT-M3: Phase transition prediction (deferred)
+
+**LLM Benchmark** (4 levels × 5 models): See [research/15](research/15_ct_llm_benchmark_design.md)
+- CT-L1: Failure category MCQ (5-way, 1,500 records)
+- CT-L2: Failure report extraction (500 records)
+- CT-L3: Failure reasoning (200 records)
+- CT-L4: Trial existence discrimination (500 records)
+
+### Implementation Progress (as of 2026-03-18)
+
+| Step | Component | Status |
+|------|-----------|--------|
+| CT-1 | Schema & scaffolding (2 migrations) | ✅ Complete |
+| CT-2 | Data loading (4 sources) | ✅ Complete |
+| CT-3 | Enrichment & resolution | ✅ Complete |
+| CT-4 | Analysis & benchmark design | ✅ Complete |
+| CT-5 | ML export & splits | Planned |
+| CT-6 | ML baseline experiments | Planned |
+| CT-7 | LLM benchmark execution | Planned |
+
+---
+
 ## Project Documents
 
 | Document | Description |
@@ -72,30 +176,11 @@ Biology-first, Science-extensible Architecture
 | [research/10_expert_panel_review.md](research/10_expert_panel_review.md) | 6-expert panel review: reviewer, data eng, ML, domain, SW arch, PM |
 | [research/11_full_plan_review.md](research/11_full_plan_review.md) | Pre-implementation audit: 16 issues found, feasibility ratings, execution adjustments |
 | [research/12_review_findings_summary.md](research/12_review_findings_summary.md) | Schema/pipeline implementation review: 9 issues (3 critical, 3 high, 2 moderate, 1 low) |
-| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v10 — ML baselines 18/18, LLM infra complete) |
-
-## Implementation Progress (as of 2026-03-13)
-
-| Step | Component | Status |
-|------|-----------|--------|
-| 1 | Schema & scaffolding | ✅ Complete |
-| 2a | Data download (4 sources) | ✅ Complete |
-| 2b | ETL: DAVIS, ChEMBL, PubChem, BindingDB | ✅ Complete |
-| 3 | ML export & splits (6 strategies) | ✅ Complete |
-| 4 | ML baseline models + SLURM harness | ✅ Complete |
-| 5 | ML evaluation metrics (7 metrics, 329 tests) | ✅ Complete |
-| 6a | ML baseline experiments (18/18 runs on Cayuga) | ✅ Complete |
-| 6b | LLM benchmark infrastructure (L1–L4 datasets, prompts, eval, SLURM) | ✅ Complete |
-| 6c | LLM benchmark execution (Cayuga) | ⏳ Pending |
-| 7 | Paper writing & submission | Planned |
-
-**DB:** 30.5M negative_results · 919K compounds · 3.7K targets · 13.22 GB
-
-### Key ML Results (18/18 complete)
-- **Exp 1:** Degree-matched negatives inflate LogAUC by +0.112 avg → benchmark inflation confirmed
-- **Split effect:** Cold-target LogAUC drops to 0.15–0.33 while AUROC stays 0.76–0.89 → AUROC misleading
-- **Exp 4:** DDB ≈ random (≤0.010 diff) → degree balancing alone is not harder
+| [research/13_clinical_trial_failure_domain.md](research/13_clinical_trial_failure_domain.md) | CT domain design: failure taxonomy, 3-tier detection, pipeline architecture |
+| [research/14_ct_ml_benchmark_design.md](research/14_ct_ml_benchmark_design.md) | CT ML benchmark: 3 tasks, 6 splits, 3 models, 3 experiments |
+| [research/15_ct_llm_benchmark_design.md](research/15_ct_llm_benchmark_design.md) | CT LLM benchmark: 4 levels, 5 models, contamination analysis |
 
 ## Timeline
 - Project initiated: 2026-03-02
-- Last updated: 2026-03-13
+- CT domain initiated: 2026-03-17
+- Last updated: 2026-03-18

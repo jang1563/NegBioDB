@@ -101,3 +101,51 @@ ct-clean:
 
 ct-test: setup
 	uv run pytest tests/test_ct_db.py tests/test_etl_aact.py tests/test_etl_classify.py tests/test_drug_resolver.py tests/test_etl_outcomes.py -v
+
+# ============================================================
+# Protein-Protein Interaction Negative Domain
+# ============================================================
+
+.PHONY: ppi-db ppi-download ppi-load-huri ppi-load-intact ppi-load-humap ppi-load-string ppi-all ppi-clean ppi-test
+
+ppi-db: setup
+	uv run python -c "from negbiodb_ppi.ppi_db import create_ppi_database; create_ppi_database()"
+
+ppi-download-huri: setup
+	uv run python scripts_ppi/download_huri.py
+
+ppi-download-intact: setup
+	uv run python scripts_ppi/download_intact.py
+
+ppi-download-humap: setup
+	uv run python scripts_ppi/download_humap.py
+
+ppi-download-string: setup
+	uv run python scripts_ppi/download_string.py
+
+ppi-download-biogrid: setup
+	uv run python scripts_ppi/download_biogrid.py
+
+ppi-download: ppi-download-huri ppi-download-intact ppi-download-humap ppi-download-string ppi-download-biogrid
+
+ppi-load-huri: ppi-db ppi-download-huri
+	uv run python scripts_ppi/load_huri.py
+
+ppi-load-intact: ppi-db ppi-download-intact
+	uv run python scripts_ppi/load_intact.py
+
+ppi-load-humap: ppi-db ppi-download-humap
+	uv run python scripts_ppi/load_humap.py
+
+ppi-load-string: ppi-db ppi-download-string
+	uv run python scripts_ppi/load_string.py
+
+ppi-all: ppi-db ppi-load-huri ppi-load-intact ppi-load-humap ppi-load-string
+	@echo "PPI pipeline complete."
+
+ppi-clean:
+	rm -f data/negbiodb_ppi.db
+	@echo "PPI database removed."
+
+ppi-test: setup
+	uv run pytest tests/test_ppi_db.py tests/test_protein_mapper.py tests/test_etl_huri.py tests/test_etl_intact.py tests/test_etl_humap.py tests/test_etl_string.py -v

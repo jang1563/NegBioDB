@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-13 (v10 — Steps 1–6b complete: ETL, export, metrics, ML baselines 18/18, LLM infra)
+> Last updated: 2026-03-18 (v11 — DTI complete, CT domain pipeline + benchmark design complete)
 
 ---
 
@@ -299,6 +299,68 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 ---
 
+## Phase 1-CT: Clinical Trial Failure Domain
+
+> Initiated: 2026-03-17 | Pipeline code + data loading complete, benchmark design complete
+
+### Step CT-1: Infrastructure ✅ COMPLETE
+
+- [x] CT schema design (2 migrations: 001 initial + 002 expert review fixes)
+- [x] 5 pipeline modules: etl_aact, etl_classify, drug_resolver, etl_outcomes, ct_db
+- [x] 138 tests passing
+- [x] Data download scripts for all 4 sources
+
+### Step CT-2: Data Loading ✅ COMPLETE
+
+- [x] AACT ETL: 216,987 trials, 476K trial-interventions, 372K trial-conditions
+- [x] Failure classification (3-tier): 132,925 results (bronze 60K / silver 28K / gold 23K / copper 20K)
+- [x] Open Targets: 32,782 intervention-target mappings
+- [x] Pair aggregation: 102,850 intervention-condition pairs
+
+### Step CT-3: Enrichment & Resolution ✅ COMPLETE
+
+- [x] Outcome enrichment: +66 AACT p-values, +31,969 Shi & Du SAE records
+- [x] Drug resolution Steps 1-2: ChEMBL exact (18K) + PubChem API
+- [x] Drug resolution Step 3: Fuzzy matching — 15,616 resolved
+- [x] Drug resolution Step 4: Manual overrides — 291 resolved (88 entries used)
+- [x] Pair aggregation refresh (post-resolution) — 102,850 pairs
+- [x] Post-run coverage analysis — 36,361/176,741 (20.6%) ChEMBL, 27,534 SMILES, 66,393 targets
+
+### Step CT-4: Analysis & Benchmark Design ✅ COMPLETE
+
+- [x] Data quality analysis script (`scripts_ct/analyze_ct_data.py`) — 16 queries, JSON+MD output
+- [x] Data quality report (`results/ct/ct_data_quality.md`)
+- [x] ML benchmark design (`research/14_ct_ml_benchmark_design.md`)
+  - 3 tasks: CT-M1 (binary), CT-M2 (7-way category), CT-M3 (phase transition, deferred)
+  - 6 split strategies, 3 models (XGBoost, MLP, GNN+Tabular)
+  - 3 experiments: negative source, generalization, temporal
+- [x] LLM benchmark design (`research/15_ct_llm_benchmark_design.md`)
+  - 4 levels: CT-L1 (5-way MCQ), CT-L2 (extraction), CT-L3 (reasoning), CT-L4 (discrimination)
+  - 5 models, anti-contamination analysis
+
+### Step CT-5: ML Export & Splits (Planned)
+
+- [ ] CT export module (`src/negbiodb_ct/ct_export.py`)
+- [ ] CTO success trials extraction (CT-M1 positive class)
+- [ ] Feature engineering (drug FP + mol properties + condition one-hot + trial design)
+- [ ] 6 split strategies implementation
+
+### Step CT-6: ML Baseline Experiments (Planned)
+
+- [ ] XGBoost baseline (CT-M1 + CT-M2)
+- [ ] MLP baseline
+- [ ] GNN+Tabular baseline
+- [ ] Experiments CT-1, CT-2, CT-3
+
+### Step CT-7: LLM Benchmark Execution (Planned)
+
+- [ ] CT-L1/L2/L3/L4 dataset construction scripts
+- [ ] CT prompt templates + evaluation functions
+- [ ] Inference runs on Cayuga HPC
+- [ ] Results aggregation
+
+---
+
 ## Phase 1b: Post-Submission Expansion (Months 3-6)
 
 ### Data Expansion (if not at 10K+ for submission)
@@ -525,13 +587,13 @@ DTIContext {
 ## Phase 4: Domain Expansion (Months 36+)
 
 ```
-DTI (Phase 1-3)
+DTI (Phase 1 — COMPLETE)
+  │
+  ├── Clinical Trial Failure (Phase 1-CT — IN PROGRESS)
+  │     └── 132,925 failure results loaded, benchmarks designed
   │
   ├── Gene Function (CRISPR KO/KD negatives)
   │     └── Leverage CRISPR screen data, DepMap
-  │
-  ├── Clinical Trial Failure
-  │     └── ClinicalTrials.gov terminated/failed trials
   │
   ├── Chemistry Domain Layer
   │     └── Failed reactions, yield = 0 data
@@ -553,7 +615,7 @@ DTI (Phase 1-3)
 | ML baseline infrastructure | Week 4 (Mar 2026) | 3 models + SLURM harness | ✅ Done |
 | ML baseline experiments | Week 5 (Mar 2026) | 18/18 runs complete, key findings confirmed | ✅ Done |
 | LLM benchmark infrastructure | Week 5 (Mar 2026) | L1–L4 datasets, prompts, eval, SLURM templates | ✅ Done |
-| LLM benchmark execution | Week 6-7 (Mar-Apr 2026) | 3 models × 3 tasks × 2 configs on Cayuga | ⏳ Pending |
+| LLM benchmark execution | Week 5-6 (Mar 2026) | 81/81 runs complete (9 models × 4 tasks + configs) | ✅ Done |
 | **ArXiv preprint** | **Week 9** | **Priority establishment** |
 | **Paper submission** | **Week 11** | **Benchmark paper** |
 | Perspective paper submitted | Month 4-6 | Publication bias in DTI |
@@ -629,3 +691,6 @@ Exp 1 result determines the paper's primary narrative. Check at Week 6:
 | [research/10_expert_panel_review.md](research/10_expert_panel_review.md) | 6-expert panel review: reviewer, data eng, ML, domain, SW arch, PM |
 | [research/11_full_plan_review.md](research/11_full_plan_review.md) | Pre-implementation audit: 16 issues found, feasibility ratings, execution adjustments |
 | [research/12_review_findings_summary.md](research/12_review_findings_summary.md) | Schema/pipeline implementation review: 9 issues (3 critical, 3 high, 2 moderate, 1 low) |
+| [research/13_clinical_trial_failure_domain.md](research/13_clinical_trial_failure_domain.md) | CT domain design: failure taxonomy, 3-tier detection, pipeline architecture |
+| [research/14_ct_ml_benchmark_design.md](research/14_ct_ml_benchmark_design.md) | CT ML benchmark: 3 tasks, 6 splits, 3 models, 3 experiments |
+| [research/15_ct_llm_benchmark_design.md](research/15_ct_llm_benchmark_design.md) | CT LLM benchmark: 4 levels, 5 models, contamination analysis |

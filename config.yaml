@@ -157,3 +157,56 @@ ct_domain:
     max_features: 10000
     ngram_range: [1, 2]
     cv_folds: 5
+
+# ============================================================
+# Protein-Protein Interaction Negative Domain
+# ============================================================
+
+ppi_domain:
+  # === Paths ===
+  paths:
+    database: data/negbiodb_ppi.db
+    migrations_dir: migrations_ppi
+    data_dir: data/ppi
+
+  # === Downloads ===
+  downloads:
+    huri:
+      hi_union_url: "https://www.interactome-atlas.org/data/HI-union.tsv"
+      hi_iii_url: "https://www.interactome-atlas.org/data/HI-III-20.tsv"
+      dest_dir: data/ppi/huri
+    intact:
+      url: "https://ftp.ebi.ac.uk/pub/databases/intact/current/psimitab/intact_negative.txt"
+      dest: data/ppi/intact/intact_negative.txt
+      min_size_bytes: 1000000
+    humap:
+      base_url: "https://humap2.proteincomplexes.org/static/downloads/3.0"
+      neg_train: ComplexPortal_reduced_20230309.neg_train_ppis.txt
+      neg_test: ComplexPortal_reduced_20230309.neg_test_ppis.txt
+      pos_train: ComplexPortal_reduced_20230309.train_ppis.txt
+      pos_test: ComplexPortal_reduced_20230309.test_ppis.txt
+      dest_dir: data/ppi/humap
+    string:
+      links_url: "https://stringdb-downloads.org/download/protein.links.v12.5/9606.protein.links.v12.5.txt.gz"
+      mapping_url: "https://stringdb-downloads.org/download/mapping_files/uniprot/human.uniprot_2_string.2018.tsv.gz"
+      dest_dir: data/ppi/string
+    biogrid:
+      url: "https://downloads.thebiogrid.org/Download/BioGRID/Latest-Release/BIOGRID-ALL-LATEST.tab3.zip"
+      dest_dir: data/ppi/biogrid
+
+  # === Evidence Type Priority (best first) ===
+  evidence_type_priority:
+    - experimental_non_interaction
+    - literature_reported
+    - ml_predicted_negative
+    - low_score_negative
+    - compartment_separated
+
+  # === STRING ETL Settings ===
+  string_etl:
+    min_protein_degree: 5
+    max_negative_pairs: 500000
+
+  # === Benchmark Split ===
+  split_ratios: {train: 0.7, val: 0.1, test: 0.2}
+  random_seed: 42
