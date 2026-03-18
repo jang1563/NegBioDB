@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-02 (v8 — research/12 fixes: migration idempotency, streaming OOM, DAVIS threshold, export columns, UNIQUE index NULL)
+> Last updated: 2026-03-13 (v10 — Steps 1–6b complete: ETL, export, metrics, ML baselines 18/18, LLM infra)
 
 ---
 
@@ -126,6 +126,7 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - Only the negative set changes: NegBioDB confirmed vs. uniform random vs. degree-matched random
 - **Total: 3 models × 3 negative conditions = 9 runs** (was 3 runs; updated)
 - **Note:** The 3 NegBioDB-negative random-split runs are shared with the baseline count (9 baselines include random split). Thus Exp 1 adds only **6 new runs** (uniform random + degree-matched random). Similarly, Exp 4 shares the random-split baseline and adds only **3 new DDB runs**. Overall: 9 baseline + 6 Exp 1 + 3 Exp 4 = **18 total**.
+- **Exp 4 definition:** The DDB comparison uses a full-task degree-balanced split on the merged M1 balanced benchmark. Positives and negatives are reassigned together under the same split policy.
 
 ### Reporting
 
@@ -139,31 +140,31 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 **Deadline: ~May 15, 2026 (paper) | ~May 1, 2026 (abstract)**
 
-### Week 1: Scaffolding + Download + Schema
+### Week 1: Scaffolding + Download + Schema ✅ COMPLETE
 
-- [ ] **Project scaffolding**: Create `src/negbiodb/`, `scripts/`, `tests/`, `migrations/`, `config.yaml`, `Makefile`, `pyproject.toml`
-- [ ] **Dependency management**: `pyproject.toml` with Python 3.11+, rdkit, pandas, pyarrow, mlcroissant, tqdm, scikit-learn
-- [ ] **Makefile skeleton**: Define target structure (full pipeline encoding in Week 2)
-- [ ] Finalize database schema (SQLite for MVP) — apply `migrations/001_initial_schema.sql`
-- [ ] Download all source data (see below — < 1 day total)
-- [ ] **Verify ChEMBL v36** (Sep 2025) downloaded, not v35
-- [ ] **[B7] Verify PubChem bioactivities.tsv.gz column names** after download (assumed: AID, SID, CID, Activity_Outcome, Activity_Value, Activity_Name — may differ)
+- [x] **Project scaffolding**: Create `src/negbiodb/`, `scripts/`, `tests/`, `migrations/`, `config.yaml`, `Makefile`, `pyproject.toml`
+- [x] **Dependency management**: `pyproject.toml` with Python 3.11+, rdkit, pandas, pyarrow, mlcroissant, tqdm, scikit-learn
+- [x] **Makefile skeleton**: Define target structure (full pipeline encoding in Week 2)
+- [x] Finalize database schema (SQLite for MVP) — apply `migrations/001_initial_schema.sql`
+- [x] Download all source data (see below — < 1 day total)
+- [x] **Verify ChEMBL v36** (Sep 2025) downloaded, not v35
+- [x] **[B7] Verify PubChem bioactivities.tsv.gz column names** after download
 - [ ] **[B4] Hardware decision**: Test local RAM/GPU. If < 32GB RAM → use Llama 3.1 8B + Mistral 7B (not 70B). If ≥ 32GB → quantized Llama 3.3 70B (Q4). Document choice.
 - [ ] **[B2] Verify citations**: Search for Nature MI 2025 negative subsampling paper + Science 2025 editorial. If not found → substitute with EviDTI, DDB paper, LIT-PCBA audit
 - [ ] **[B3] Start NeurIPS 2026 CFP monitoring**: Check neurips.cc weekly. CFP expected ~mid-March 2026.
 
-### Week 2: Standardization + Extraction Start
+### Week 2: Standardization + Extraction Start ✅ COMPLETE
 
-- [ ] Implement compound standardization pipeline (RDKit: salt removal, normalization, InChIKey)
-- [ ] Implement target standardization pipeline (UniProt accession as canonical ID)
-- [ ] Set up cross-DB deduplication (InChIKey[0:14] connectivity layer)
-- [ ] **Makefile pipeline**: Encode full data pipeline dependency graph as executable Makefile targets
+- [x] Implement compound standardization pipeline (RDKit: salt removal, normalization, InChIKey)
+- [x] Implement target standardization pipeline (UniProt accession as canonical ID)
+- [x] Set up cross-DB deduplication (InChIKey[0:14] connectivity layer)
+- [x] **Makefile pipeline**: Encode full data pipeline dependency graph as executable Makefile targets
 - [ ] **[B5] Check shared target pool size**: Count intersection of NegBioDB targets ∩ ChEMBL pChEMBL ≥ 6 targets. If < 200 targets → expand NegBioDB target extraction
 - [ ] **[B6] Check borderline exclusion impact**: Run pChEMBL distribution query on ChEMBL. Estimate data loss from excluding pChEMBL 4.5–5.5 zone
 
-### Week 2-4: Data Extraction
+### Week 2-4: Data Extraction ✅ COMPLETE
 
-**Minimum target: 10K curated entries. Stretch: 20K+.**
+**Result: 30.5M negative_results (>minimum target of 10K — far exceeded)**
 
 **Data Sources (License-Safe Only):**
 
@@ -187,36 +188,42 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 4. Map SID→CID via Sid2CidSMILES.gz, targets via Aid2GeneidAccessionUniProt.gz
 ```
 
-- [ ] Download PubChem FTP files (bioactivities.tsv.gz + bioassays.tsv.gz + mapping files)
-- [ ] Download ChEMBL v36 SQLite via chembl_downloader
-- [ ] Download BindingDB bulk TSV
-- [ ] Build PubChem FTP extraction script (**streaming with chunksize=100K or polars lazy** — 12GB uncompressed, do NOT load all into memory)
-- [ ] Build ChEMBL extraction SQL: inactive (activity_comment + pChEMBL < 5) **AND active (pChEMBL ≥ 6)** for positive data
-- [ ] Build BindingDB extraction script (filter Kd/Ki > 10 uM, human targets)
-- [ ] Integrate DAVIS matrix from TDC (both actives pKd ≥ 7 and inactives pKd ≤ 5)
-- [ ] Run compound/target standardization on all extracted data (multiprocessing for RDKit)
-- [ ] Run cross-DB deduplication + **overlap analysis** (vs DAVIS, TDC, DUD-E, LIT-PCBA)
-- [ ] Assign confidence tiers (gold/silver/bronze/copper — lowercase, matching DDL CHECK constraint)
-- [ ] **Extract ChEMBL positives**: Run SQL query from §Positive Data Protocol (pChEMBL ≥ 6, shared targets only)
-- [ ] **Positive-negative pairing**: Implement `merge_positive_negative()` script (research/09 §2.3). Create balanced (1:1) and realistic (1:10) sets. Verify zero compound-target overlap between active and inactive pools
-- [ ] **Borderline exclusion**: Remove pChEMBL 4.5–5.5 from both active and inactive pools
-- [ ] Spot-check top 100 most-duplicated compounds (manual QC checkpoint)
-- [ ] Run data leakage check: NegBioDB test set ∩ existing benchmark train sets
+- [x] Download PubChem FTP files (bioactivities.tsv.gz + bioassays.tsv.gz + mapping files)
+- [x] Download ChEMBL v36 SQLite via chembl_downloader
+- [x] Download BindingDB bulk TSV
+- [x] Build PubChem FTP extraction script (**streaming with chunksize=100K** — 12GB uncompressed)
+- [x] Build ChEMBL extraction SQL: inactive (activity_comment + pChEMBL < 5) **AND active (pChEMBL ≥ 6)** for positive data
+- [x] Build BindingDB extraction script (filter Kd/Ki > 10 uM, human targets)
+- [x] Integrate DAVIS matrix from TDC (both actives pKd ≥ 7 and inactives pKd ≤ 5)
+- [x] Run compound/target standardization on all extracted data (multiprocessing for RDKit)
+- [x] Run cross-DB deduplication + **overlap analysis** (vs DAVIS, TDC, DUD-E, LIT-PCBA)
+- [x] Assign confidence tiers (gold/silver/bronze/copper — lowercase, matching DDL CHECK constraint)
+- [x] **Extract ChEMBL positives**: 883K → 863K after 21K overlap removal (pChEMBL ≥ 6, shared targets only)
+- [x] **Positive-negative pairing**: M1 balanced (1.73M, 1:1) + M1 realistic (9.49M, 1:10). Zero compound-target overlap verified.
+- [x] **Borderline exclusion**: pChEMBL 4.5–5.5 removed from both pools
+- [x] Spot-check top 100 most-duplicated compounds (manual QC checkpoint)
+- [x] Run data leakage check: cold split leaks = 0, cross-source overlaps documented
 
 ### Week 3-5: Benchmark Construction (ML + LLM)
 
 **ML Track:**
-- [ ] Implement 3 must-have splits (Random, Cold-Compound, Cold-Target) + DDB for Exp 4
-- [ ] Implement ML evaluation metrics: LogAUC[0.001,0.1], BEDROC, EF@1%, EF@5%, AUPRC, MCC, AUROC
-- [ ] (Should have) Add Cold-Both, Temporal, Scaffold splits
+- [x] Implement 3 must-have splits (Random, Cold-Compound, Cold-Target) + DDB for Exp 4
+- [x] Implement ML evaluation metrics: LogAUC[0.001,0.1], BEDROC, EF@1%, EF@5%, AUPRC, MCC, AUROC
+- [x] (Should have) Add Cold-Both, Temporal, Scaffold splits (all 6 implemented)
 
-**LLM Track:**
-- [ ] Design prompt templates for L1, L2, L4 (priority tasks)
-- [ ] Construct L1 dataset: 2,000 MCQ from NegBioDB entries (semi-automated)
-- [ ] Construct L2 dataset: **100 PubMed abstracts** (semi-automated: LLM first-pass + human correction, ~4 days)
-- [ ] Construct L4 dataset: 500 tested/untested pairs (**post-2024 data for test set** + trick pairs for anti-contamination). Implementation details: temporal partitioning (125 pre-2023 + 125 post-2024 tested), low-profile pair selection (drug × Tdark targets), synthetic untested pairs, trick pair generation. See research/08 §5
-- [ ] Implement automated evaluation scripts (L1: accuracy/F1, L2: schema/entity F1, L4: classification F1)
-- [ ] (Should have) Construct L3 dataset: 200 reasoning examples + set up LLM-as-Judge pipeline
+**LLM Track:** ✅ INFRASTRUCTURE COMPLETE (2026-03-12)
+- [x] Design prompt templates for L1, L2, L4 (priority tasks) → `llm_prompts.py`
+- [x] Construct L1 dataset: 2,000 MCQ from NegBioDB entries → `build_l1_dataset.py`
+- [x] Construct L2 dataset: 116 candidates (semi-automated) → `build_l2_dataset.py`
+- [x] Construct L4 dataset: 500 tested/untested pairs → `build_l4_dataset.py`
+- [x] Implement automated evaluation scripts → `llm_eval.py` (L1: accuracy/F1, L2: entity F1, L4: classification F1)
+- [x] Build compound name cache → `compound_names.parquet` (144,633 names from ChEMBL)
+- [x] Construct L3 dataset: 50 pilot reasoning examples → `build_l3_dataset.py`
+- [x] LLM client (vLLM + Gemini) → `llm_client.py`
+- [x] SLURM templates + batch submission → `run_llm_local.slurm`, `run_llm_gemini.slurm`, `submit_llm_all.sh`
+- [x] Results aggregation → `collect_llm_results.py` (Table 2)
+- [x] 54 new tests (29 eval + 25 dataset), 329 total pass
+- [ ] **L2 gold annotation**: 15–20h human review needed for `l2_gold.jsonl`
 
 **Shared:**
 - [ ] Generate Croissant machine-readable metadata (NeurIPS mandatory)
@@ -227,17 +234,19 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 **ML Baselines:**
 
-| Model | Type | Priority | Runs (3 splits) |
-|-------|------|----------|-----------------|
-| DeepDTA | Sequence CNN | Must have | 3 |
-| GraphDTA | Graph neural network | Must have | 3 |
-| DrugBAN | Bilinear attention | Must have | 3 |
-| Random Forest | Traditional ML | Should have | 3 |
-| XGBoost | Traditional ML | Should have | 3 |
-| DTI-LM | Language model-based | Nice to have | 3 |
-| EviDTI | Evidential/uncertainty | Nice to have | 3 |
+| Model | Type | Priority | Runs (3 splits) | Status |
+|-------|------|----------|-----------------|--------|
+| DeepDTA | Sequence CNN | Must have | 3 | ✅ Implemented |
+| GraphDTA | Graph neural network | Must have | 3 | ✅ Implemented |
+| DrugBAN | Bilinear attention | Must have | 3 | ✅ Implemented |
+| Random Forest | Traditional ML | Should have | 3 | Planned |
+| XGBoost | Traditional ML | Should have | 3 | Planned |
+| DTI-LM | Language model-based | Nice to have | 3 | Planned |
+| EviDTI | Evidential/uncertainty | Nice to have | 3 | Planned |
 
 **Must-have ML: 9 baseline runs (3 models × 3 splits) + 6 Exp 1 (2 random conditions) + 3 Exp 4 (DDB split) = 18 total (~36-72 GPU-hours, 3-4 days)**
+
+> **Status (2026-03-13):** All 18/18 ML baseline runs COMPLETE on Cayuga HPC. Results in `results/baselines/`. 3 timed-out DrugBAN jobs recovered via `eval_checkpoint.py`. Key findings: degree-matched negatives inflate LogAUC by +0.112 avg; cold-target LogAUC drops to 0.15–0.33; DDB ≈ random (≤0.010 diff).
 
 **LLM Baselines (all free):**
 
@@ -255,10 +264,10 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - GPT-4/4.1, Claude Sonnet/Opus, Gemini Pro — added to leaderboard later
 
 **Must-have experiments (minimum for paper):**
-- [ ] **Exp 1: NegBioDB vs. random negatives** (the main result — 3 ML models × 3 negative conditions = 9 runs total [3 shared with baselines + 6 new]; see §Random Negative Control Design)
-- [ ] **Exp 4: Node degree bias** (DDB vs. random split, 3 ML models — 3 new DDB runs [random-split comparison shared with baselines])
-- [ ] **Exp 9: LLM vs. ML comparison** (L1 vs. M1 on matched test set — reuses baseline results)
-- [ ] **Exp 10: LLM extraction quality** (L2 entity F1 — reuses baseline results)
+- [x] **Exp 1: NegBioDB vs. random negatives** ✅ COMPLETE — degree-matched avg +0.112 over negbiodb → benchmark inflation confirmed
+- [x] **Exp 4: Node degree bias** ✅ COMPLETE — DDB ≈ random (≤0.010 diff) → degree balancing alone not harder
+- [ ] **Exp 9: LLM vs. ML comparison** (L1 vs. M1 on matched test set — reuses baseline results; awaiting LLM runs)
+- [ ] **Exp 10: LLM extraction quality** (L2 entity F1 — awaiting LLM runs)
 
 **Should-have experiments (strengthen paper, no extra training):**
 - [ ] Exp 5: Cross-database consistency (analysis only, no training)
@@ -539,11 +548,16 @@ DTI (Phase 1-3)
 
 ## Key Milestones (Revised)
 
-| Milestone | Target Date | Deliverable |
-|-----------|------------|-------------|
-| Schema v1.0 finalized | Week 2 (Mar 2026) | SQLite schema + standardization pipeline |
-| Data extraction complete | Week 3-4 (Mar-Apr 2026) | **10K+ curated** negative DTI entries (target: 20K+) |
-| Baseline experiments complete | Week 7 (Apr 2026) | 3 ML models × 3 splits + 3 LLM models × 3 tasks |
+| Milestone | Target Date | Deliverable | Status |
+|-----------|------------|-------------|--------|
+| Schema v1.0 finalized | Week 2 (Mar 2026) | SQLite schema + standardization pipeline | ✅ Done |
+| Data extraction complete | Week 3-4 (Mar 2026) | **30.5M** negative results (far exceeded 10K target) | ✅ Done |
+| ML export & splits | Week 3 (Mar 2026) | 6 split strategies + M1 benchmark datasets | ✅ Done |
+| ML evaluation metrics | Week 3 (Mar 2026) | 7 metrics, 329 tests | ✅ Done |
+| ML baseline infrastructure | Week 4 (Mar 2026) | 3 models + SLURM harness | ✅ Done |
+| ML baseline experiments | Week 5 (Mar 2026) | 18/18 runs complete, key findings confirmed | ✅ Done |
+| LLM benchmark infrastructure | Week 5 (Mar 2026) | L1–L4 datasets, prompts, eval, SLURM templates | ✅ Done |
+| LLM benchmark execution | Week 6-7 (Mar-Apr 2026) | 3 models × 3 tasks × 2 configs on Cayuga | ⏳ Pending |
 | **ArXiv preprint** | **Week 9 (May 2026)** | **Priority establishment** |
 | **NeurIPS 2026 submission** | **Week 11 (~May 15, 2026)** | **Benchmark paper** |
 | Perspective paper submitted | Month 4-6 | Publication bias in DTI |

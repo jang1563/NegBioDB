@@ -73,9 +73,31 @@ Biology-first, Science-extensible Architecture
 | [research/10_expert_panel_review.md](research/10_expert_panel_review.md) | 6-expert panel review: NeurIPS reviewer, data eng, ML, domain, SW arch, PM |
 | [research/11_full_plan_review.md](research/11_full_plan_review.md) | Pre-implementation audit: 16 issues found, feasibility ratings, execution adjustments |
 | [research/12_review_findings_summary.md](research/12_review_findings_summary.md) | Schema/pipeline implementation review: 9 issues (3 critical, 3 high, 2 moderate, 1 low) |
-| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v8 — research/12 fixes incorporated) |
+| [ROADMAP.md](ROADMAP.md) | Execution roadmap (v10 — ML baselines 18/18, LLM infra complete) |
+
+## Implementation Progress (as of 2026-03-13)
+
+| Step | Component | Status |
+|------|-----------|--------|
+| 1 | Schema & scaffolding | ✅ Complete |
+| 2a | Data download (4 sources) | ✅ Complete |
+| 2b | ETL: DAVIS, ChEMBL, PubChem, BindingDB | ✅ Complete |
+| 3 | ML export & splits (6 strategies) | ✅ Complete |
+| 4 | ML baseline models + SLURM harness | ✅ Complete |
+| 5 | ML evaluation metrics (7 metrics, 329 tests) | ✅ Complete |
+| 6a | ML baseline experiments (18/18 runs on Cayuga) | ✅ Complete |
+| 6b | LLM benchmark infrastructure (L1–L4 datasets, prompts, eval, SLURM) | ✅ Complete |
+| 6c | LLM benchmark execution (Cayuga) | ⏳ Pending |
+| 7 | Paper writing & submission | Planned |
+
+**DB:** 30.5M negative_results · 919K compounds · 3.7K targets · 13.22 GB
+
+### Key ML Results (18/18 complete)
+- **Exp 1:** Degree-matched negatives inflate LogAUC by +0.112 avg → benchmark inflation confirmed
+- **Split effect:** Cold-target LogAUC drops to 0.15–0.33 while AUROC stays 0.76–0.89 → AUROC misleading
+- **Exp 4:** DDB ≈ random (≤0.010 diff) → degree balancing alone is not harder
 
 ## Timeline
 - Project initiated: 2026-03-02
 - Primary target: NeurIPS 2026 D&B Track (~May 15, 2026)
-- Last updated: 2026-03-02
+- Last updated: 2026-03-13
