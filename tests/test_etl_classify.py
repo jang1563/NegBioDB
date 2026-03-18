@@ -441,6 +441,28 @@ class TestLoadCtoOutcomes:
         assert len(result) == 2
         assert result[result["nct_id"] == "NCT001"]["outcome"].iloc[0] == 0
 
+    def test_realistic_cto_columns(self, tmp_path):
+        """Regression test: CTO parquet has nct_id + expanded_access columns.
+
+        Previously, the column detection loop would overwrite nct_col with
+        'expanded_access_status_for_nctid', causing zero results.
+        """
+        df = pd.DataFrame({
+            "nct_id": ["NCT00001", "NCT00002", "NCT00003"],
+            "labels": [0.0, 1.0, 0.0],
+            "expanded_access_nctid": [None, None, None],
+            "expanded_access_status_for_nctid": ["Available", None, "Available"],
+            "other_column": ["x", "y", "z"],
+        })
+        path = tmp_path / "cto_realistic.parquet"
+        df.to_parquet(path)
+        result = load_cto_outcomes(path)
+        assert len(result) == 3
+        # Must use 'nct_id' column, not 'expanded_access_status_for_nctid'
+        assert list(result["nct_id"]) == ["NCT00001", "NCT00002", "NCT00003"]
+        assert (result["outcome"] == 0).sum() == 2
+        assert (result["outcome"] == 1).sum() == 1
+
 
 # ============================================================
 # CTO ENRICHMENT TESTS

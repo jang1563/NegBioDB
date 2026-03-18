@@ -10,7 +10,10 @@ import pytest
 from negbiodb_ct.ct_db import create_ct_database, get_connection
 from negbiodb_ct.drug_resolver import (
     _map_mol_type,
+    _pug_download_results,
+    _pubchem_batch_cid_to_properties,
     _pubchem_name_lookup,
+    _xml_escape,
     build_chembl_synonym_index,
     clean_drug_name,
     crossref_inchikey_to_chembl,
@@ -442,3 +445,249 @@ class TestCrossrefInchikeyToChembl:
             db_path,
         )
         assert result == {"BSYNRYMUTXBXSQ-UHFFFAOYSA-N": "CHEMBL25"}
+
+
+# ============================================================
+# XML ESCAPE TESTS
+# ============================================================
+
+
+class TestXmlEscape:
+    def test_ampersand(self):
+        assert _xml_escape("A&B") == "A&amp;B"
+
+    def test_angle_brackets(self):
+        assert _xml_escape("<tag>") == "&lt;tag&gt;"
+
+    def test_quotes(self):
+        assert _xml_escape('say "hello"') == 'say &quot;hello&quot;'
+
+    def test_no_escape_needed(self):
+        assert _xml_escape("imatinib") == "imatinib"
+
+    def test_braces_pass_through(self):
+        # Braces are NOT XML special chars — they pass through xml_escape.
+        # But they must not break the template (we use .replace, not .format).
+        assert _xml_escape("drug{1}") == "drug{1}"
+
+
+# ============================================================
+# PUG BATCH TSV DOWNLOAD TESTS
+# ============================================================
+
+
+class TestPugDownloadResults:
+    def test_parse_tsv(self, monkeypatch):
+        import urllib.request
+
+        tsv_data = "aspirin\t2244\nimatinib\t123631\nunknown\t\n".encode()
+
+        class MockResponse:
+            def read(self):
+                return tsv_data
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **kw: MockResponse())
+        result = _pug_download_results("https://example.com/results.tsv")
+        assert result == {"aspirin": 2244, "imatinib": 123631}
+
+    def test_lowercase_keys(self, monkeypatch):
+        import urllib.request
+
+        tsv_data = "Aspirin\t2244\nIMATINIB\t123631\n".encode()
+
+        class MockResponse:
+            def read(self):
+                return tsv_data
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **kw: MockResponse())
+        result = _pug_download_results("https://example.com/results.tsv")
+        assert "aspirin" in result
+        assert "imatinib" in result
+
+    def test_empty_response(self, monkeypatch):
+        import urllib.request
+
+        class MockResponse:
+            def read(self):
+                return b""
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **kw: MockResponse())
+        result = _pug_download_results("https://example.com/results.tsv")
+        assert result == {}
+
+    def test_ftp_to_https_conversion(self, monkeypatch):
+        """Verify ftp:// URLs are converted to https://."""
+        import urllib.request
+
+        captured_urls = []
+
+        class MockResponse:
+            def read(self):
+                return b""
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        def mock_urlopen(req, **kw):
+            captured_urls.append(req.full_url)
+            return MockResponse()
+
+        monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+        _pug_download_results("ftp://ftp.ncbi.nlm.nih.gov/pubchem/result.tsv")
+        assert captured_urls[0].startswith("https://")
+
+
+# ============================================================
+# BATCH CID→PROPERTIES TESTS
+# ============================================================
+
+
+class TestPubchemBatchCidToProperties:
+    def test_parses_response(self, monkeypatch):
+        import urllib.request
+
+        mock_data = json.dumps({
+            "PropertyTable": {"Properties": [
+                {"CID": 2244, "IsomericSMILES": "CC(=O)OC1=CC=CC=C1C(O)=O", "InChIKey": "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"},
+                {"CID": 5090, "CanonicalSMILES": "OC(=O)C1=CC=CC=C1", "InChIKey": "WPYMKLBDIGXBTP-UHFFFAOYSA-N"},
+            ]}
+        }).encode()
+
+        class MockResponse:
+            def read(self):
+                return mock_data
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **kw: MockResponse())
+        result = _pubchem_batch_cid_to_properties([2244, 5090])
+        assert 2244 in result
+        assert 5090 in result
+        assert result[2244]["smiles"] == "CC(=O)OC1=CC=CC=C1C(O)=O"  # IsomericSMILES preferred
+        assert result[2244]["inchikey"] == "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"
+
+    def test_prefers_isomeric_over_canonical(self, monkeypatch):
+        import urllib.request
+
+        mock_data = json.dumps({
+            "PropertyTable": {"Properties": [{
+                "CID": 1,
+                "IsomericSMILES": "ISO_SMILES",
+                "CanonicalSMILES": "CAN_SMILES",
+                "InChIKey": "TESTKEY",
+            }]}
+        }).encode()
+
+        class MockResponse:
+            def read(self):
+                return mock_data
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **kw: MockResponse())
+        result = _pubchem_batch_cid_to_properties([1])
+        assert result[1]["smiles"] == "ISO_SMILES"
+
+    def test_retries_on_http_error(self, monkeypatch):
+        import urllib.request
+        import urllib.error
+
+        call_count = [0]
+
+        def mock_urlopen(*a, **kw):
+            call_count[0] += 1
+            if call_count[0] < 3:
+                raise urllib.error.HTTPError(None, 503, "Service Unavailable", {}, None)
+            mock_data = json.dumps({
+                "PropertyTable": {"Properties": [
+                    {"CID": 1, "IsomericSMILES": "C", "InChIKey": "KEY"},
+                ]}
+            }).encode()
+
+            class MockResponse:
+                def read(self):
+                    return mock_data
+                def __enter__(self):
+                    return self
+                def __exit__(self, *args):
+                    pass
+
+            return MockResponse()
+
+        monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+        monkeypatch.setattr("time.sleep", lambda _: None)
+        result = _pubchem_batch_cid_to_properties([1], max_retries=3)
+        assert 1 in result
+        assert call_count[0] == 3
+
+
+# ============================================================
+# BATCH RESOLVE STEP 2 TESTS
+# ============================================================
+
+
+class TestResolveStep2BatchMode:
+    def test_batch_mode_dispatches(self, tmp_path, monkeypatch):
+        """With >100 names and use_batch=True, batch path should be used."""
+        from negbiodb_ct import drug_resolver
+
+        batch_called = [False]
+        original_batch = drug_resolver._pubchem_batch_names_to_cids
+
+        def mock_batch(names, batch_size=5000):
+            batch_called[0] = True
+            return {"drugname_001": 1}
+
+        def mock_props(cids, batch_size=500, max_retries=3):
+            return {1: {"smiles": "C", "inchikey": "KEY-A-B"}}
+
+        monkeypatch.setattr(drug_resolver, "_pubchem_batch_names_to_cids", mock_batch)
+        monkeypatch.setattr(drug_resolver, "_pubchem_batch_cid_to_properties", mock_props)
+
+        names = [f"DrugName_{i:03d}" for i in range(150)]
+        cache_path = tmp_path / "cache.json"
+        result = resolve_step2_pubchem(names, cache_path, use_batch=True)
+        assert batch_called[0] is True
+
+    def test_single_mode_for_small_sets(self, tmp_path, monkeypatch):
+        """With ≤100 names, single-name REST should be used."""
+        import urllib.request
+
+        mock_data = json.dumps({
+            "PropertyTable": {"Properties": [{
+                "CID": 2244, "IsomericSMILES": "C", "InChIKey": "KEY",
+            }]}
+        }).encode()
+
+        class MockResponse:
+            def read(self):
+                return mock_data
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **kw: MockResponse())
+
+        cache_path = tmp_path / "cache.json"
+        result = resolve_step2_pubchem(
+            ["aspirin"], cache_path, rate_limit=100.0, use_batch=False,
+        )
+        assert "aspirin" in result

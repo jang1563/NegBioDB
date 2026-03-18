@@ -148,13 +148,62 @@ def resolve_step1_chembl(
 # STEP 2: PUBCHEM REST API
 # ============================================================
 
+_PUG_XML_TEMPLATE = """\
+<?xml version="1.0"?>
+<PCT-Data>
+  <PCT-Data_input>
+    <PCT-InputData>
+      <PCT-InputData_query>
+        <PCT-Query>
+          <PCT-Query_type>
+            <PCT-QueryType>
+              <PCT-QueryType_id-exchange>
+                <PCT-QueryIDExchange>
+                  <PCT-QueryIDExchange_input>
+                    <PCT-QueryUids>
+                      <PCT-QueryUids_synonyms>
+{synonym_elements}
+                      </PCT-QueryUids_synonyms>
+                    </PCT-QueryUids>
+                  </PCT-QueryIDExchange_input>
+                  <PCT-QueryIDExchange_operation-type value="same"/>
+                  <PCT-QueryIDExchange_output-type value="cid"/>
+                  <PCT-QueryIDExchange_output-method value="file-pair"/>
+                  <PCT-QueryIDExchange_compression value="none"/>
+                </PCT-QueryIDExchange>
+              </PCT-QueryType_id-exchange>
+            </PCT-QueryType>
+          </PCT-Query_type>
+        </PCT-Query>
+      </PCT-InputData_query>
+    </PCT-InputData>
+  </PCT-Data_input>
+</PCT-Data>"""
+
+_PUG_POLL_TEMPLATE = """\
+<?xml version="1.0"?>
+<PCT-Data>
+  <PCT-Data_input>
+    <PCT-InputData>
+      <PCT-InputData_request>
+        <PCT-Request>
+          <PCT-Request_reqid>{reqid}</PCT-Request_reqid>
+          <PCT-Request_type value="status"/>
+        </PCT-Request>
+      </PCT-InputData_request>
+    </PCT-InputData>
+  </PCT-Data_input>
+</PCT-Data>"""
+
+PUG_URL = "https://pubchem.ncbi.nlm.nih.gov/pug/pug.cgi"
+
 
 def _pubchem_name_lookup(
     name: str,
     rate_limit: float = 5.0,
     last_call_time: list[float] | None = None,
 ) -> dict | None:
-    """Look up a compound name via PubChem REST API.
+    """Look up a compound name via PubChem REST API (single name).
 
     Returns dict with CID, CanonicalSMILES, InChIKey or None.
     Rate-limited to `rate_limit` requests/sec.
@@ -172,7 +221,7 @@ def _pubchem_name_lookup(
     encoded = urllib.parse.quote(name)
     url = (
         f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/"
-        f"{encoded}/property/CID,CanonicalSMILES,InChIKey/JSON"
+        f"{encoded}/property/IsomericSMILES,InChIKey/JSON"
     )
 
     try:
@@ -187,7 +236,7 @@ def _pubchem_name_lookup(
             p = props[0]
             return {
                 "cid": p.get("CID"),
-                "smiles": p.get("CanonicalSMILES"),
+                "smiles": p.get("IsomericSMILES") or p.get("SMILES") or p.get("CanonicalSMILES"),
                 "inchikey": p.get("InChIKey"),
             }
     except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
@@ -201,12 +250,229 @@ def _pubchem_name_lookup(
     return None
 
 
+def _xml_escape(s: str) -> str:
+    """Escape XML special characters."""
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _pug_submit_batch(names: list[str], max_retries: int = 3) -> str | None:
+    """Submit batch name→CID request to PUG XML. Returns request ID."""
+    import urllib.request
+    import urllib.error
+    import xml.etree.ElementTree as ET
+
+    elements = "\n".join(
+        f"                        <PCT-QueryUids_synonyms_E>{_xml_escape(n)}</PCT-QueryUids_synonyms_E>"
+        for n in names
+    )
+    xml_body = _PUG_XML_TEMPLATE.replace("{synonym_elements}", elements)
+
+    for attempt in range(max_retries):
+        req = urllib.request.Request(
+            PUG_URL,
+            data=xml_body.encode("utf-8"),
+            headers={"Content-Type": "application/xml", "User-Agent": "NegBioDB/1.0"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                root = ET.fromstring(resp.read())
+            # Extract reqid from response
+            for elem in root.iter():
+                if "Waiting_reqid" in elem.tag and elem.text:
+                    return elem.text.strip()
+            # Check for immediate result
+            for elem in root.iter():
+                if "Status" in elem.tag:
+                    val = elem.get("value", "")
+                    if val in ("success", "hit"):
+                        for dl in root.iter():
+                            if "Download-URL_url" in dl.tag and dl.text:
+                                return f"DIRECT:{dl.text.strip()}"
+            # No reqid and no success — likely a server issue
+            return None
+        except Exception as e:
+            logger.warning("PUG batch submit attempt %d/%d failed: %s", attempt + 1, max_retries, e)
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+    return None
+
+
+def _pug_poll(reqid: str, max_wait: int = 300) -> str | None:
+    """Poll PUG for batch job completion. Returns download URL."""
+    import urllib.request
+    import xml.etree.ElementTree as ET
+
+    xml_body = _PUG_POLL_TEMPLATE.replace("{reqid}", _xml_escape(reqid))
+    deadline = time.time() + max_wait
+
+    while time.time() < deadline:
+        time.sleep(5)
+        req = urllib.request.Request(
+            PUG_URL,
+            data=xml_body.encode("utf-8"),
+            headers={"Content-Type": "application/xml", "User-Agent": "NegBioDB/1.0"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                root = ET.fromstring(resp.read())
+
+            for elem in root.iter():
+                if "Status" in elem.tag:
+                    val = elem.get("value", "")
+                    if val == "success" or val == "hit":
+                        # Find download URL
+                        for dl in root.iter():
+                            if "Download-URL_url" in dl.tag and dl.text:
+                                return dl.text.strip()
+                    elif val in ("server-error", "data-error", "input-error"):
+                        logger.warning("PUG batch job failed with status: %s", val)
+                        return None
+            # Still running — continue polling
+        except Exception as e:
+            logger.debug("PUG poll error: %s", e)
+
+    logger.warning("PUG batch job timed out after %ds", max_wait)
+    return None
+
+
+def _pug_download_results(url: str) -> dict[str, int]:
+    """Download PUG batch result TSV and parse name→CID mapping."""
+    import urllib.request
+
+    # PUG sometimes returns ftp:// URLs; convert to https
+    if url.startswith("ftp://"):
+        url = url.replace("ftp://", "https://", 1)
+    # Normalize host to ftp.ncbi.nlm.nih.gov if needed
+    if "ftp.ncbi.nlm.nih.gov" not in url and "pubchem.ncbi.nlm.nih.gov" not in url:
+        url = re.sub(r"https?://[^/]+", "https://ftp.ncbi.nlm.nih.gov", url)
+
+    req = urllib.request.Request(url, headers={"User-Agent": "NegBioDB/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        logger.warning("PUG download failed: %s", e)
+        return {}
+
+    result: dict[str, int] = {}
+    for line in data.strip().split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 2 and parts[1].strip():
+            name = parts[0].strip()
+            try:
+                cid = int(parts[1].strip())
+                result[name.lower()] = cid
+            except ValueError:
+                continue
+    return result
+
+
+def _pubchem_batch_names_to_cids(
+    names: list[str], batch_size: int = 5000,
+) -> dict[str, int]:
+    """Batch-resolve compound names → CIDs via PUG XML interface.
+
+    Returns dict mapping lowercase name → CID.
+    """
+    result: dict[str, int] = {}
+    batches = [names[i:i + batch_size] for i in range(0, len(names), batch_size)]
+
+    for i, batch in enumerate(batches):
+        logger.info("PUG batch %d/%d (%d names)...", i + 1, len(batches), len(batch))
+        reqid = _pug_submit_batch(batch)
+        if reqid is None:
+            logger.warning("PUG batch %d submit failed, skipping", i + 1)
+            continue
+
+        if reqid.startswith("DIRECT:"):
+            url = reqid[7:]
+        else:
+            url = _pug_poll(reqid, max_wait=600)
+
+        if url:
+            batch_result = _pug_download_results(url)
+            result.update(batch_result)
+            logger.info("PUG batch %d: %d / %d resolved", i + 1, len(batch_result), len(batch))
+        else:
+            logger.warning("PUG batch %d: no results (poll failed or timed out)", i + 1)
+
+        # Small delay between batches
+        if i < len(batches) - 1:
+            time.sleep(2)
+
+    return result
+
+
+def _pubchem_batch_cid_to_properties(
+    cids: list[int], batch_size: int = 500, max_retries: int = 3,
+) -> dict[int, dict]:
+    """Batch-fetch CID → {smiles, inchikey} via PUG REST POST.
+
+    Returns dict mapping CID → {smiles, inchikey}.
+    """
+    import urllib.request
+    import urllib.error
+
+    result: dict[int, dict] = {}
+    batches = [cids[i:i + batch_size] for i in range(0, len(cids), batch_size)]
+
+    for i, batch in enumerate(batches):
+        cid_str = ",".join(str(c) for c in batch)
+        url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/property/IsomericSMILES,CanonicalSMILES,InChIKey/JSON"
+        body = f"cid={cid_str}".encode("utf-8")
+
+        for attempt in range(max_retries):
+            try:
+                req = urllib.request.Request(
+                    url, data=body,
+                    headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "NegBioDB/1.0"},
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    data = json.loads(resp.read())
+
+                for p in data.get("PropertyTable", {}).get("Properties", []):
+                    cid = p.get("CID")
+                    if cid:
+                        # POST response uses varying key names for SMILES;
+                        # prefer IsomericSMILES (preserves stereochemistry)
+                        smiles = (
+                            p.get("IsomericSMILES")
+                            or p.get("SMILES")
+                            or p.get("CanonicalSMILES")
+                            or p.get("ConnectivitySMILES")
+                        )
+                        result[cid] = {
+                            "smiles": smiles,
+                            "inchikey": p.get("InChIKey"),
+                        }
+                break  # Success — no retry needed
+            except (urllib.error.HTTPError, urllib.error.URLError) as e:
+                logger.warning("PUG REST CID batch %d/%d attempt %d/%d failed: %s",
+                               i + 1, len(batches), attempt + 1, max_retries, e)
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+            except Exception as e:
+                logger.warning("PUG REST CID batch non-retryable error: %s", e)
+                break
+
+        # Rate limit: ~5 req/sec
+        time.sleep(0.25)
+
+    return result
+
+
 def resolve_step2_pubchem(
     names: list[str],
     cache_path: Path | None = None,
     rate_limit: float = 5.0,
+    use_batch: bool = True,
 ) -> dict[str, dict]:
-    """Step 2: PubChem REST API name lookup with caching.
+    """Step 2: PubChem name lookup with caching.
+
+    Uses batch PUG XML + REST POST for large sets (>100 names),
+    falls back to single-name REST for small sets or testing.
 
     Returns dict mapping name -> {cid, smiles, inchikey}.
     """
@@ -230,20 +496,72 @@ def resolve_step2_pubchem(
             cache[k] = None
 
     resolved: dict[str, dict] = {}
-    last_call = [0.0]
+    uncached_names: list[str] = []
+    uncached_cleaned: list[str] = []
+    name_to_cleaned: dict[str, str] = {}
 
-    for name in tqdm(names, desc="Step 2: PubChem API"):
+    for name in names:
         cleaned = clean_drug_name(name)
+        name_to_cleaned[name] = cleaned
         if cleaned in cache:
             entry = cache[cleaned]
             if entry is not None:
                 resolved[name] = entry
-            continue
+        else:
+            uncached_names.append(name)
+            uncached_cleaned.append(cleaned)
 
-        result = _pubchem_name_lookup(cleaned, rate_limit, last_call)
-        cache[cleaned] = result
-        if result is not None:
-            resolved[name] = result
+    logger.info("PubChem: %d cached hits, %d uncached to resolve", len(resolved), len(uncached_names))
+
+    if uncached_cleaned:
+        unique_cleaned = list(dict.fromkeys(uncached_cleaned))
+
+        if use_batch and len(unique_cleaned) > 100:
+            # BATCH: PUG XML name→CID, then PUG REST CID→properties
+            logger.info("Using PUG XML batch for %d unique names", len(unique_cleaned))
+            name_to_cid = _pubchem_batch_names_to_cids(unique_cleaned)
+
+            resolved_cids = list(set(name_to_cid.values()))
+            logger.info("PUG batch: %d names → %d unique CIDs", len(name_to_cid), len(resolved_cids))
+
+            cid_to_props = _pubchem_batch_cid_to_properties(resolved_cids) if resolved_cids else {}
+            logger.info("CID→properties: %d / %d fetched", len(cid_to_props), len(resolved_cids))
+
+            # Merge into cache
+            for cleaned in unique_cleaned:
+                cid = name_to_cid.get(cleaned)
+                if cid is not None:
+                    props = cid_to_props.get(cid, {})
+                    entry = {
+                        "cid": cid,
+                        "smiles": props.get("smiles"),
+                        "inchikey": props.get("inchikey"),
+                    }
+                    cache[cleaned] = entry
+                else:
+                    cache[cleaned] = None
+
+            # Map back to original names
+            for name in uncached_names:
+                cleaned = name_to_cleaned[name]
+                entry = cache.get(cleaned)
+                if entry is not None:
+                    resolved[name] = entry
+        else:
+            # SINGLE: Original per-name REST API
+            last_call = [0.0]
+            for name in tqdm(uncached_names, desc="Step 2: PubChem API"):
+                cleaned = name_to_cleaned[name]
+                if cleaned in cache:
+                    entry = cache[cleaned]
+                    if entry is not None:
+                        resolved[name] = entry
+                    continue
+
+                result = _pubchem_name_lookup(cleaned, rate_limit, last_call)
+                cache[cleaned] = result
+                if result is not None:
+                    resolved[name] = result
 
     # Save cache
     if cache_path:
@@ -252,7 +570,7 @@ def resolve_step2_pubchem(
             json.dump(cache, f)
         logger.info("PubChem cache saved: %d entries", len(cache))
 
-    logger.info("Step 2 (PubChem API): %d / %d resolved", len(resolved), len(names))
+    logger.info("Step 2 (PubChem): %d / %d resolved", len(resolved), len(names))
     return resolved
 
 
@@ -644,8 +962,11 @@ def run_drug_resolution(
         if not drugs:
             return stats
 
-        id_map = {row[1]: row[0] for row in drugs}  # name -> id
-        names = [row[1] for row in drugs]
+        # name -> list of intervention_ids (multiple interventions can share a name)
+        id_map: dict[str, list[int]] = {}
+        for row in drugs:
+            id_map.setdefault(row[1], []).append(row[0])
+        names = list(id_map.keys())
 
         # Pre-filter: skip non-drug names (placebos, controls, etc.)
         non_drug = [n for n in names if is_non_drug_name(n)]
@@ -721,48 +1042,42 @@ def run_drug_resolution(
         chembl_to_interv: dict[str, list[int]] = {}
 
         for name, chembl_id in all_chembl_ids.items():
-            interv_id = id_map.get(name)
-            if interv_id is None:
-                continue
-            d = details.get(chembl_id, {})
-            resolutions[interv_id] = {
-                "chembl_id": chembl_id,
-                "canonical_smiles": d.get("canonical_smiles"),
-                "inchikey": d.get("inchikey"),
-                "inchikey_connectivity": d.get("inchikey_connectivity"),
-                "molecular_type": d.get("molecular_type", "unknown"),
-            }
-            chembl_to_interv.setdefault(chembl_id, []).append(interv_id)
+            for interv_id in id_map.get(name, []):
+                d = details.get(chembl_id, {})
+                resolutions[interv_id] = {
+                    "chembl_id": chembl_id,
+                    "canonical_smiles": d.get("canonical_smiles"),
+                    "inchikey": d.get("inchikey"),
+                    "inchikey_connectivity": d.get("inchikey_connectivity"),
+                    "molecular_type": d.get("molecular_type", "unknown"),
+                }
+                chembl_to_interv.setdefault(chembl_id, []).append(interv_id)
 
         # Add PubChem-only data (no ChEMBL match)
         for name, pdata in step2.items():
-            interv_id = id_map.get(name)
-            if interv_id is None:
-                continue
-            if interv_id not in resolutions:
-                resolutions[interv_id] = {}
-            resolutions[interv_id]["pubchem_cid"] = pdata.get("cid")
-            # Store PubChem SMILES/InChIKey if no ChEMBL data present
-            if not resolutions[interv_id].get("canonical_smiles") and pdata.get("smiles"):
-                resolutions[interv_id]["canonical_smiles"] = pdata["smiles"]
-            if not resolutions[interv_id].get("inchikey") and pdata.get("inchikey"):
-                ik = pdata["inchikey"]
-                resolutions[interv_id]["inchikey"] = ik
-                resolutions[interv_id]["inchikey_connectivity"] = ik.split("-")[0] if ik else None
+            for interv_id in id_map.get(name, []):
+                if interv_id not in resolutions:
+                    resolutions[interv_id] = {}
+                resolutions[interv_id]["pubchem_cid"] = pdata.get("cid")
+                # Store PubChem SMILES/InChIKey if no ChEMBL data present
+                if not resolutions[interv_id].get("canonical_smiles") and pdata.get("smiles"):
+                    resolutions[interv_id]["canonical_smiles"] = pdata["smiles"]
+                if not resolutions[interv_id].get("inchikey") and pdata.get("inchikey"):
+                    ik = pdata["inchikey"]
+                    resolutions[interv_id]["inchikey"] = ik
+                    resolutions[interv_id]["inchikey_connectivity"] = ik.split("-")[0] if ik else None
 
         # Add override data (skip entries with no useful values)
         for name, override in step4.items():
-            interv_id = id_map.get(name)
-            if interv_id is None:
-                continue
             has_data = any(v is not None for v in override.values())
             if not has_data:
                 continue  # Skip entry (placebo, generic class, etc.)
-            if interv_id not in resolutions:
-                resolutions[interv_id] = {}
-            for k, v in override.items():
-                if v is not None:
-                    resolutions[interv_id][k] = v
+            for interv_id in id_map.get(name, []):
+                if interv_id not in resolutions:
+                    resolutions[interv_id] = {}
+                for k, v in override.items():
+                    if v is not None:
+                        resolutions[interv_id][k] = v
 
         # Update database
         n_updated = update_interventions(conn, resolutions)
@@ -773,12 +1088,16 @@ def run_drug_resolution(
         n_targets = insert_intervention_targets(conn, targets, chembl_to_interv)
         stats["targets_inserted"] = n_targets
 
-        # Final counts
+        # Final counts (use intervention_ids for consistent units)
         total_resolved = len(resolutions)
-        total_drugs = len(drugs)
+        total_drug_ids = sum(
+            len(ids) for name, ids in id_map.items()
+            if not is_non_drug_name(name)
+        )
         stats["total_resolved"] = total_resolved
+        stats["total_drug_interventions"] = total_drug_ids
         stats["coverage_pct"] = (
-            round(100 * total_resolved / total_drugs, 1) if total_drugs > 0 else 0
+            round(100 * total_resolved / total_drug_ids, 1) if total_drug_ids > 0 else 0
         )
 
     finally:

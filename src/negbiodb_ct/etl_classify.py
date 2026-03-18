@@ -176,9 +176,9 @@ def load_cto_outcomes(parquet_path: Path) -> pd.DataFrame:
     outcome_col = None
     for col in df.columns:
         cl = col.lower()
-        if "nct" in cl or "trial_id" in cl:
+        if nct_col is None and (cl == "nct_id" or cl == "nctid" or "trial_id" in cl):
             nct_col = col
-        elif "outcome" in cl or "label" in cl or "success" in cl:
+        elif outcome_col is None and ("outcome" in cl or "label" in cl or "success" in cl):
             outcome_col = col
 
     if nct_col is None or outcome_col is None:
@@ -597,17 +597,41 @@ def enrich_with_cto(
     if len(cto_failures) == 0:
         return []
 
-    nct_ids = tuple(cto_failures["nct_id"].unique().tolist())
-    placeholders = ",".join(["?"] * len(nct_ids))
-    cursor = conn.execute(
-        f"SELECT source_trial_id, trial_id, trial_phase "
-        f"FROM clinical_trials WHERE source_trial_id IN ({placeholders})",
-        nct_ids,
-    )
-    trial_info = {
-        row[0]: {"trial_id": row[1], "phase": row[2]}
-        for row in cursor.fetchall()
-    }
+    nct_list = cto_failures["nct_id"].unique().tolist()
+
+    # Batch IN clause to avoid SQLite variable limit
+    trial_info: dict[str, dict] = {}
+    for i in range(0, len(nct_list), BATCH_SIZE):
+        batch = nct_list[i:i + BATCH_SIZE]
+        placeholders = ",".join(["?"] * len(batch))
+        cursor = conn.execute(
+            f"SELECT source_trial_id, trial_id, trial_phase "
+            f"FROM clinical_trials WHERE source_trial_id IN ({placeholders})",
+            batch,
+        )
+        for row in cursor.fetchall():
+            trial_info[row[0]] = {"trial_id": row[1], "phase": row[2]}
+
+    # Pre-fetch interventions and conditions in bulk (avoid N+1 queries)
+    trial_ids = [info["trial_id"] for info in trial_info.values()]
+    trial_to_intervs: dict[int, list[int]] = {}
+    trial_to_conds: dict[int, list[int]] = {}
+
+    for i in range(0, len(trial_ids), BATCH_SIZE):
+        batch = trial_ids[i:i + BATCH_SIZE]
+        placeholders = ",".join(["?"] * len(batch))
+
+        for row in conn.execute(
+            f"SELECT trial_id, intervention_id FROM trial_interventions "
+            f"WHERE trial_id IN ({placeholders})", batch,
+        ).fetchall():
+            trial_to_intervs.setdefault(row[0], []).append(row[1])
+
+        for row in conn.execute(
+            f"SELECT trial_id, condition_id FROM trial_conditions "
+            f"WHERE trial_id IN ({placeholders})", batch,
+        ).fetchall():
+            trial_to_conds.setdefault(row[0], []).append(row[1])
 
     results: list[dict] = []
     seen: set[tuple] = set()
@@ -620,15 +644,8 @@ def enrich_with_cto(
             continue
 
         trial_id = info["trial_id"]
-
-        interv_ids = [r[0] for r in conn.execute(
-            "SELECT intervention_id FROM trial_interventions WHERE trial_id = ?",
-            (trial_id,),
-        ).fetchall()]
-        cond_ids = [r[0] for r in conn.execute(
-            "SELECT condition_id FROM trial_conditions WHERE trial_id = ?",
-            (trial_id,),
-        ).fetchall()]
+        interv_ids = trial_to_intervs.get(trial_id, [])
+        cond_ids = trial_to_conds.get(trial_id, [])
 
         for interv_id in interv_ids:
             for cond_id in cond_ids:
