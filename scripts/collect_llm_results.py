@@ -23,8 +23,8 @@ RESULTS_DIR = PROJECT_ROOT / "results" / "llm"
 PRIMARY_METRICS = {
     "l1": ["accuracy", "macro_f1", "mcc"],
     "l2": ["schema_compliance", "entity_f1", "field_accuracy"],
-    "l3": ["overall"],  # overall.mean
-    "l4": ["accuracy", "mcc", "evidence_citation_rate"],
+    "l3": ["judge_accuracy", "judge_reasoning", "judge_completeness", "judge_specificity", "overall"],
+    "l4": ["accuracy", "mcc", "evidence_citation_rate", "accuracy_pre_2023", "accuracy_post_2024", "contamination_gap"],
 }
 
 
@@ -121,9 +121,17 @@ def aggregate_results(results: list[dict]) -> list[dict]:
 
         metrics = PRIMARY_METRICS.get(task, [])
         for metric in metrics:
+            # Strip "judge_" prefix to look up raw key in results.json
+            raw_key = metric.removeprefix("judge_")
             values = []
             for m in effective_list:
-                val = m.get(metric)
+                # Backward compat: derive contamination_gap from pre/post
+                if metric == "contamination_gap" and m.get("contamination_gap") is None:
+                    pre = m.get("accuracy_pre_2023")
+                    post = m.get("accuracy_post_2024")
+                    val = round(pre - post, 4) if pre is not None and post is not None else None
+                else:
+                    val = m.get(raw_key)
                 # Handle nested dicts (e.g., L3 overall.mean)
                 if isinstance(val, dict):
                     val = val.get("mean")

@@ -105,7 +105,7 @@ def main():
     parser.add_argument("--task", required=True, choices=["l1", "l2", "l3", "l4"])
     parser.add_argument("--model", required=True, help="Model name or path")
     parser.add_argument(
-        "--provider", required=True, choices=["vllm", "gemini", "openai"]
+        "--provider", required=True, choices=["vllm", "gemini", "openai", "anthropic"]
     )
     parser.add_argument(
         "--config", default="zero-shot", choices=["zero-shot", "3-shot"]

@@ -98,11 +98,20 @@ def download_file_ftp(url: str, dest: str | Path, desc: str = "Downloading") -> 
 
 
 def download_file_http(
-    url: str, dest: str | Path, desc: str = "Downloading"
+    url: str,
+    dest: str | Path,
+    desc: str = "Downloading",
+    verify: bool = True,
 ) -> Path:
     """Download a file via HTTP with tqdm progress bar.
 
     Skips download if dest already exists and is non-empty.
+
+    Args:
+        url: URL to download.
+        dest: Destination file path.
+        desc: Progress bar description.
+        verify: Whether to verify SSL certificates (default True).
     """
     dest = Path(dest)
     if dest.exists() and dest.stat().st_size > 0:
@@ -111,7 +120,9 @@ def download_file_http(
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        resp = requests.get(url, stream=True, allow_redirects=True, timeout=300)
+        resp = requests.get(
+            url, stream=True, allow_redirects=True, timeout=300, verify=verify
+        )
         resp.raise_for_status()
 
         total = int(resp.headers.get("content-length", 0))

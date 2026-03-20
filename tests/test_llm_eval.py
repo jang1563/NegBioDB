@@ -308,6 +308,30 @@ class TestEvaluateL4:
         assert result["accuracy_pre_2023"] == 0.5
         assert result["accuracy_post_2024"] == 0.5
 
+    def test_contamination_gap_flagged(self):
+        """Gap > 0.15 should set contamination_flag=True."""
+        # 4 pre_2023 correct, 0 post_2024 correct → gap = 1.0
+        preds = ["tested", "untested", "untested", "tested"]
+        gold = ["tested", "untested", "tested", "untested"]
+        temporal = ["pre_2023", "pre_2023", "post_2024", "post_2024"]
+        result = evaluate_l4(preds, gold, temporal)
+        assert result["accuracy_pre_2023"] == 1.0
+        assert result["accuracy_post_2024"] == 0.0
+        assert result["contamination_gap"] == 1.0
+        assert result["contamination_flag"] is True
+
+    def test_contamination_gap_not_flagged(self):
+        """Gap <= 0.15 should set contamination_flag=False."""
+        # Equal accuracy across temporal groups → gap = 0.0
+        preds = ["tested", "untested", "tested", "untested"]
+        gold = ["tested", "untested", "tested", "untested"]
+        temporal = ["pre_2023", "pre_2023", "post_2024", "post_2024"]
+        result = evaluate_l4(preds, gold, temporal)
+        assert result["accuracy_pre_2023"] == 1.0
+        assert result["accuracy_post_2024"] == 1.0
+        assert result["contamination_gap"] == 0.0
+        assert result["contamination_flag"] is False
+
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 

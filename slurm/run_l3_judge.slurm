@@ -25,6 +25,7 @@ RUN="${RUN:-}"
 # Init — use scratch env via PATH (no conda activate, no NFS /home)
 export PATH="${SCRATCH_ENV}/bin:${PATH}"
 export CONDA_PREFIX="${SCRATCH_ENV}"
+export PYTHONUNBUFFERED=1
 
 echo "=== L3 Judge Pipeline ==="
 echo "Judge model: gemini-2.5-flash-lite"

@@ -36,7 +36,7 @@ Biology-first, Science-extensible Architecture
 └────────┘ └────────┘  └──────────┘
 ```
 
-**Expansion Path:** DTI → Clinical Trial Failure → Gene Function → Chemistry → Materials Science
+**Expansion Path:** DTI → Clinical Trial Failure → Protein-Protein Interaction → Gene Function → Chemistry → Materials Science
 
 ## Key Decisions
 
@@ -116,6 +116,14 @@ Data Sources                    Pipeline                      Database
 
 **Drug resolution:** 36,361/176,741 interventions (20.6%) have ChEMBL IDs; 27,534 (15.6%) have SMILES; 66,393 intervention-target mappings
 
+**ML Export (CT-5):** 7 output files in `exports/ct/`:
+- `negbiodb_ct_pairs.parquet`: 102,850 failure pairs, 6 splits, all tiers
+- `negbiodb_ct_m1_balanced.parquet`: 11,222 rows (5,611 pos + 5,611 neg, silver+gold)
+- `negbiodb_ct_m1_realistic.parquet`: 36,957 rows (5,611 pos + 31,346 neg)
+- `negbiodb_ct_m1_smiles_only.parquet`: 3,878 rows (1,939 pos + 1,939 neg)
+- `negbiodb_ct_m2.parquet`: 112,298 results (non-copper, 7-way category, 6 splits)
+- Cold leakage = 0 (both drug and condition), M1 conflict-free verified
+
 ### Data Sources
 
 | Source | License | Records | Purpose |
@@ -153,9 +161,71 @@ Data Sources                    Pipeline                      Database
 | CT-2 | Data loading (4 sources) | ✅ Complete |
 | CT-3 | Enrichment & resolution | ✅ Complete |
 | CT-4 | Analysis & benchmark design | ✅ Complete |
-| CT-5 | ML export & splits | Planned |
-| CT-6 | ML baseline experiments | Planned |
-| CT-7 | LLM benchmark execution | Planned |
+| CT-5 | ML export & splits | ✅ Complete |
+| CT-6 | ML baseline experiments | Running on Cayuga (102/108 complete) |
+| CT-7 | LLM benchmark execution | Running on Cayuga |
+
+---
+
+## Protein-Protein Interaction Domain (NegBioDB-PPI)
+
+The third domain extends NegBioDB to protein-protein interactions, capturing experimentally confirmed non-interactions.
+
+### Architecture
+
+```
+Data Sources                    Pipeline                      Database
+┌──────────┐    ┌────────────────────────────┐    ┌─────────────────────┐
+│ IntAct   │───→│ etl_intact.py (PSI-MI TAB) │───→│ proteins            │
+│ HuRI     │───→│ etl_huri.py (Y2H screen)   │───→│ negative_results    │
+│ hu.MAP   │───→│ etl_humap.py (ML-derived)  │───→│ protein_protein_pairs│
+│ STRING   │───→│ etl_string.py (zero-score) │───→│ ppi_split_*         │
+└──────────┘    └────────────────────────────┘    └─────────────────────┘
+```
+
+**4 ETL modules + protein mapper + aggregation layer**
+
+### Database State (as of 2026-03-19)
+
+| Metric | Value |
+|--------|-------|
+| Proteins | 18,412 |
+| Negative results | 2,229,670 |
+| Aggregated pairs | 2,220,786 |
+| Multi-source overlaps | 8,800 |
+| DB size | 849 MB |
+
+**Tier distribution:** gold 500,069 (HuRI + IntAct) / silver 1,229,601 (hu.MAP + IntAct) / bronze 500,000 (STRING)
+
+### Data Sources
+
+| Source | License | Records | Purpose |
+|--------|---------|---------|---------|
+| IntAct | CC BY 4.0 | 779 pairs | Curated non-interactions (gold/silver) |
+| HuRI (interactome atlas) | CC BY 4.0 | 500,000 pairs | Y2H systematic screen negatives (gold) |
+| hu.MAP 3.0 | MIT | 1,228,891 pairs | ML-derived negatives from ComplexPortal (silver) |
+| STRING v12.0 | CC BY 4.0 | 500,000 pairs | Zero-score pairs between well-studied proteins (bronze) |
+
+### ML Benchmark Design
+
+**3 models:** SiameseCNN (shared CNN encoder), PIPR (cross-attention), MLPFeatures (67-dim hand-crafted)
+
+**4 split strategies:** random, cold_protein, cold_both (Metis graph partition), degree_balanced
+
+**18 runs per seed:** 9 baselines (3 models × 3 splits) + 6 Exp 1 (2 controls × 3 models) + 3 Exp 4 (DDB × 3 models)
+
+**Positive source:** HuRI HI-union (~62K pairs), 578 conflicts removed from both sides
+
+**Exports:** `ppi_m1_balanced.parquet` (123,456 rows), `ppi_m1_realistic.parquet` (679,008 rows), + 2 Exp 1 controls + DDB
+
+### Implementation Progress (as of 2026-03-19)
+
+| Step | Component | Status |
+|------|-----------|--------|
+| PPI-A | Schema & ETL modules | ✅ Complete |
+| PPI-B | Data loading (4 sources) | ✅ Complete |
+| PPI-C | ML export, models, training harness | ✅ Code complete |
+| PPI-D | ML baseline experiments | Awaiting HPC data transfer |
 
 ---
 
@@ -183,4 +253,4 @@ Data Sources                    Pipeline                      Database
 ## Timeline
 - Project initiated: 2026-03-02
 - CT domain initiated: 2026-03-17
-- Last updated: 2026-03-18
+- Last updated: 2026-03-19

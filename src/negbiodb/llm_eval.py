@@ -344,6 +344,14 @@ def evaluate_l4(
             if group_pred:
                 result[f"accuracy_{group}"] = accuracy_score(group_gold, group_pred)
 
+        # Contamination flag
+        pre = result.get("accuracy_pre_2023")
+        post = result.get("accuracy_post_2024")
+        if pre is not None and post is not None:
+            gap = pre - post
+            result["contamination_gap"] = round(gap, 4)
+            result["contamination_flag"] = gap > 0.15
+
     return result
 
 

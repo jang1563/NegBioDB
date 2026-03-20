@@ -247,7 +247,8 @@ def log_auc(
 
     # Integrate TPR vs log10(FPR) using trapezoidal rule
     log_fpr = np.log10(fpr_trim)
-    area = float(np.trapezoid(tpr_trim, log_fpr))
+    _trapezoid = getattr(np, "trapezoid", np.trapz)
+    area = float(_trapezoid(tpr_trim, log_fpr))
 
     # Normalize by the log10 width of the FPR range
     log_width = np.log10(fpr_max) - np.log10(fpr_min)

@@ -2,6 +2,10 @@
 data/
 exports/
 
+# Experiment results & runtime logs (generated, large)
+results/
+logs/
+
 # Database files
 *.db
 *.sqlite

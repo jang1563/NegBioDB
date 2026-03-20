@@ -23,13 +23,15 @@ TASK="${TASK:-l1}"
 MODEL="${MODEL:-gemini-2.5-flash}"
 CONFIG="${CONFIG:-zero-shot}"
 FS="${FS:-0}"
+MAX_TOKENS="${MAX_TOKENS:-1024}"
 
 # Init — use scratch env via PATH (no conda activate, no NFS /home)
 export PATH="${SCRATCH_ENV}/bin:${PATH}"
 export CONDA_PREFIX="${SCRATCH_ENV}"
+export PYTHONUNBUFFERED=1
 
 echo "=== LLM Gemini Benchmark ==="
-echo "Task: ${TASK}, Model: ${MODEL}, Config: ${CONFIG}, FS: ${FS}"
+echo "Task: ${TASK}, Model: ${MODEL}, Config: ${CONFIG}, FS: ${FS}, MaxTok: ${MAX_TOKENS}"
 echo "Node: $(hostname)"
 echo "Start: $(date)"
 
@@ -39,6 +41,7 @@ python "${PROJECT_DIR}/scripts/run_llm_benchmark.py" \
     --provider gemini \
     --config "${CONFIG}" \
     --fewshot-set "${FS}" \
+    --max-tokens "${MAX_TOKENS}" \
     --data-dir "${PROJECT_DIR}/exports/llm_benchmarks" \
     --output-dir "${PROJECT_DIR}/results/llm"
 

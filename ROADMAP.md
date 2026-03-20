@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-18 (v11 — DTI complete, CT domain pipeline + benchmark design complete)
+> Last updated: 2026-03-19 (v14 — DTI complete, CT-6 ML done, CT-7 LLM 64/80 done, PPI Phase C complete)
 
 ---
 
@@ -338,26 +338,81 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
   - 4 levels: CT-L1 (5-way MCQ), CT-L2 (extraction), CT-L3 (reasoning), CT-L4 (discrimination)
   - 5 models, anti-contamination analysis
 
-### Step CT-5: ML Export & Splits (Planned)
+### Step CT-5: ML Export & Splits ✅ COMPLETE
 
-- [ ] CT export module (`src/negbiodb_ct/ct_export.py`)
-- [ ] CTO success trials extraction (CT-M1 positive class)
-- [ ] Feature engineering (drug FP + mol properties + condition one-hot + trial design)
-- [ ] 6 split strategies implementation
+- [x] CT export module (`src/negbiodb_ct/ct_export.py`) — 1,100 lines, 3 loaders + 6 splits + M1 builder + leakage report
+- [x] CTO success trials extraction — 5,611 clean pairs (7,835 conflict pairs removed from both sides)
+- [x] 6 split strategies (random, cold_drug, cold_condition, temporal, scaffold, degree_balanced)
+- [x] CT-M1: balanced (11,222), realistic (36,957), smiles_only (3,878)
+- [x] CT-M2: 112,298 results (non-copper, 7-way classification)
+- [x] Leakage report: cold leakage=0, M1 conflict-free verified
+- [x] 52 tests passing (`tests/test_ct_export.py`)
 
-### Step CT-6: ML Baseline Experiments (Planned)
+### Step CT-6: ML Baseline Experiments ✅ COMPLETE
 
-- [ ] XGBoost baseline (CT-M1 + CT-M2)
-- [ ] MLP baseline
-- [ ] GNN+Tabular baseline
-- [ ] Experiments CT-1, CT-2, CT-3
+- [x] Feature encoding (`ct_features.py`): drug/condition/trial features, 1044-dim M1, 1066-dim M2
+- [x] Model definitions (`ct_models.py`): CT_MLP, CT_GNN_Tab
+- [x] Training harness (`train_ct_baseline.py`): XGBoost/MLP/GNN, M1 binary + M2 7-way
+- [x] Exp CT-1 negative generation (`prepare_ct_exp_data.py`)
+- [x] Results aggregation (`collect_ct_results.py`) + inflation analysis
+- [x] SLURM infrastructure: 36 jobs × 3 seeds = 108 total
+- [x] 282 CT tests passing, 3-round review (16 bugs found and fixed)
+- [x] 108/108 runs complete (6 M1-temporal = NaN due to single-class val set — expected)
+- [x] Results collected: `ct_table_m1.csv`, `ct_table_m2.csv`, `ct_exp_ct1_inflation.md`
 
-### Step CT-7: LLM Benchmark Execution (Planned)
+> **Key CT-6 findings:** NegBioDB negatives trivially solvable (AUROC~1.0); degree-matched hardest (0.76-0.84); Exp CT-1 inflation: -0.156 to -0.242 (XGBoost→GNN). M2: XGBoost best (mF1=0.51), scaffold/temporal splits hardest.
 
-- [ ] CT-L1/L2/L3/L4 dataset construction scripts
-- [ ] CT prompt templates + evaluation functions
-- [ ] Inference runs on Cayuga HPC
-- [ ] Results aggregation
+### Step CT-7: LLM Benchmark Execution ✅ 64/80 COMPLETE (Gemini pending)
+
+- [x] CT-L1/L2/L3/L4 dataset construction scripts (`build_ct_l1/l2/l3/l4_dataset.py`)
+- [x] CT prompt templates (`src/negbiodb_ct/llm_prompts.py`) + evaluation functions (`src/negbiodb_ct/llm_eval.py`)
+- [x] SLURM infrastructure: `submit_ct_llm_all.sh`, local + OpenAI + Gemini + Anthropic runners
+- [x] Results aggregation (`collect_ct_llm_results.py`)
+- [x] 5 models: Llama-3.3-70B (vLLM), Qwen2.5-32B-AWQ (vLLM), GPT-4o-mini (OpenAI), Gemini-2.5-Flash (Google), Claude-Haiku-4.5 (Anthropic)
+- [x] Haiku 16/16, Llama 16/16, Qwen 16/16, GPT 16/16 complete
+- [x] L3 LLM-as-Judge: GPT-4o-mini judging all non-Gemini L3 runs
+- [x] L2 field_f1_micro bug fixed (gold_extraction nesting)
+- [ ] Gemini 16 runs: sequential chain running at 250 RPD (~30 days)
+- [ ] Final results collection after L3 judge + Gemini complete
+
+> **Key CT-7 findings (4/5 models):** L1 accuracy 0.63-0.66 (Haiku best), L2 category_accuracy 0.71-0.76, L2 field_f1 0.48-0.81, L4 accuracy 0.72-0.76. LLMs show meaningful CT discrimination unlike DTI-L4 (near random).
+
+---
+
+## Phase 1-PPI: Protein-Protein Interaction Domain
+
+> Initiated: 2026-03-18 | Phase C (ML benchmark) complete, training pending
+
+### Step PPI-A: Infrastructure ✅ COMPLETE
+
+- [x] PPI schema design (1 migration: 001 initial)
+- [x] 4 ETL modules: etl_intact, etl_huri, etl_humap, etl_string
+- [x] Protein mapper with UniProt validation
+- [x] 176 tests passing
+
+### Step PPI-B: Data Loading ✅ COMPLETE
+
+- [x] IntAct: 779 curated non-interactions (gold 69 / silver 710)
+- [x] HuRI: 500,000 Y2H systematic screen negatives (gold)
+- [x] hu.MAP: 1,228,891 ML-derived negatives from ComplexPortal (silver)
+- [x] STRING: 500,000 zero-score pairs (bronze)
+- [x] Pair aggregation: 2,220,786 pairs (8,800 multi-source overlaps)
+- [x] DB: 849 MB (`data/negbiodb_ppi.db`), 18,412 proteins
+
+### Step PPI-C: ML Export & Benchmark ✅ CODE COMPLETE
+
+- [x] UniProt sequence fetch: 18,412 proteins annotated
+- [x] Export module (`src/negbiodb_ppi/export.py`): 4 split strategies + negative export + positive merge
+- [x] 4 splits: random, cold_protein, cold_both (Metis graph partition), degree_balanced
+- [x] Positive collection: 61,728 HuRI positives (578 conflicts removed from both sides)
+- [x] M1 balanced (123,456), realistic (679,008), + 2 Exp 1 controls + DDB
+- [x] 3 models: SiameseCNN, PIPR, MLPFeatures (67-dim hand-crafted)
+- [x] Training harness (`train_baseline.py`): 18 runs/seed (9 baseline + 6 Exp1 + 3 Exp4)
+- [x] Results collection (`collect_results.py`) + inflation analysis
+- [x] SLURM infrastructure: `train_ppi_baseline.slurm`, `submit_ppi_all.sh`
+- [x] 285 PPI tests passing, 3-agent audit (1 cosmetic fix)
+- [ ] Transfer data to Cayuga (in progress)
+- [ ] Run experiments on Cayuga HPC
 
 ---
 
@@ -589,8 +644,11 @@ DTIContext {
 ```
 DTI (Phase 1 — COMPLETE)
   │
-  ├── Clinical Trial Failure (Phase 1-CT — IN PROGRESS)
-  │     └── 132,925 failure results loaded, benchmarks designed
+  ├── Clinical Trial Failure (Phase 1-CT — ML DONE, LLM 64/80)
+  │     └── 132,925 failure results, 108 ML runs done, 64/80 LLM runs done
+  │
+  ├── Protein-Protein Interaction (Phase 1-PPI — CODE COMPLETE)
+  │     └── 2.2M negative pairs, 3 models + 18 runs designed, awaiting HPC
   │
   ├── Gene Function (CRISPR KO/KD negatives)
   │     └── Leverage CRISPR screen data, DepMap

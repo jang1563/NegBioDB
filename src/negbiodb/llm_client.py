@@ -1,6 +1,7 @@
-"""Unified LLM client for vLLM (local), OpenAI, and Gemini (API) inference.
+"""Unified LLM client for vLLM (local), OpenAI, Gemini, and Anthropic (API) inference.
 
-Supports OpenAI-compatible API (vLLM server, OpenAI) and Google Gemini API.
+Supports OpenAI-compatible API (vLLM server, OpenAI), Google Gemini API,
+and Anthropic Messages API.
 Includes rate limiter for Gemini free tier (250 RPD Flash, 1000 RPD Flash-Lite).
 """
 
@@ -26,7 +27,13 @@ _RATE_LIMIT_DIR = Path.home() / ".config" / "negbiodb"
 
 
 class LLMClient:
-    """Unified client for local vLLM and Gemini API models."""
+    """Unified client for local vLLM, OpenAI, Gemini, and Anthropic API models."""
+
+    # Map short names → Anthropic model IDs (aliases work as-is)
+    _ANTHROPIC_MODELS = {
+        "claude-sonnet-4-6": "claude-sonnet-4-6",
+        "claude-haiku-4-5": "claude-haiku-4-5-20251001",
+    }
 
     def __init__(
         self,
@@ -40,7 +47,7 @@ class LLMClient:
         """Initialize LLM client.
 
         Args:
-            provider: 'vllm', 'openai', or 'gemini'
+            provider: 'vllm', 'openai', 'gemini', or 'anthropic'
             model: Model name/path (e.g., 'gpt-4o-mini', 'gemini-2.5-flash')
             api_base: API base URL (vLLM: 'http://localhost:8000/v1')
             api_key: API key (read from env/file if not provided)
@@ -59,6 +66,10 @@ class LLMClient:
         elif provider == "openai":
             self.api_base = api_base or "https://api.openai.com/v1"
             self.api_key = api_key or self._load_openai_key()
+            self.rate_limiter = None
+        elif provider == "anthropic":
+            self.api_key = api_key or self._load_anthropic_key()
+            self.api_model = self._ANTHROPIC_MODELS.get(model, model)
             self.rate_limiter = None
         elif provider == "vllm":
             self.api_base = api_base or "http://localhost:8000/v1"
@@ -93,12 +104,27 @@ class LLMClient:
             f"create {key_file}"
         )
 
+    def _load_anthropic_key(self) -> str:
+        """Load Anthropic API key from env or file."""
+        key = os.environ.get("ANTHROPIC_API_KEY")
+        if key:
+            return key
+        key_file = _RATE_LIMIT_DIR / "anthropic_api_key.txt"
+        if key_file.exists():
+            return key_file.read_text().strip()
+        raise ValueError(
+            "Anthropic API key not found. Set ANTHROPIC_API_KEY env var or "
+            f"create {key_file}"
+        )
+
     def generate(self, prompt: str, system: str = "") -> str:
         """Generate a single completion."""
         if self.provider in ("vllm", "openai"):
             return self._generate_openai_compat(prompt, system)
         elif self.provider == "gemini":
             return self._generate_gemini(prompt, system)
+        elif self.provider == "anthropic":
+            return self._generate_anthropic(prompt, system)
         raise ValueError(f"Unknown provider: {self.provider}")
 
     def generate_batch(
@@ -179,12 +205,19 @@ class LLMClient:
 
         contents = [{"role": "user", "parts": [{"text": prompt}]}]
 
+        gen_config = {
+            "temperature": self.temperature,
+            "maxOutputTokens": self.max_tokens,
+        }
+        # Disable thinking for models that support it (e.g. gemini-2.5-flash)
+        # to ensure full output budget is used for the response, not internal
+        # reasoning tokens.  This also keeps benchmarks fair across models.
+        if "2.5-flash" in self.model and "lite" not in self.model:
+            gen_config["thinkingConfig"] = {"thinkingBudget": 0}
+
         payload = {
             "contents": contents,
-            "generationConfig": {
-                "temperature": self.temperature,
-                "maxOutputTokens": self.max_tokens,
-            },
+            "generationConfig": gen_config,
         }
         if system:
             payload["systemInstruction"] = {"parts": [{"text": system}]}
@@ -223,6 +256,63 @@ class LLMClient:
 
         parts = candidates[0].get("content", {}).get("parts", [])
         return parts[0].get("text", "") if parts else ""
+
+
+    # ── Anthropic Messages API ──────────────────────────────────────────────
+
+    def _generate_anthropic(self, prompt: str, system: str) -> str:
+        """Generate via Anthropic Messages API with retry."""
+        url = "https://api.anthropic.com/v1/messages"
+        payload: dict = {
+            "model": self.api_model,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system:
+            payload["system"] = system
+
+        data = json.dumps(payload).encode("utf-8")
+
+        max_retries = 8
+        for attempt in range(max_retries):
+            req = urllib.request.Request(
+                url,
+                data=data,
+                method="POST",
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": self.api_key,
+                    "anthropic-version": "2023-06-01",
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=120, context=_SSL_CTX) as resp:
+                    result = json.loads(resp.read())
+                content_blocks = result.get("content", [])
+                for block in content_blocks:
+                    if block.get("type") == "text":
+                        return block["text"]
+                return ""
+            except urllib.error.HTTPError as e:
+                body = ""
+                try:
+                    body = e.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+                if e.code == 429 and attempt < max_retries - 1:
+                    wait = min(2 ** (attempt + 1), 128)
+                    print(f"  Rate limited (429), retry {attempt + 1}/{max_retries} in {wait}s")
+                    time.sleep(wait)
+                elif e.code >= 500 and attempt < max_retries - 1:
+                    wait = min(2 ** (attempt + 1), 64)
+                    print(f"  Server error ({e.code}), retry in {wait}s")
+                    time.sleep(wait)
+                else:
+                    if body:
+                        print(f"  Anthropic API error {e.code}: {body[:300]}")
+                    raise
+        raise RuntimeError(f"Anthropic API failed after {max_retries} retries")
 
 
 class GeminiRateLimiter:

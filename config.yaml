@@ -173,21 +173,22 @@ ppi_domain:
   downloads:
     huri:
       hi_union_url: "https://www.interactome-atlas.org/data/HI-union.tsv"
-      hi_iii_url: "https://www.interactome-atlas.org/data/HI-III-20.tsv"
+      # hi_iii_url removed — HI-III-20.tsv returns 404 as of 2026-03
+      idmapping_url: "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/by_organism/HUMAN_9606_idmapping.dat.gz"
       dest_dir: data/ppi/huri
     intact:
       url: "https://ftp.ebi.ac.uk/pub/databases/intact/current/psimitab/intact_negative.txt"
       dest: data/ppi/intact/intact_negative.txt
       min_size_bytes: 1000000
     humap:
-      base_url: "https://humap2.proteincomplexes.org/static/downloads/3.0"
+      base_url: "https://humap3.proteincomplexes.org/static/downloads/humap3"
       neg_train: ComplexPortal_reduced_20230309.neg_train_ppis.txt
       neg_test: ComplexPortal_reduced_20230309.neg_test_ppis.txt
       pos_train: ComplexPortal_reduced_20230309.train_ppis.txt
       pos_test: ComplexPortal_reduced_20230309.test_ppis.txt
       dest_dir: data/ppi/humap
     string:
-      links_url: "https://stringdb-downloads.org/download/protein.links.v12.5/9606.protein.links.v12.5.txt.gz"
+      links_url: "https://stringdb-downloads.org/download/protein.links.v12.0/9606.protein.links.v12.0.txt.gz"
       mapping_url: "https://stringdb-downloads.org/download/mapping_files/uniprot/human.uniprot_2_string.2018.tsv.gz"
       dest_dir: data/ppi/string
     biogrid:

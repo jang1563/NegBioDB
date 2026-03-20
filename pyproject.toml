@@ -26,6 +26,8 @@ dev = [
 ml = [
     "torch>=2.2",
     "torch-geometric>=2.5",
+    "xgboost>=2.0",
+    "pymetis>=2023.1",
     # torch-scatter and torch-sparse require CUDA-specific wheels;
     # install manually on HPC: see slurm/setup_env.sh
 ]
