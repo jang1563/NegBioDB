@@ -131,6 +131,20 @@ class TestParseL2Response:
     def test_empty(self):
         assert parse_l2_response("") is None
 
+    def test_code_fenced_python(self):
+        """Code fence with non-json language tag should be stripped."""
+        r = '```python\n{"total_inactive_count": 7}\n```'
+        result = parse_l2_response(r)
+        assert result is not None
+        assert result["total_inactive_count"] == 7
+
+    def test_code_fenced_bare(self):
+        """Code fence with no language tag should be stripped."""
+        r = '```\n{"total_inactive_count": 2}\n```'
+        result = parse_l2_response(r)
+        assert result is not None
+        assert result["total_inactive_count"] == 2
+
 
 # ── L2 Evaluation ─────────────────────────────────────────────────────────────
 
@@ -255,6 +269,20 @@ class TestParseL4Answer:
 
     def test_not_tested_sentence(self):
         answer, _ = parse_l4_answer("This compound has not been tested against this target.")
+        assert answer == "untested"
+
+    def test_never_tested(self):
+        answer, _ = parse_l4_answer("This pair has never tested positive.")
+        # "never tested" should match untested
+        answer2, _ = parse_l4_answer("never tested")
+        assert answer2 == "untested"
+
+    def test_hasnt_been_tested(self):
+        answer, _ = parse_l4_answer("This compound hasn't been tested against EGFR.")
+        assert answer == "untested"
+
+    def test_no_evidence_of_testing(self):
+        answer, _ = parse_l4_answer("No evidence of testing for this pair.")
         assert answer == "untested"
 
 

@@ -70,6 +70,8 @@ def set_seed(seed: int) -> None:
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
     except ImportError:
         pass
 
@@ -306,6 +308,7 @@ def _run_epoch(model, loader, criterion, optimizer, device, train: bool):
             if train:
                 optimizer.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             total_loss += loss.item()
@@ -339,7 +342,10 @@ def train(
     import torch.nn as nn
 
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="max", factor=0.5, patience=3
+    )
 
     best_val_metric = float("-inf")
     patience_counter = 0
@@ -349,6 +355,8 @@ def train(
         train_loss, _, _ = _run_epoch(model, train_loader, criterion, optimizer, device, train=True)
         val_loss, val_y, val_pred = _run_epoch(model, val_loader, criterion, optimizer, device, train=False)
         val_metric = _compute_val_metric(val_y, val_pred)
+        if not np.isnan(val_metric):
+            scheduler.step(val_metric)
 
         row = {"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss, "val_log_auc": val_metric}
         training_log.append(row)

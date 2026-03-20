@@ -617,6 +617,8 @@ def insert_negative_results(
             source_record_id,
         ))
 
+    # activity_value=10000.0 is the raw Kd in nM (10 µM) for inactive
+    # compounds. The meaningful metric is pchembl_value (pKd), stored via ?.
     conn.executemany(
         """INSERT OR IGNORE INTO negative_results
         (compound_id, target_id, variant_id, assay_id,

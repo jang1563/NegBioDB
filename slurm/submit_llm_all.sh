@@ -46,7 +46,7 @@ for MODEL in gemini-2.5-flash gemini-2.5-flash-lite; do
                 echo "Submitting: ${JOB_NAME}"
                 ${SBATCH} \
                     --job-name="${JOB_NAME}" \
-                    --export=ALL,TASK=${TASK},MODEL=${MODEL},CONFIG=${CONFIG},FS=${FS} \
+                    --export=ALL,TASK=${TASK},MODEL=${MODEL},CONFIG=${CONFIG},FS=${FS},MAX_TOKENS=1024 \
                     "${SLURM_DIR}/run_llm_gemini.slurm"
             done
         done

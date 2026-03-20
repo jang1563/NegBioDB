@@ -636,6 +636,9 @@ def _resolve_pubchem_chunk(chunk: pd.DataFrame, confirmatory_aids: set[int]) -> 
         _units = chunk[unit_col]
         out["activity_unit"] = _units.where(_units.notna(), pd.NA)
     else:
+        # Default to nM when unit column is absent. PubChem HTS assays
+        # typically report nM concentrations. Records without explicit
+        # units receive 'bronze' tier in the tier assignment logic.
         out["activity_unit"] = "nM"
     out["target_taxid"] = pd.to_numeric(chunk[taxid_col], errors="coerce") if taxid_col else pd.NA
     out["protein_accession"] = (
@@ -863,11 +866,21 @@ def run_pubchem_etl(
                         pass
                 elif human_only and aid in confirmatory_human_aids:
                     species_tested = "Homo sapiens"
+                # Tier: gold if pchembl + confirmatory assay, silver if
+                # pchembl or explicit unit, bronze otherwise.
+                has_unit = pd.notna(r.activity_unit)
+                if pchembl_value is not None and aid in confirmatory_human_aids:
+                    tier = "gold"
+                elif pchembl_value is not None or (has_unit and activity_value is not None):
+                    tier = "silver"
+                else:
+                    tier = "bronze"
                 insert_params.append(
                     (
                         compound_id,
                         target_id,
                         assay_id,
+                        tier,
                         str(r.activity_name) if pd.notna(r.activity_name) else "bioactivity",
                         activity_value,
                         str(r.activity_unit) if pd.notna(r.activity_unit) else None,
@@ -889,7 +902,7 @@ def run_pubchem_etl(
                          source_db, source_record_id, extraction_method,
                          curator_validated, species_tested)
                         VALUES (?, ?, ?,
-                                'hard_negative', 'silver',
+                                'hard_negative', ?,
                                 ?, ?, ?, '=',
                                 ?,
                                 ?, 'nM',
@@ -912,7 +925,7 @@ def run_pubchem_etl(
                  source_db, source_record_id, extraction_method,
                  curator_validated, species_tested)
                 VALUES (?, ?, ?,
-                        'hard_negative', 'silver',
+                        'hard_negative', ?,
                         ?, ?, ?, '=',
                         ?,
                         ?, 'nM',

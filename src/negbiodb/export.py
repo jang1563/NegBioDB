@@ -72,32 +72,43 @@ def _assign_folds_by_group(
 ) -> dict[str, int]:
     """Assign folds by grouping on a column (cold-compound or cold-target).
 
+    Uses pair-count-aware greedy assignment so that each fold receives
+    approximately the target ratio of *pairs* (not groups). This prevents
+    high-degree groups from causing extreme imbalance (e.g., val = 0.6%).
+
     All pairs sharing the same group_col value get the same fold.
     Returns dict with fold counts.
     """
-    groups = [
-        r[0]
-        for r in conn.execute(
-            f"SELECT DISTINCT {group_col} FROM compound_target_pairs"
-            f" ORDER BY {group_col}"
-        ).fetchall()
-    ]
+    _VALID_GROUP_COLS = {"compound_id", "target_id"}
+    if group_col not in _VALID_GROUP_COLS:
+        raise ValueError(f"Invalid group_col: {group_col!r}. Must be one of {_VALID_GROUP_COLS}")
+
+    # Count pairs per group
+    rows = conn.execute(
+        f"SELECT {group_col}, COUNT(*) FROM compound_target_pairs"
+        f" GROUP BY {group_col}"
+    ).fetchall()
 
     rng = np.random.RandomState(seed)
-    rng.shuffle(groups)
+    group_pairs = [(gid, cnt) for gid, cnt in rows]
+    rng.shuffle(group_pairs)
 
-    n = len(groups)
-    n_train = int(n * ratios["train"])
-    n_val = int(n * ratios["val"])
+    total = sum(cnt for _, cnt in group_pairs)
+    target_train = int(total * ratios["train"])
+    target_val = int(total * ratios["val"])
 
+    # Greedy bin-packing by pair count
+    fold_counts = {"train": 0, "val": 0, "test": 0}
     group_to_fold: dict[int, str] = {}
-    for i, gid in enumerate(groups):
-        if i < n_train:
-            group_to_fold[gid] = "train"
-        elif i < n_train + n_val:
-            group_to_fold[gid] = "val"
+    for gid, cnt in group_pairs:
+        if fold_counts["train"] < target_train:
+            fold = "train"
+        elif fold_counts["val"] < target_val:
+            fold = "val"
         else:
-            group_to_fold[gid] = "test"
+            fold = "test"
+        group_to_fold[gid] = fold
+        fold_counts[fold] += cnt
 
     # Write via temp table + JOIN for performance
     conn.execute("DROP TABLE IF EXISTS _group_folds")
@@ -1012,15 +1023,20 @@ def merge_positive_negative(
     if overlap:
         logger.warning(
             "Found %d overlapping (inchikey_conn, uniprot) pairs! "
-            "Removing from positives.",
+            "Removing from BOTH positives and negatives.",
             len(overlap),
         )
-        keep_mask = ~pd.Series(
+        pos_mask = ~pd.Series(
             [k in overlap for k in zip(positives["inchikey"].str[:14], positives["uniprot_id"])],
             index=positives.index,
         )
-        positives = positives[keep_mask]
-        logger.info("Positives after overlap removal: %d", len(positives))
+        neg_mask = ~pd.Series(
+            [k in overlap for k in zip(negatives["inchikey"].str[:14], negatives["uniprot_id"])],
+            index=negatives.index,
+        )
+        positives = positives[pos_mask]
+        negatives = negatives[neg_mask]
+        logger.info("After overlap removal: %d pos, %d neg", len(positives), len(negatives))
 
     # Prepare label columns
     positives = positives.copy()

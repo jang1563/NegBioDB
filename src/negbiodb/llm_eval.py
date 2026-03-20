@@ -101,8 +101,8 @@ def parse_l2_response(response: str) -> dict | None:
     """Parse JSON from LLM response for L2 extraction."""
     # Try to find JSON in response
     response = response.strip()
-    # Remove markdown code fences
-    response = re.sub(r"```json\s*", "", response)
+    # Remove markdown code fences (any language tag, not just json)
+    response = re.sub(r"```\w*\s*", "", response)
     response = re.sub(r"```\s*$", "", response)
 
     try:
@@ -261,7 +261,12 @@ def parse_l4_answer(response: str) -> tuple[str | None, str | None]:
 
     first = lines[0].strip().lower()
     answer = None
-    if "untested" in first or "not tested" in first or "not been tested" in first:
+    _UNTESTED_PATTERNS = [
+        "untested", "not tested", "not been tested",
+        "never tested", "hasn't been tested", "has not been tested",
+        "no testing", "no evidence of testing",
+    ]
+    if any(pat in first for pat in _UNTESTED_PATTERNS):
         answer = "untested"
     elif "tested" in first:
         answer = "tested"
@@ -316,7 +321,7 @@ def evaluate_l4(
         if m and a == "tested" and g == "tested"
     ]
     # Evidence must be substantive: >50 chars or contain known DB/DOI keywords
-    _EVIDENCE_KEYWORDS = {"chembl", "pubchem", "bindingdb", "doi", "pmid", "assay", "ic50", "ki ", "kd "}
+    _EVIDENCE_KEYWORDS = {"chembl", "pubchem", "bindingdb", "doi", "pmid", "assay", "ic50", "ki", "kd"}
 
     if tested_correct:
         with_evidence = sum(

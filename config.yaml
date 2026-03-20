@@ -5,8 +5,8 @@
 inactivity_threshold_nm: 10000         # 10 uM in nM; compound inactive if IC50/Ki/Kd > this
 positive_pchembl_min: 6.0             # pChEMBL >= 6 for positives (IC50 <= 1 uM)
 borderline_exclusion:
-  lower: 4.5                          # Exclude pChEMBL in [4.5, 5.5] from both pools
-  upper: 5.5
+  lower: 4.5                          # Exclude pChEMBL >= 4.5 from negative pool
+  upper: 6.0                          # Matches positive_pchembl_min; effective gap: [4.5, 6.0)
 davis_inactive_pkd_threshold: 5.0     # DAVIS: inactive if pKd <= 5 (NOT strictly < 5)
 davis_active_pkd_threshold: 7.0       # DAVIS: active if pKd >= 7 (Kd <= 100 nM)
 

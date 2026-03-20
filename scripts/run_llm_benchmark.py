@@ -73,10 +73,11 @@ def get_fewshot_examples(
     for cls, cls_records in by_class.items():
         pool = list(cls_records)  # copy to avoid mutating input
         rng.shuffle(pool)
-        # Offset by fewshot_set * n_per_class
+        # Wrap-around selection to handle small pools (e.g., L3 has only 5 items)
         start = fewshot_set * n_per_class
-        end = start + n_per_class
-        examples.extend(pool[start:end])
+        for j in range(n_per_class):
+            idx = (start + j) % len(pool)
+            examples.append(pool[idx])
 
     rng.shuffle(examples)
     return examples

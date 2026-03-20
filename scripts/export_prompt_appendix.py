@@ -86,7 +86,7 @@ def main():
     sections.append("")
     sections.append("### A.4.3 LLM-as-Judge Rubric\n")
     sections.append(
-        "Responses are evaluated by a judge model (Gemini 2.0 Flash-Lite) "
+        "Responses are evaluated by a judge model (Gemini 2.5 Flash-Lite) "
         "using the following rubric:\n"
     )
     sections.append(code_block(L3_JUDGE_PROMPT))
@@ -127,7 +127,7 @@ def main():
     sections.append("| Mistral-7B-Instruct-v0.3 | vLLM | Local (A100 GPU) |")
     sections.append("| GPT-4o-mini | OpenAI API | Cloud |")
     sections.append("| Gemini 2.5 Flash | Google Gemini API | Cloud |")
-    sections.append("| Gemini 2.0 Flash-Lite | Google Gemini API | Cloud |")
+    sections.append("| Gemini 2.5 Flash-Lite | Google Gemini API | Cloud |")
     sections.append("")
     sections.append(
         "Gemini 2.5 Flash uses `thinkingConfig: {thinkingBudget: 0}` to "

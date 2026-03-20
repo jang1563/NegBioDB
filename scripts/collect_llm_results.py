@@ -141,7 +141,7 @@ def aggregate_results(results: list[dict]) -> list[dict]:
             if values:
                 row[f"{metric}_mean"] = float(np.mean(values))
                 row[f"{metric}_std"] = (
-                    float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
+                    float(np.std(values, ddof=0)) if len(values) > 1 else 0.0
                 )
             else:
                 row[f"{metric}_mean"] = None

@@ -643,7 +643,7 @@ class TestExtractChEMBLInactives:
     def test_extracts_type1_and_type2(self, tmp_path):
         mock_db = self._create_mock_chembl(tmp_path)
         cfg = {
-            "borderline_exclusion": {"lower": 4.5, "upper": 5.5},
+            "borderline_exclusion": {"lower": 4.5, "upper": 6.0},
             "inactivity_threshold_nm": 10000,
         }
         df = extract_chembl_inactives(mock_db, cfg)
@@ -657,7 +657,7 @@ class TestExtractChEMBLInactives:
     def test_excludes_borderline(self, tmp_path):
         mock_db = self._create_mock_chembl(tmp_path)
         cfg = {
-            "borderline_exclusion": {"lower": 4.5, "upper": 5.5},
+            "borderline_exclusion": {"lower": 4.5, "upper": 6.0},
             "inactivity_threshold_nm": 10000,
         }
         df = extract_chembl_inactives(mock_db, cfg)
@@ -668,7 +668,7 @@ class TestExtractChEMBLInactives:
     def test_excludes_non_human(self, tmp_path):
         mock_db = self._create_mock_chembl(tmp_path)
         cfg = {
-            "borderline_exclusion": {"lower": 4.5, "upper": 5.5},
+            "borderline_exclusion": {"lower": 4.5, "upper": 6.0},
             "inactivity_threshold_nm": 10000,
         }
         df = extract_chembl_inactives(mock_db, cfg)
@@ -679,7 +679,7 @@ class TestExtractChEMBLInactives:
     def test_excludes_invalid(self, tmp_path):
         mock_db = self._create_mock_chembl(tmp_path)
         cfg = {
-            "borderline_exclusion": {"lower": 4.5, "upper": 5.5},
+            "borderline_exclusion": {"lower": 4.5, "upper": 6.0},
             "inactivity_threshold_nm": 10000,
         }
         df = extract_chembl_inactives(mock_db, cfg)
@@ -690,7 +690,7 @@ class TestExtractChEMBLInactives:
     def test_activity_comment_excluded_by_default(self, tmp_path):
         mock_db = self._create_mock_chembl(tmp_path)
         cfg = {
-            "borderline_exclusion": {"lower": 4.5, "upper": 5.5},
+            "borderline_exclusion": {"lower": 4.5, "upper": 6.0},
             "inactivity_threshold_nm": 10000,
         }
         df = extract_chembl_inactives(mock_db, cfg)
@@ -699,7 +699,7 @@ class TestExtractChEMBLInactives:
     def test_includes_activity_comment_when_enabled(self, tmp_path):
         mock_db = self._create_mock_chembl(tmp_path)
         cfg = {
-            "borderline_exclusion": {"lower": 4.5, "upper": 5.5},
+            "borderline_exclusion": {"lower": 4.5, "upper": 6.0},
             "inactivity_threshold_nm": 10000,
             "chembl_etl": {
                 "include_activity_comment": True,

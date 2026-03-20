@@ -25,6 +25,7 @@ FS="${FS:-0}"
 
 export PATH="${SCRATCH_ENV}/bin:${PATH}"
 export CONDA_PREFIX="${SCRATCH_ENV}"
+export PYTHONUNBUFFERED=1
 
 echo "=== CT LLM Gemini Benchmark ==="
 echo "Task: ${TASK}, Model: ${MODEL}, Config: ${CONFIG}, FS: ${FS}"

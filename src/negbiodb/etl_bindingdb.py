@@ -205,6 +205,8 @@ def _extract_inactive_rows_from_chunk(
             chosen_type = metric_name
             chosen_rel = rel
             chosen_val = val
+            # One negative result per compound-target pair: break after first
+            # qualifying metric to avoid duplicate rows.
             break
 
         if chosen_type is None or chosen_val is None:

@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-19 (v14 — DTI complete, CT-6 ML done, CT-7 LLM 64/80 done, PPI Phase C complete)
+> Last updated: 2026-03-19 (v14 — DTI complete, CT-6 ML done, CT-7 LLM 67/80 done, PPI Phase C complete)
 
 ---
 
@@ -362,7 +362,7 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 > **Key CT-6 findings:** NegBioDB negatives trivially solvable (AUROC~1.0); degree-matched hardest (0.76-0.84); Exp CT-1 inflation: -0.156 to -0.242 (XGBoost→GNN). M2: XGBoost best (mF1=0.51), scaffold/temporal splits hardest.
 
-### Step CT-7: LLM Benchmark Execution ✅ 64/80 COMPLETE (Gemini pending)
+### Step CT-7: LLM Benchmark Execution ✅ 67/80 COMPLETE (Gemini L4/L2/L1 pending)
 
 - [x] CT-L1/L2/L3/L4 dataset construction scripts (`build_ct_l1/l2/l3/l4_dataset.py`)
 - [x] CT prompt templates (`src/negbiodb_ct/llm_prompts.py`) + evaluation functions (`src/negbiodb_ct/llm_eval.py`)
@@ -370,12 +370,14 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - [x] Results aggregation (`collect_ct_llm_results.py`)
 - [x] 5 models: Llama-3.3-70B (vLLM), Qwen2.5-32B-AWQ (vLLM), GPT-4o-mini (OpenAI), Gemini-2.5-Flash (Google), Claude-Haiku-4.5 (Anthropic)
 - [x] Haiku 16/16, Llama 16/16, Qwen 16/16, GPT 16/16 complete
-- [x] L3 LLM-as-Judge: GPT-4o-mini judging all non-Gemini L3 runs
+- [x] Gemini L3: 3/4 complete (zero-shot + 3-shot fs0/fs1), fs2 resuming
+- [x] L3 LLM-as-Judge: GPT-4o-mini — 19/20 runs judged (all non-Gemini + Gemini L3 zero-shot/fs0/fs1)
 - [x] L2 field_f1_micro bug fixed (gold_extraction nesting)
-- [ ] Gemini 16 runs: sequential chain running at 250 RPD (~30 days)
-- [ ] Final results collection after L3 judge + Gemini complete
+- [x] L3 ceiling effect identified: GPT-4o-mini judge gives 4.4-5.0/5.0 (too lenient)
+- [ ] Gemini remaining: L3-fs2 + L4 + L2 + L1 = 13 configs at 250 RPD (chain resubmitted)
+- [ ] Final results collection after Gemini complete
 
-> **Key CT-7 findings (4/5 models):** L1 accuracy 0.63-0.66 (Haiku best), L2 category_accuracy 0.71-0.76, L2 field_f1 0.48-0.81, L4 accuracy 0.72-0.76. LLMs show meaningful CT discrimination unlike DTI-L4 (near random).
+> **Key CT-7 findings (4/5 models):** L1 accuracy 0.63-0.66 (Haiku best), L2 category_accuracy 0.71-0.76, L2 field_f1 0.48-0.81, L4 MCC 0.48-0.52 — meaningful discrimination unlike DTI-L4 (near random). L3 judge (GPT-4o-mini) ceiling effect: scores 4.4-5.0, only completeness dimension discriminates.
 
 ---
 
@@ -644,8 +646,8 @@ DTIContext {
 ```
 DTI (Phase 1 — COMPLETE)
   │
-  ├── Clinical Trial Failure (Phase 1-CT — ML DONE, LLM 64/80)
-  │     └── 132,925 failure results, 108 ML runs done, 64/80 LLM runs done
+  ├── Clinical Trial Failure (Phase 1-CT — ML DONE, LLM 67/80)
+  │     └── 132,925 failure results, 108 ML runs done, 67/80 LLM runs done
   │
   ├── Protein-Protein Interaction (Phase 1-PPI — CODE COMPLETE)
   │     └── 2.2M negative pairs, 3 models + 18 runs designed, awaiting HPC

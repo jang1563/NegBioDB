@@ -319,7 +319,7 @@ class GeminiRateLimiter:
     """Rate limiter for Gemini free tier.
 
     Persists daily call count to disk for crash recovery.
-    Daily reset at midnight Pacific Time.
+    Daily reset at midnight UTC.
     """
 
     # Free tier limits (March 2026)
