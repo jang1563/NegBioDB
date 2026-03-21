@@ -2,7 +2,7 @@
 
 Supports OpenAI-compatible API (vLLM server, OpenAI), Google Gemini API,
 and Anthropic Messages API.
-Includes rate limiter for Gemini free tier (250 RPD Flash, 1000 RPD Flash-Lite).
+Includes rate limiter for Gemini Tier 1 pay-as-you-go (1500 RPD Flash, 200 RPM).
 """
 
 import fcntl
@@ -322,15 +322,16 @@ class GeminiRateLimiter:
     Daily reset at midnight UTC.
     """
 
-    # Free tier limits (March 2026)
+    # Tier 1 (pay-as-you-go) limits (March 2026)
+    # RPD set high — rely on RPM throttle + server-side 429 retry for daily cap
     LIMITS = {
-        "gemini-2.5-flash": {"rpd": 250, "rpm": 10},
-        "gemini-2.5-flash-lite": {"rpd": 1000, "rpm": 15},
+        "gemini-2.5-flash": {"rpd": 100000, "rpm": 200},
+        "gemini-2.5-flash-lite": {"rpd": 100000, "rpm": 200},
     }
 
     def __init__(self, model: str):
         self.model = model
-        limits = self.LIMITS.get(model, {"rpd": 250, "rpm": 10})
+        limits = self.LIMITS.get(model, {"rpd": 100000, "rpm": 200})
         self.max_rpd = limits["rpd"]
         self.max_rpm = limits["rpm"]
         self.state_file = _RATE_LIMIT_DIR / f"rate_state_{model.replace('/', '_')}.json"

@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-19 (v14 — DTI complete, CT-6 ML done, CT-7 LLM 67/80 done, PPI Phase C complete)
+> Last updated: 2026-03-21 (v15 — DTI complete, CT ML+LLM 80/80 COMPLETE, PPI-C ML complete 54/54, PPI-D LLM planned)
 
 ---
 
@@ -362,22 +362,19 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 > **Key CT-6 findings:** NegBioDB negatives trivially solvable (AUROC~1.0); degree-matched hardest (0.76-0.84); Exp CT-1 inflation: -0.156 to -0.242 (XGBoost→GNN). M2: XGBoost best (mF1=0.51), scaffold/temporal splits hardest.
 
-### Step CT-7: LLM Benchmark Execution ✅ 67/80 COMPLETE (Gemini L4/L2/L1 pending)
+### Step CT-7: LLM Benchmark Execution ✅ 80/80 COMPLETE
 
 - [x] CT-L1/L2/L3/L4 dataset construction scripts (`build_ct_l1/l2/l3/l4_dataset.py`)
 - [x] CT prompt templates (`src/negbiodb_ct/llm_prompts.py`) + evaluation functions (`src/negbiodb_ct/llm_eval.py`)
 - [x] SLURM infrastructure: `submit_ct_llm_all.sh`, local + OpenAI + Gemini + Anthropic runners
 - [x] Results aggregation (`collect_ct_llm_results.py`)
-- [x] 5 models: Llama-3.3-70B (vLLM), Qwen2.5-32B-AWQ (vLLM), GPT-4o-mini (OpenAI), Gemini-2.5-Flash (Google), Claude-Haiku-4.5 (Anthropic)
-- [x] Haiku 16/16, Llama 16/16, Qwen 16/16, GPT 16/16 complete
-- [x] Gemini L3: 3/4 complete (zero-shot + 3-shot fs0/fs1), fs2 resuming
-- [x] L3 LLM-as-Judge: GPT-4o-mini — 19/20 runs judged (all non-Gemini + Gemini L3 zero-shot/fs0/fs1)
-- [x] L2 field_f1_micro bug fixed (gold_extraction nesting)
+- [x] 5 models × 4 tasks × 4 configs = 80 runs complete
+- [x] L3 LLM-as-Judge: GPT-4o-mini — all 20 runs judged
+- [x] L2 field_f1_micro bug fixed (gold_extraction nesting + list response parsing)
 - [x] L3 ceiling effect identified: GPT-4o-mini judge gives 4.4-5.0/5.0 (too lenient)
-- [ ] Gemini remaining: L3-fs2 + L4 + L2 + L1 = 13 configs at 250 RPD (chain resubmitted)
-- [ ] Final results collection after Gemini complete
+- [x] Gemini rate limit resolved: Tier 1 pay-as-you-go (200 RPM, no RPD cap)
 
-> **Key CT-7 findings (4/5 models):** L1 accuracy 0.63-0.66 (Haiku best), L2 category_accuracy 0.71-0.76, L2 field_f1 0.48-0.81, L4 MCC 0.48-0.52 — meaningful discrimination unlike DTI-L4 (near random). L3 judge (GPT-4o-mini) ceiling effect: scores 4.4-5.0, only completeness dimension discriminates.
+> **Key CT-7 findings (5/5 models):** Gemini best on L1 (0.68) and L4 (MCC 0.56). L1 accuracy 0.63-0.68, L2 field_f1 0.48-0.81, L4 MCC 0.48-0.56 — meaningful discrimination unlike DTI-L4 (near random). L3 judge ceiling: GPT-4o-mini gives 4.4-5.0/5.0.
 
 ---
 
@@ -401,7 +398,7 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - [x] Pair aggregation: 2,220,786 pairs (8,800 multi-source overlaps)
 - [x] DB: 849 MB (`data/negbiodb_ppi.db`), 18,412 proteins
 
-### Step PPI-C: ML Export & Benchmark ✅ CODE COMPLETE
+### Step PPI-C: ML Export & Benchmark ✅ COMPLETE (2026-03-21)
 
 - [x] UniProt sequence fetch: 18,412 proteins annotated
 - [x] Export module (`src/negbiodb_ppi/export.py`): 4 split strategies + negative export + positive merge
@@ -413,8 +410,24 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - [x] Results collection (`collect_results.py`) + inflation analysis
 - [x] SLURM infrastructure: `train_ppi_baseline.slurm`, `submit_ppi_all.sh`
 - [x] 285 PPI tests passing, 3-agent audit (1 cosmetic fix)
-- [ ] Transfer data to Cayuga (in progress)
-- [ ] Run experiments on Cayuga HPC
+- [x] Data transfer to Cayuga + 54/54 jobs complete (3 seeds × 18 configs)
+- [x] Degree leakage bug found + fixed (recompute degree from merged graph)
+- [x] Results collected: `results/ppi/table1_aggregated.csv`
+
+> **Key PPI-C findings:** PIPR cold_both catastrophic (AUROC 0.409±0.077, below random). MLPFeatures cold_both robust (0.950±0.021). Negative source effect MODEL-DEPENDENT: sequence models +6-9% inflation (same as DTI), MLPFeatures REVERSED -5% to -19% (NegBioDB harder). DDB ≈ random.
+
+### Step PPI-D: LLM Benchmark ⏳ NOT STARTED
+
+- [ ] PPI schema migration 002 (function descriptions, GO terms, PMID abstracts table)
+- [ ] UniProt function descriptions fetch (~18K proteins)
+- [ ] PubMed abstract fetch for IntAct PMIDs
+- [ ] Design document (`research/16_ppi_llm_benchmark_design.md`)
+- [ ] PPI LLM modules (`llm_prompts.py`, `llm_eval.py`, `llm_dataset.py`)
+- [ ] 4 dataset builders: PPI-L1 (4-way MCQ), PPI-L2 (extraction), PPI-L3 (reasoning), PPI-L4 (tested/untested)
+- [ ] Inference runner + SLURM scripts
+- [ ] 80 runs: 5 models × 4 levels × 4 configs
+- [ ] L3 judge scoring (GPT-4o-mini)
+- [ ] Results collection and analysis
 
 ---
 
@@ -646,11 +659,11 @@ DTIContext {
 ```
 DTI (Phase 1 — COMPLETE)
   │
-  ├── Clinical Trial Failure (Phase 1-CT — ML DONE, LLM 67/80)
-  │     └── 132,925 failure results, 108 ML runs done, 67/80 LLM runs done
+  ├── Clinical Trial Failure (Phase 1-CT — COMPLETE)
+  │     └── 132,925 failure results, 108 ML + 80 LLM runs done
   │
-  ├── Protein-Protein Interaction (Phase 1-PPI — CODE COMPLETE)
-  │     └── 2.2M negative pairs, 3 models + 18 runs designed, awaiting HPC
+  ├── Protein-Protein Interaction (Phase 1-PPI — ML DONE, LLM planned)
+  │     └── 2.2M negative pairs, 54/54 ML runs done, PPI-D LLM benchmark planned
   │
   ├── Gene Function (CRISPR KO/KD negatives)
   │     └── Leverage CRISPR screen data, DepMap

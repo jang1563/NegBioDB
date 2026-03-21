@@ -147,13 +147,17 @@ def parse_ct_l2_response(response: str) -> dict | None:
     response = re.sub(r"```\s*$", "", response)
 
     try:
-        return json.loads(response)
+        result = json.loads(response)
+        if isinstance(result, list) and len(result) > 0:
+            result = result[0]  # take first element if array
+        return result if isinstance(result, dict) else None
     except json.JSONDecodeError:
         # Try to find JSON object in text
         match = re.search(r"\{[\s\S]*\}", response)
         if match:
             try:
-                return json.loads(match.group())
+                result = json.loads(match.group())
+                return result if isinstance(result, dict) else None
             except json.JSONDecodeError:
                 return None
     return None
