@@ -1,5 +1,5 @@
 #!/bin/bash
-# Submit all 18 NegBioDB baseline training jobs to Cayuga SLURM.
+# Submit NegBioDB baseline training jobs to Cayuga SLURM.
 #
 # Usage (from Cayuga login node, after setup_env.sh + precompute_graphs.sh):
 #   bash slurm/submit_all.sh
@@ -10,7 +10,8 @@
 #   B1-B9  : 3 models × 3 splits (random, cold_compound, cold_target) + NegBioDB neg
 #   E1-1~6 : 3 models × 2 random conditions (uniform_random, degree_matched)
 #   E4-1~3 : 3 models × 1 DDB split + NegBioDB neg
-#   Total  : 18 × (#seeds) jobs
+#   S1-S6  : 3 models × 2 splits (scaffold, temporal) + NegBioDB neg
+#   Total  : 24 × (#seeds) jobs
 
 set -euo pipefail
 
@@ -21,7 +22,7 @@ SCRIPT=$NEGBIODB/slurm/train_baseline.slurm
 SEEDS_STR=${SEEDS:-42}
 MODELS_STR=${MODELS:-"deepdta graphdta drugban"}
 DATASETS_STR=${DATASETS:-balanced}
-BASELINE_SPLITS_STR=${SPLITS:-"random cold_compound cold_target ddb"}
+BASELINE_SPLITS_STR=${SPLITS:-"random cold_compound cold_target ddb scaffold temporal"}
 NEGATIVES_STR=${NEGATIVES:-"negbiodb uniform_random degree_matched"}
 
 mkdir -p "$LOGDIR"
@@ -128,6 +129,23 @@ if contains_word "balanced" "$DATASETS_STR"; then
     done
 else
     echo "Skipping Exp 4 submissions because DATASETS does not include balanced."
+fi
+
+# ---- Scaffold + Temporal splits (S1-S6) ------------------------------------
+echo ""
+echo "--- Scaffold + Temporal (6 runs) ---"
+if contains_word "balanced" "$DATASETS_STR"; then
+    for model in $MODELS_STR; do
+        for seed in $SEEDS_STR; do
+            for split in scaffold temporal; do
+                if contains_word "$split" "$BASELINE_SPLITS_STR" && contains_word "negbiodb" "$NEGATIVES_STR"; then
+                    submit "$model" "$split" "negbiodb" "balanced" "$seed"
+                fi
+            done
+        done
+    done
+else
+    echo "Skipping scaffold/temporal submissions because DATASETS does not include balanced."
 fi
 
 echo ""

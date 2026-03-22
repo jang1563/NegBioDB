@@ -96,14 +96,9 @@ def get_or_insert_protein(
     Returns:
         protein_id from the proteins table.
     """
-    row = conn.execute(
-        "SELECT protein_id FROM proteins WHERE uniprot_accession = ?",
-        (accession,),
-    ).fetchone()
-    if row:
-        return row[0]
-    cur = conn.execute(
-        """INSERT INTO proteins (uniprot_accession, gene_symbol,
+    # Use INSERT OR IGNORE to avoid race conditions in concurrent execution.
+    conn.execute(
+        """INSERT OR IGNORE INTO proteins (uniprot_accession, gene_symbol,
            amino_acid_sequence, sequence_length, organism)
         VALUES (?, ?, ?, ?, ?)""",
         (
@@ -114,4 +109,8 @@ def get_or_insert_protein(
             organism,
         ),
     )
-    return cur.lastrowid
+    row = conn.execute(
+        "SELECT protein_id FROM proteins WHERE uniprot_accession = ?",
+        (accession,),
+    ).fetchone()
+    return row[0]

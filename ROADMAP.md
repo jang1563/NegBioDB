@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-21 (v15 — DTI complete, CT ML+LLM 80/80 COMPLETE, PPI-C ML complete 54/54, PPI-D LLM planned)
+> Last updated: 2026-03-22 (v18 — DTI complete, CT COMPLETE, PPI COMPLETE — all 3 domains done)
 
 ---
 
@@ -416,18 +416,29 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 > **Key PPI-C findings:** PIPR cold_both catastrophic (AUROC 0.409±0.077, below random). MLPFeatures cold_both robust (0.950±0.021). Negative source effect MODEL-DEPENDENT: sequence models +6-9% inflation (same as DTI), MLPFeatures REVERSED -5% to -19% (NegBioDB harder). DDB ≈ random.
 
-### Step PPI-D: LLM Benchmark ⏳ NOT STARTED
+### Step PPI-D: LLM Benchmark ✅ 80/80 COMPLETE (2026-03-22)
 
-- [ ] PPI schema migration 002 (function descriptions, GO terms, PMID abstracts table)
-- [ ] UniProt function descriptions fetch (~18K proteins)
-- [ ] PubMed abstract fetch for IntAct PMIDs
-- [ ] Design document (`research/16_ppi_llm_benchmark_design.md`)
-- [ ] PPI LLM modules (`llm_prompts.py`, `llm_eval.py`, `llm_dataset.py`)
-- [ ] 4 dataset builders: PPI-L1 (4-way MCQ), PPI-L2 (extraction), PPI-L3 (reasoning), PPI-L4 (tested/untested)
-- [ ] Inference runner + SLURM scripts
-- [ ] 80 runs: 5 models × 4 levels × 4 configs
-- [ ] L3 judge scoring (GPT-4o-mini)
-- [ ] Results collection and analysis
+- [x] PPI schema migration 002 (function descriptions, GO terms, PMID abstracts table)
+- [x] UniProt function descriptions fetch (15,722/18,412 = 85.4% with function)
+- [x] PubMed abstract fetch for IntAct PMIDs (65 unique PMIDs → L2 fallback to constructed evidence)
+- [x] Design document (`research/16_ppi_llm_benchmark_design.md`, 1,005 lines)
+- [x] PPI LLM modules (`llm_prompts.py`, `llm_eval.py`, `llm_dataset.py`) — 101 tests passing
+- [x] 4 dataset builders: PPI-L1 (1,200), PPI-L2 (500), PPI-L3 (200), PPI-L4 (500)
+- [x] Inference runner + L3 judge + results collector + SLURM scripts (4 templates + submit)
+- [x] 80 jobs submitted (SLURM IDs 2708050-2708129)
+- [x] 80/80 complete: all 5 models × 4 levels × 4 configs
+- [x] L3 judge scoring (Gemini 2.5 Flash) — 20/20 runs judged
+- [x] Results collection and analysis — `ppi_llm_summary.csv` + `.md`
+- [x] Contamination vs popularity analysis — all 5 models show true contamination
+- [x] Expert panel review fixes (protein_mapper race condition, STRING file glob, collector regex)
+
+> **Key PPI-D findings (5 models):**
+> - **L1 3-shot trivially solvable** (~1.0 acc for 4/5 models; Qwen ~0.83)
+> - **L2 near-perfect extraction** (entity_f1 ~1.0 for all models)
+> - **L3 NO ceiling effect** (1.0-4.68 range). Haiku zero-shot best (4.68). Structural reasoning hardest dimension.
+> - **L4 moderate discrimination** (MCC 0.33-0.44, between DTI ≤0.18 and CT ~0.5)
+> - **L4 MASSIVE contamination** — gap 0.40-0.59 (threshold 0.15). True contamination confirmed (not popularity confound).
+> - **100% evidence hallucination** — all models cite evidence for untested pairs
 
 ---
 
@@ -662,8 +673,8 @@ DTI (Phase 1 — COMPLETE)
   ├── Clinical Trial Failure (Phase 1-CT — COMPLETE)
   │     └── 132,925 failure results, 108 ML + 80 LLM runs done
   │
-  ├── Protein-Protein Interaction (Phase 1-PPI — ML DONE, LLM planned)
-  │     └── 2.2M negative pairs, 54/54 ML runs done, PPI-D LLM benchmark planned
+  ├── Protein-Protein Interaction (Phase 1-PPI — COMPLETE)
+  │     └── 2.2M negative pairs, 54 ML + 80 LLM runs done
   │
   ├── Gene Function (CRISPR KO/KD negatives)
   │     └── Leverage CRISPR screen data, DepMap
@@ -767,3 +778,6 @@ Exp 1 result determines the paper's primary narrative. Check at Week 6:
 | [research/13_clinical_trial_failure_domain.md](research/13_clinical_trial_failure_domain.md) | CT domain design: failure taxonomy, 3-tier detection, pipeline architecture |
 | [research/14_ct_ml_benchmark_design.md](research/14_ct_ml_benchmark_design.md) | CT ML benchmark: 3 tasks, 6 splits, 3 models, 3 experiments |
 | [research/15_ct_llm_benchmark_design.md](research/15_ct_llm_benchmark_design.md) | CT LLM benchmark: 4 levels, 5 models, contamination analysis |
+| [research/16_ppi_llm_benchmark_design.md](research/16_ppi_llm_benchmark_design.md) | PPI LLM benchmark: 4 levels, 5 models, contamination analysis |
+| [research/17_ct_expert_panel_review.md](research/17_ct_expert_panel_review.md) | CT domain 6-expert panel review |
+| [research/17_ppi_expert_panel_review.md](research/17_ppi_expert_panel_review.md) | PPI domain 6-expert panel review |

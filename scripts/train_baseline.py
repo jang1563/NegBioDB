@@ -59,6 +59,8 @@ _SPLIT_COL_MAP: dict[str, str] = {
     "cold_compound":  "split_cold_compound",
     "cold_target":    "split_cold_target",
     "ddb":            "split_degree_balanced",
+    "scaffold":       "split_scaffold",
+    "temporal":       "split_temporal",
 }
 
 

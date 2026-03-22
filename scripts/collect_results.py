@@ -44,7 +44,7 @@ TABLE_METRIC_NAMES = {
 
 # Display order for models/splits
 MODEL_ORDER = ["deepdta", "graphdta", "drugban"]
-SPLIT_ORDER = ["random", "cold_compound", "cold_target", "ddb"]
+SPLIT_ORDER = ["random", "cold_compound", "cold_target", "ddb", "scaffold", "temporal"]
 NEG_ORDER   = ["negbiodb", "uniform_random", "degree_matched"]
 
 

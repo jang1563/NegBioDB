@@ -194,6 +194,8 @@ def run_string_etl(
     min_degree: int = 5,
     max_pairs: int = 500_000,
     protein_universe: set[str] | None = None,
+    mapping_path: str | Path | None = None,
+    links_path: str | Path | None = None,
 ) -> dict:
     """Orchestrator: load STRING zero-score negatives.
 
@@ -203,10 +205,16 @@ def run_string_etl(
         min_degree: Minimum STRING degree for "well-studied".
         max_pairs: Maximum number of negative pairs.
         protein_universe: Optional set of proteins to restrict to.
+        mapping_path: Explicit path to ENSP→UniProt mapping file.
+        links_path: Explicit path to STRING protein links file.
 
     Returns:
         Stats dict.
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     from negbiodb_ppi.ppi_db import DEFAULT_PPI_DB_PATH, get_connection, run_ppi_migrations
 
     if db_path is None:
@@ -218,16 +226,32 @@ def run_string_etl(
     data_dir = Path(data_dir)
     run_ppi_migrations(db_path)
 
-    # Find files
-    mapping_files = list(data_dir.glob("*.uniprot_2_string*"))
-    links_files = list(data_dir.glob("*.protein.links*"))
-    if not mapping_files:
-        raise FileNotFoundError(f"No STRING mapping file found in {data_dir}")
-    if not links_files:
-        raise FileNotFoundError(f"No STRING links file found in {data_dir}")
+    # Resolve file paths — use explicit paths if provided, else glob with warnings
+    if mapping_path is None:
+        mapping_files = list(data_dir.glob("*.uniprot_2_string*"))
+        if not mapping_files:
+            raise FileNotFoundError(f"No STRING mapping file found in {data_dir}")
+        if len(mapping_files) > 1:
+            logger.warning(
+                "Multiple STRING mapping files found: %s. Using %s",
+                mapping_files, mapping_files[0],
+            )
+        mapping_path = mapping_files[0]
+    else:
+        mapping_path = Path(mapping_path)
 
-    mapping_path = mapping_files[0]
-    links_path = links_files[0]
+    if links_path is None:
+        links_files = list(data_dir.glob("*.protein.links*"))
+        if not links_files:
+            raise FileNotFoundError(f"No STRING links file found in {data_dir}")
+        if len(links_files) > 1:
+            logger.warning(
+                "Multiple STRING links files found: %s. Using %s",
+                links_files, links_files[0],
+            )
+        links_path = links_files[0]
+    else:
+        links_path = Path(links_path)
 
     # Load mapping
     ensp_to_uniprot = load_string_mapping(mapping_path)
