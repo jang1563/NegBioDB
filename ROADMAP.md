@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-22 (v18 — DTI complete, CT COMPLETE, PPI COMPLETE — all 3 domains done)
+> Last updated: 2026-03-22 (v19 — DTI complete, CT COMPLETE, PPI COMPLETE, GE code complete — 4 domains)
 
 ---
 
@@ -442,6 +442,62 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 ---
 
+## Phase 1-GE: Gene Essentiality / DepMap Domain
+
+> Initiated: 2026-03-22 | Code complete (172 tests), awaiting HPC data load
+
+### Step GE-1: Infrastructure ✅ COMPLETE
+
+- [x] Design document (`research/19_ge_depmap_domain_design.md`)
+- [x] GE schema design (1 migration: 001 initial, 11 tables)
+- [x] DB layer (`src/negbiodb_depmap/depmap_db.py`): migrations, pair aggregation
+- [x] Package init + build system (`pyproject.toml` updated)
+- [x] 26 DB tests passing
+
+### Step GE-2: ETL Pipeline ✅ COMPLETE
+
+- [x] CRISPR ETL (`etl_depmap.py`): chunked CSV, gene/cell line/reference set loading, tier assignment
+- [x] RNAi ETL (`etl_rnai.py`): DEMETER2, CCLE name mapping, concordance tier upgrade
+- [x] PRISM ETL (`etl_prism.py`): compound metadata, primary/secondary screen bridge tables
+- [x] Download script (`scripts_depmap/download_depmap.py`): DepMap portal + Figshare
+- [x] Load scripts: `load_depmap.py`, `load_rnai.py`, `load_prism.py`
+- [x] 47 ETL tests passing (27 CRISPR + 9 RNAi + 11 PRISM)
+
+### Step GE-3: ML Export & Features ✅ COMPLETE
+
+- [x] Export module (`src/negbiodb_depmap/export.py`): 5 splits, M1/M2, conflict resolution, controls
+- [x] Features module (`src/negbiodb_depmap/ge_features.py`): gene + cell line + omics features (~75 dims)
+- [x] ML models: XGBoost (`xgboost_ge.py`) + MLP (`mlp_features.py`)
+- [x] Training harness (`train_ge_baseline.py`) + SLURM template
+- [x] 34 tests passing (14 export + 20 features)
+
+### Step GE-4: LLM Benchmark ✅ COMPLETE
+
+- [x] Prompt templates (`llm_prompts.py`): GE-L1 through GE-L4
+- [x] Evaluation module (`llm_eval.py`): parsing + metrics for all 4 tasks
+- [x] Dataset builder (`llm_dataset.py`): candidate pool, evidence, splits
+- [x] 4 dataset build scripts (`build_ge_l{1-4}_dataset.py`)
+- [x] Inference runner (`run_ge_llm_benchmark.py`) + results collector
+- [x] SLURM templates: Anthropic/OpenAI/Gemini/Local + submit_all (80 jobs)
+- [x] 65 LLM tests passing (13 prompts + 30 eval + 15 dataset + 7 misc)
+
+### Step GE-5: Data Download & Load (PENDING — HPC)
+
+- [ ] Download DepMap data (~2 GB): CRISPR, Dependency, Model.csv, controls, DEMETER2, PRISM, omics
+- [ ] Load CRISPR ETL: ~28.5M non-essential pairs → `data/negbiodb_depmap.db`
+- [ ] Load RNAi ETL: DEMETER2 concordance upgrade
+- [ ] Load PRISM bridge tables
+- [ ] Export ML datasets (M1 balanced/realistic, M2 3-way)
+
+### Step GE-6: Experiments (PENDING — HPC)
+
+- [ ] ML baselines: XGBoost + MLP × 5 splits × 3 seeds
+- [ ] LLM benchmark: 80 jobs (5 models × 4 tasks × 4 configs)
+- [ ] L3 LLM-as-Judge scoring
+- [ ] Results collection and analysis
+
+---
+
 ## Phase 1b: Post-Submission Expansion (Months 3-6)
 
 ### Data Expansion (if not at 10K+ for submission)
@@ -676,8 +732,8 @@ DTI (Phase 1 — COMPLETE)
   ├── Protein-Protein Interaction (Phase 1-PPI — COMPLETE)
   │     └── 2.2M negative pairs, 54 ML + 80 LLM runs done
   │
-  ├── Gene Function (CRISPR KO/KD negatives)
-  │     └── Leverage CRISPR screen data, DepMap
+  ├── Gene Essentiality / DepMap (Phase 1-GE — CODE COMPLETE)
+  │     └── ~28.5M non-essential pairs, 172 tests, awaiting HPC load
   │
   ├── Chemistry Domain Layer
   │     └── Failed reactions, yield = 0 data

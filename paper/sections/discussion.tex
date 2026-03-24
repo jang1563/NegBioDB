@@ -1,0 +1,17 @@
+\section{Discussion and Conclusion}
+\label{sec:discussion}
+
+\textbf{The opacity gradient and its implications.}
+The opacity gradient implies that LLM benchmarks must account for data accessibility in training corpora, not just task difficulty. The L4 progression---DTI (MCC~$\leq$~0.18) $\to$ PPI (0.44) $\to$ CT (0.56)---does not reflect increasing biological reasoning capability. Rather, it mirrors the degree to which each domain's data appears in web crawls: ChEMBL bioactivity tables are locked behind database queries (opaque), IntAct/STRING protein interaction data is publicly crawlable (memorizable), and ClinicalTrials.gov records are extensively discussed in news, regulatory filings, and medical literature (public). Models do not ``understand'' negative results---they recall them. This distinction is critical for responsible LLM deployment in drug discovery and clinical trial design.
+
+\textbf{Curated negatives as a feature.}
+NegBioDB negatives being trivially separable from positives by ML models (AUROC~=~1.0 on random splits) is a feature, not a bug: it confirms that experimentally confirmed negatives encode genuine biological signal absent from random pairs. The value of NegBioDB for ML emerges in cold and temporal splits, where models must generalize to unseen entities---and where we observe catastrophic failures (PIPR cold\_both AUROC~=~0.409) that random negatives would not reveal.
+
+\textbf{Universal evidence hallucination.}
+The 100\% hallucination rate for evidence citations across all 241 LLM runs is a safety concern. Even when models correctly classify negative results, they fabricate supporting evidence (PMIDs, DOIs, author names). This confabulation pattern persists across all five models, all four levels, and all three domains, suggesting it is a fundamental limitation of current LLMs rather than a model-specific issue.
+
+\textbf{Limitations.}
+DTI ML baselines use a single seed (CT/PPI use 3 seeds). CT drug resolution covers only 20.6\% of interventions due to non-standard drug naming in trial records. PPI L1/L2 tasks are trivially solvable with few-shot prompting, limiting their discriminative value. The L3 reasoning evaluation suffers from a judge ceiling effect in CT (Appendix~D). Contamination analysis is conclusive only for PPI; DTI L4 performance is too low to detect temporal patterns. The database was developed by a single author, mitigated by 800+ automated tests and a comprehensive reproducibility pipeline.
+
+\textbf{Conclusion.}
+NegBioDB provides the first multi-domain resource for experimentally confirmed negative results in biomedicine (32.9M entries, CC BY-SA 4.0, Croissant metadata). NegBioBench reveals that curated negatives carry systematically different signal than controls, cold splits expose universal generalization failures, and LLMs are fundamentally failure-blind---unable to distinguish tested from untested pairs without training data memorization. We release all databases, benchmarks, and code to support future work on negative result understanding, including community contribution tools, additional domains (e.g., gene function), and a public leaderboard.

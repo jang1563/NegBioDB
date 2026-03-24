@@ -1,0 +1,52 @@
+\section{Croissant Metadata}
+\label{app:croissant}
+
+NegBioDB provides Croissant JSON-LD metadata~\citep{akhtar2024croissant} for machine-readable dataset discovery, as required by the NeurIPS 2026 Evaluations \& Datasets Track. The metadata file (\texttt{croissant.json}) is distributed alongside the dataset on HuggingFace and describes all three domain databases and their ML export files.
+
+The Croissant metadata includes:
+\begin{itemize}[nosep,leftmargin=*]
+    \item \textbf{Dataset-level fields:} Name, description, license (CC BY-SA 4.0), URL, creator, date published, citation.
+    \item \textbf{Distribution:} Three SQLite databases (\texttt{negbiodb.db}, \texttt{negbiodb\_ct.db}, \texttt{negbiodb\_ppi.db}) and three Parquet ML export files.
+    \item \textbf{Record sets:} Schema definitions for each domain's primary fact table (\texttt{negative\_results}, \texttt{trial\_failure\_results}, \texttt{ppi\_negative\_results}) including field names, types, and descriptions.
+    \item \textbf{ML-specific fields:} Split definitions, positive/negative label semantics, and recommended evaluation metrics per domain.
+\end{itemize}
+
+The metadata validates successfully with the \texttt{mlcroissant} Python library (v1.0+). A minimal excerpt:
+
+\begin{small}
+\begin{verbatim}
+{
+  "@context": {"@vocab": "https://schema.org/",
+               "cr": "http://mlcommons.org/croissant/"},
+  "@type": "cr:Dataset",
+  "name": "NegBioDB",
+  "description": "Multi-domain database of experimentally confirmed
+                  negative results in biomedicine",
+  "license": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "distribution": [
+    {"@type": "cr:FileObject",
+     "name": "negbiodb.db",
+     "contentUrl": "https://huggingface.co/.../negbiodb.db",
+     "encodingFormat": "application/x-sqlite3"},
+    {"@type": "cr:FileObject",
+     "name": "negbiodb_ct.db", ...},
+    {"@type": "cr:FileObject",
+     "name": "negbiodb_ppi.db", ...}
+  ],
+  "recordSet": [
+    {"@type": "cr:RecordSet",
+     "name": "dti_negative_results",
+     "field": [
+       {"name": "compound_id", "@type": "cr:Field",
+        "dataType": "sc:Integer"},
+       {"name": "target_id", ...},
+       {"name": "confidence_tier", "dataType": "sc:Text"},
+       {"name": "activity_value", "dataType": "sc:Float"},
+       ...
+     ]}
+  ]
+}
+\end{verbatim}
+\end{small}
+
+The full Croissant JSON-LD file is available in the dataset repository.

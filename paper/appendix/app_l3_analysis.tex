@@ -1,0 +1,53 @@
+\section{L3 Reasoning Analysis}
+\label{app:l3_analysis}
+
+L3 evaluates open-ended scientific reasoning about negative results using an LLM-as-judge scoring on four dimensions (1--5 scale). Each domain uses a domain-appropriate judge: GPT-4o-mini for CT, Gemini-2.5-Flash for PPI, and Gemini-2.5-Flash-Lite for DTI. We present the full per-dimension breakdown and discuss the ceiling effect that motivated deferring L3 from the main text.
+
+\subsection{Judge Ceiling Effect}
+
+A ceiling effect is present in two domains:
+\begin{itemize}[nosep,leftmargin=*]
+    \item \textbf{CT} (GPT-4o-mini judge): Overall scores range 4.45--5.00 (Table~\ref{tab:ct_l3_full}). Three of five models (Haiku, Gemini, Qwen) receive perfect 5.0 scores in zero-shot mode; GPT-4o-mini scores 4.66 and Llama-3.3-70B scores 4.997. This ceiling confounds meaningful cross-model comparison.
+    \item \textbf{PPI} (Gemini-2.5-Flash judge): Zero-shot scores range 4.28--4.68 (Table~\ref{tab:ppi_l3_full}). While lower than CT, the range is still compressed. Notably, Llama-3.3-70B 3-shot has a 51.5\% formatting error rate; successful completions score 2.05$\pm$0.92, but overall 3-shot performance is unreliable.
+\end{itemize}
+
+DTI L3 shows the most meaningful variation (3.02--4.66), with Gemini-2.5-Flash achieving the highest overall score.
+
+\subsection{PPI L3 Per-Dimension Scores}
+
+Table~\ref{tab:ppi_l3_dims} reveals that \textbf{structural reasoning} (dimension 2) is the most challenging aspect across all models. Even top-performing models score 1.2--4.4 on structural reasoning while achieving 4.6--5.0 on biological plausibility. This suggests models excel at identifying functional mismatches between proteins but struggle with detailed structural arguments about binding interfaces, domain compatibility, and steric constraints.
+
+\begin{table}[h]
+\centering
+\caption{PPI L3 per-dimension judge scores. Structural reasoning is consistently the weakest dimension. $\dagger$Llama-3.3-70B 3-shot has 51.5\% output failure rate; scores computed from successful completions only.}
+\label{tab:ppi_l3_dims}
+\scriptsize
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Bio.\ Plaus.} & \textbf{Struct.\ Reas.} & \textbf{Mech.\ Compl.} & \textbf{Specificity} & \textbf{Overall} \\
+\midrule
+Claude Haiku-4.5 & 3-shot & 4.98 & 2.25 & 3.17 & 4.39 & 3.70 \\
+Claude Haiku-4.5 & zero-shot & 5.00 & 4.29 & 4.46 & 4.99 & 4.68 \\
+Gemini-2.5-Flash & 3-shot & 4.71 & 1.24 & 2.70 & 3.77 & 3.11 \\
+Gemini-2.5-Flash & zero-shot & 5.00 & 4.39 & 4.19 & 5.00 & 4.65 \\
+GPT-4o-mini & 3-shot & 4.80 & 1.34 & 2.78 & 3.92 & 3.21 \\
+GPT-4o-mini & zero-shot & 4.87 & 3.98 & 3.87 & 4.73 & 4.36 \\
+Llama-3.3-70B & 3-shot & 2.81 & 1.18 & 1.80 & 2.43 & 2.05$^\dagger$ \\
+Llama-3.3-70B & zero-shot & 4.77 & 3.94 & 3.70 & 4.71 & 4.28 \\
+Qwen2.5-32B & 3-shot & 4.92 & 1.96 & 3.06 & 4.10 & 3.51 \\
+Qwen2.5-32B & zero-shot & 4.91 & 4.01 & 4.02 & 4.87 & 4.45 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{3-shot Degradation in PPI L3}
+
+A notable phenomenon: 3-shot prompting \emph{degrades} PPI L3 scores compared to zero-shot for all models (e.g., Gemini: 4.65$\to$3.11, GPT-4o-mini: 4.36$\to$3.21). This contrasts with L1 where 3-shot dramatically improves performance. We hypothesize that few-shot examples constrain the model's reasoning to follow a specific template, reducing the depth and specificity of explanations compared to unconstrained zero-shot generation. This effect is most extreme for Llama-3.3-70B, where 3-shot examples cause a 51.5\% output failure rate---successful completions score only 2.05$\pm$0.92.
+
+\subsection{Cross-Domain L3 Comparison}
+
+Despite the ceiling effect, two patterns emerge:
+\begin{enumerate}[nosep,leftmargin=*]
+    \item \textbf{Gemini-2.5-Flash consistently leads} across DTI (4.62 3-shot) and PPI (4.65 zero-shot), producing the most scientifically specific explanations.
+    \item \textbf{Specificity is the hardest dimension in DTI} (2.41--4.22) but not in PPI (3.77--5.00), suggesting that DTI requires more specialized pharmacological knowledge that models lack.
+\end{enumerate}

@@ -36,6 +36,60 @@ N_DIFF_COMPARTMENT = 100
 MIN_FUNC_LEN = 50  # Minimum function_description length
 
 
+def _generate_gold_reasoning(row: pd.Series) -> str:
+    """Generate template gold reasoning from protein annotations for fewshot examples."""
+    gene1 = row.get("gene_symbol_1") or row.get("uniprot_1", "Protein_1")
+    gene2 = row.get("gene_symbol_2") or row.get("uniprot_2", "Protein_2")
+    func1 = (row.get("function_1") or "unknown function")[:200]
+    func2 = (row.get("function_2") or "unknown function")[:200]
+    loc1 = row.get("location_1") or ""
+    loc2 = row.get("location_2") or ""
+    source = row.get("source_db", "")
+    method = row.get("detection_method", "")
+
+    parts = []
+    # Biological plausibility
+    parts.append(
+        f"{gene1} is described as: {func1}. "
+        f"{gene2} is described as: {func2}. "
+        f"These distinct biological roles suggest limited functional overlap "
+        f"requiring direct physical association."
+    )
+    # Structural/localization reasoning
+    if loc1 and loc2:
+        if loc1.lower() != loc2.lower():
+            parts.append(
+                f"{gene1} localizes to {loc1}, while {gene2} localizes to {loc2}. "
+                f"Different subcellular compartments reduce the probability of direct interaction."
+            )
+        else:
+            parts.append(
+                f"Although both proteins are found in {loc1}, co-localization alone "
+                f"does not imply physical interaction."
+            )
+    # Evidence basis
+    if source == "intact" and method:
+        from negbiodb_ppi.llm_dataset import DETECTION_METHOD_DESCRIPTIONS
+
+        method_desc = DETECTION_METHOD_DESCRIPTIONS.get(method, method)
+        parts.append(
+            f"A {method_desc} experiment directly tested for binding between "
+            f"{gene1} and {gene2} and found no detectable interaction."
+        )
+    elif source == "huri":
+        parts.append(
+            f"Systematic yeast two-hybrid screening tested this pair across "
+            f"multiple replicates and found no positive interaction signal."
+        )
+    else:
+        parts.append(
+            "Experimental evidence does not support a physical interaction between "
+            f"{gene1} and {gene2}."
+        )
+
+    return " ".join(parts)
+
+
 def _same_compartment(loc1: str | None, loc2: str | None) -> bool | None:
     """Check if two proteins share a subcellular compartment."""
     if not loc1 or not loc2:
@@ -155,6 +209,9 @@ def main(argv: list[str] | None = None) -> int:
                 "uniprot_2": row.get("uniprot_2"),
             },
         }
+        # Fewshot records need gold_reasoning for 3-shot L3 prompts
+        if row["split"] == "fewshot":
+            rec["gold_reasoning"] = _generate_gold_reasoning(row)
         records.append(rec)
 
     write_jsonl(records, args.output)

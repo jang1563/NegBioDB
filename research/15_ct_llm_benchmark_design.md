@@ -282,6 +282,8 @@ Given a drug, condition, trial phase, and quantitative outcome data, provide a s
 - Safety vs efficacy: ~50/50 split
 - Phase II vs III: ~50/50 split
 
+> **Deployment note (2026-03-23):** The safety/efficacy balance was unachievable at time of construction. Gold-tier records with ChEMBL resolution, Phase II/III, and `failure_category='safety'` yielded zero eligible records after all filters. The deployed L3 dataset is 200/200 efficacy-only. The build script logs a warning and falls back to all-efficacy. This must be disclosed as a limitation in the paper: CT-L3 evaluates reasoning about efficacy failures only, not the full safety/efficacy spectrum originally intended.
+
 ### Context Text Generation
 
 ```

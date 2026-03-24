@@ -1,0 +1,279 @@
+\section{Complete LLM Results}
+\label{app:llm_tables}
+
+This appendix presents complete LLM results for all 241 experiments. DTI uses 6 models (81 runs); CT and PPI each use 5 models (80 runs each). Each model is evaluated in zero-shot and three 3-shot configurations (different random example sets). 3-shot results report mean $\pm$ std across the three example sets.
+
+\subsection{DTI LLM Results (81 runs)}
+
+DTI models: Gemini-2.5-Flash, Gemini-2.5-Flash-Lite, GPT-4o-mini, Llama-3.3-70B, Mistral-7B, Qwen2.5-32B. L2 was not evaluated for DTI due to annotation cost.
+
+\begin{table}[h]
+\centering
+\caption{DTI L1 (MCQ, 4-way classification). N=3 for 3-shot (mean$\pm$std), N=1 for zero-shot.}
+\label{tab:dti_l1_full}
+\scriptsize
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Accuracy} & \textbf{Macro-F1} & \textbf{MCC} \\
+\midrule
+Gemini-2.5-Flash & 3-shot & 1.000$\pm$0.000 & 1.000$\pm$0.000 & 1.000$\pm$0.000 \\
+Gemini-2.5-Flash & zero-shot & 0.721 & 0.630 & 0.610 \\
+Gemini-2.5-Flash-Lite & 3-shot & 0.971$\pm$0.019 & 0.964$\pm$0.031 & 0.960$\pm$0.026 \\
+Gemini-2.5-Flash-Lite & zero-shot & 0.807 & 0.705 & 0.750 \\
+GPT-4o-mini & 3-shot & 0.944$\pm$0.012 & 0.941$\pm$0.014 & 0.922$\pm$0.016 \\
+GPT-4o-mini & zero-shot & 0.736 & 0.642 & 0.632 \\
+Llama-3.3-70B & 3-shot & 0.991$\pm$0.010 & 0.991$\pm$0.010 & 0.987$\pm$0.014 \\
+Llama-3.3-70B & zero-shot & 0.613 & 0.501 & 0.430 \\
+Mistral-7B & 3-shot & 0.650$\pm$0.060 & 0.496$\pm$0.108 & 0.502$\pm$0.086 \\
+Mistral-7B & zero-shot & 0.708 & 0.551 & 0.593 \\
+Qwen2.5-32B & 3-shot & 0.977$\pm$0.012 & 0.978$\pm$0.012 & 0.968$\pm$0.017 \\
+Qwen2.5-32B & zero-shot & 0.728 & 0.635 & 0.620 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{DTI L3 (reasoning, LLM-as-judge). Judge dimensions: accuracy, completeness, reasoning quality, specificity. Overall = mean of 4 dimensions.}
+\label{tab:dti_l3_full}
+\scriptsize
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Accuracy} & \textbf{Complete.} & \textbf{Reasoning} & \textbf{Specific.} & \textbf{Overall} \\
+\midrule
+Gemini-2.5-Flash & 3-shot & 4.88$\pm$0.01 & 4.49$\pm$0.08 & 4.89$\pm$0.02 & 4.22$\pm$0.01 & 4.62$\pm$0.02 \\
+Gemini-2.5-Flash & zero-shot & 4.85 & 4.70 & 4.80 & 4.30 & 4.66 \\
+Gemini-Lite & 3-shot & 4.31$\pm$0.03 & 4.06$\pm$0.03 & 4.28$\pm$0.03 & 3.23$\pm$0.05 & 3.97$\pm$0.02 \\
+Gemini-Lite & zero-shot & 4.20 & 4.05 & 4.10 & 3.08 & 3.86 \\
+GPT-4o-mini & 3-shot & 4.06$\pm$0.01 & 4.04$\pm$0.02 & 4.02$\pm$0.02 & 2.59$\pm$0.04 & 3.68$\pm$0.02 \\
+GPT-4o-mini & zero-shot & 3.97 & 3.97 & 3.97 & 2.85 & 3.69 \\
+Llama-3.3-70B & 3-shot & 4.18$\pm$0.06 & 4.10$\pm$0.04 & 4.03$\pm$0.04 & 2.41$\pm$0.07 & 3.68$\pm$0.05 \\
+Llama-3.3-70B & zero-shot & 3.94 & 3.86 & 3.72 & 2.36 & 3.47 \\
+Mistral-7B & 3-shot & 3.46$\pm$0.21 & 3.63$\pm$0.15 & 3.23$\pm$0.05 & 1.77$\pm$0.10 & 3.02$\pm$0.08 \\
+Mistral-7B & zero-shot & 3.55 & 3.66 & 3.48 & 2.24 & 3.23 \\
+Qwen2.5-32B & 3-shot & 4.04$\pm$0.08 & 4.02$\pm$0.06 & 3.90$\pm$0.07 & 2.66$\pm$0.01 & 3.65$\pm$0.05 \\
+Qwen2.5-32B & zero-shot & 3.97 & 3.97 & 3.87 & 2.82 & 3.66 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{DTI L4 (discrimination, tested vs.\ untested). Evidence citation rate measures hallucination.}
+\label{tab:dti_l4_full}
+\scriptsize
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Accuracy} & \textbf{MCC} & \textbf{Contam.\ Gap} & \textbf{Halluc.\ Rate} \\
+\midrule
+Gemini-2.5-Flash & 3-shot & 0.478$\pm$0.006 & $-$0.102$\pm$0.005 & 0.033$\pm$0.036 & 1.000 \\
+Gemini-2.5-Flash & zero-shot & 0.427 & $-$0.234 & 0.047 & 0.994 \\
+Gemini-Lite & 3-shot & 0.570$\pm$0.040 & 0.181$\pm$0.087 & 0.022$\pm$0.027 & 0.990$\pm$0.008 \\
+Gemini-Lite & zero-shot & 0.350 & $-$0.349 & 0.146 & 0.727 \\
+GPT-4o-mini & 3-shot & 0.512$\pm$0.011 & 0.037$\pm$0.036 & 0.249$\pm$0.011 & 0.991$\pm$0.012 \\
+GPT-4o-mini & zero-shot & 0.517 & 0.047 & 0.233 & 1.000 \\
+Llama-3.3-70B & 3-shot & 0.589$\pm$0.026 & 0.184$\pm$0.051 & 0.242$\pm$0.014 & 1.000 \\
+Llama-3.3-70B & zero-shot & 0.540 & 0.101 & $-$0.024 & 1.000 \\
+Mistral-7B & 3-shot & 0.491$\pm$0.013 & $-$0.030$\pm$0.042 & 0.049$\pm$0.047 & 1.000 \\
+Mistral-7B & zero-shot & 0.500 & 0.000 & 0.000 & 1.000 \\
+Qwen2.5-32B & 3-shot & 0.538$\pm$0.013 & 0.113$\pm$0.038 & 0.163$\pm$0.021 & 1.000 \\
+Qwen2.5-32B & zero-shot & 0.510 & 0.046 & 0.098 & 1.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\subsection{CT LLM Results (80 runs)}
+
+CT models: Claude Haiku-4.5, Gemini-2.5-Flash, GPT-4o-mini, Llama-3.3-70B, Qwen2.5-32B.
+
+\begin{table}[h]
+\centering
+\caption{CT-L1 (MCQ, 5-way failure classification).}
+\label{tab:ct_l1_full}
+\scriptsize
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Accuracy} & \textbf{Macro-F1} & \textbf{MCC} \\
+\midrule
+Claude Haiku-4.5 & 3-shot & 0.662$\pm$0.012 & 0.657$\pm$0.015 & 0.592$\pm$0.014 \\
+Claude Haiku-4.5 & zero-shot & 0.660 & 0.652 & 0.581 \\
+Gemini-2.5-Flash & 3-shot & 0.667$\pm$0.014 & 0.663$\pm$0.017 & 0.597$\pm$0.015 \\
+Gemini-2.5-Flash & zero-shot & 0.681 & 0.675 & 0.609 \\
+GPT-4o-mini & 3-shot & 0.625$\pm$0.011 & 0.616$\pm$0.012 & 0.546$\pm$0.012 \\
+GPT-4o-mini & zero-shot & 0.641 & 0.634 & 0.571 \\
+Llama-3.3-70B & 3-shot & 0.634$\pm$0.022 & 0.630$\pm$0.030 & 0.560$\pm$0.026 \\
+Llama-3.3-70B & zero-shot & 0.631 & 0.617 & 0.559 \\
+Qwen2.5-32B & 3-shot & 0.648$\pm$0.017 & 0.642$\pm$0.022 & 0.572$\pm$0.024 \\
+Qwen2.5-32B & zero-shot & 0.654 & 0.641 & 0.579 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{CT-L2 (structured extraction from clinical trial evidence).}
+\label{tab:ct_l2_full}
+\scriptsize
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Category Acc} & \textbf{Field F1} & \textbf{Schema Compl.} \\
+\midrule
+Claude Haiku-4.5 & 3-shot & 0.738$\pm$0.055 & 0.476$\pm$0.099 & 1.000 \\
+Claude Haiku-4.5 & zero-shot & 0.725 & 0.280 & 1.000 \\
+Gemini-2.5-Flash & 3-shot & 0.742$\pm$0.068 & 0.746$\pm$0.162 & 1.000 \\
+Gemini-2.5-Flash & zero-shot & 0.760 & 0.284 & 1.000 \\
+GPT-4o-mini & 3-shot & 0.715$\pm$0.089 & 0.734$\pm$0.185 & 0.917$\pm$0.001 \\
+GPT-4o-mini & zero-shot & 0.751 & 0.334 & 0.965 \\
+Llama-3.3-70B & 3-shot & 0.752$\pm$0.064 & 0.768$\pm$0.161 & 1.000 \\
+Llama-3.3-70B & zero-shot & 0.762 & 0.315 & 1.000 \\
+Qwen2.5-32B & 3-shot & 0.709$\pm$0.095 & 0.808$\pm$0.162 & 1.000 \\
+Qwen2.5-32B & zero-shot & 0.718 & 0.315 & 1.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{CT-L3 (reasoning, LLM-as-judge overall score, 1--5 scale).}
+\label{tab:ct_l3_full}
+\scriptsize
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Overall Score} \\
+\midrule
+Claude Haiku-4.5 & 3-shot & 4.960$\pm$0.007 \\
+Claude Haiku-4.5 & zero-shot & 5.000 \\
+Gemini-2.5-Flash & 3-shot & 4.453$\pm$0.044 \\
+Gemini-2.5-Flash & zero-shot & 5.000 \\
+GPT-4o-mini & 3-shot & 4.743$\pm$0.058 \\
+GPT-4o-mini & zero-shot & 4.661 \\
+Llama-3.3-70B & 3-shot & 4.826$\pm$0.007 \\
+Llama-3.3-70B & zero-shot & 4.997 \\
+Qwen2.5-32B & 3-shot & 4.968$\pm$0.007 \\
+Qwen2.5-32B & zero-shot & 5.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{CT-L4 (discrimination, tested vs.\ untested clinical trials).}
+\label{tab:ct_l4_full}
+\scriptsize
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Accuracy} & \textbf{MCC} & \textbf{Halluc.\ Rate} \\
+\midrule
+Claude Haiku-4.5 & 3-shot & 0.739$\pm$0.019 & 0.502$\pm$0.014 & 1.000 \\
+Claude Haiku-4.5 & zero-shot & 0.750 & 0.514 & 1.000 \\
+Gemini-2.5-Flash & 3-shot & 0.777$\pm$0.011 & 0.563$\pm$0.018 & 1.000 \\
+Gemini-2.5-Flash & zero-shot & 0.748 & 0.496 & 1.000 \\
+GPT-4o-mini & 3-shot & 0.738$\pm$0.008 & 0.485$\pm$0.007 & 1.000 \\
+GPT-4o-mini & zero-shot & 0.744 & 0.491 & 1.000 \\
+Llama-3.3-70B & 3-shot & 0.739$\pm$0.023 & 0.504$\pm$0.036 & 1.000 \\
+Llama-3.3-70B & zero-shot & 0.635 & 0.364 & 1.000 \\
+Qwen2.5-32B & 3-shot & 0.724$\pm$0.017 & 0.484$\pm$0.018 & 1.000 \\
+Qwen2.5-32B & zero-shot & 0.757 & 0.519 & 1.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\subsection{PPI LLM Results (80 runs)}
+
+PPI models: Claude Haiku-4.5, Gemini-2.5-Flash, GPT-4o-mini, Llama-3.3-70B, Qwen2.5-32B.
+
+\begin{table}[h]
+\centering
+\caption{PPI-L1 (MCQ, 4-way evidence quality classification). All 3-shot models achieve $\geq$0.999 accuracy except Qwen2.5-32B. Zero-shot performance drops to 0.75 due to complete failure on direct\_experimental evidence (Class A: 0.0 accuracy), while scoring $\approx$1.0 on Classes B--D.}
+\label{tab:ppi_l1_full}
+\scriptsize
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Accuracy} & \textbf{Macro-F1} & \textbf{MCC} \\
+\midrule
+Claude Haiku-4.5 & 3-shot & 0.999$\pm$0.001 & 0.999$\pm$0.001 & 0.999$\pm$0.001 \\
+Claude Haiku-4.5 & zero-shot & 0.750 & 0.667 & 0.730 \\
+Gemini-2.5-Flash & 3-shot & 1.000$\pm$0.001 & 1.000$\pm$0.001 & 0.999$\pm$0.001 \\
+Gemini-2.5-Flash & zero-shot & 0.750 & 0.667 & 0.730 \\
+GPT-4o-mini & 3-shot & 1.000$\pm$0.001 & 1.000$\pm$0.001 & 0.999$\pm$0.001 \\
+GPT-4o-mini & zero-shot & 0.749 & 0.665 & 0.728 \\
+Llama-3.3-70B & 3-shot & 1.000 & 1.000 & 1.000 \\
+Llama-3.3-70B & zero-shot & 0.750 & 0.667 & 0.730 \\
+Qwen2.5-32B & 3-shot & 0.826$\pm$0.069 & 0.792$\pm$0.101 & 0.803$\pm$0.069 \\
+Qwen2.5-32B & zero-shot & 0.750 & 0.667 & 0.730 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{PPI-L2 (extraction, protein pair identification). Near-perfect entity and count extraction; method and interaction strength require explicit evidence (zero-shot method accuracy is 0.000 for all models).}
+\label{tab:ppi_l2_full}
+\scriptsize
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Entity F1} & \textbf{Count Acc} & \textbf{Schema Compl.} & \textbf{Method Acc} & \textbf{Strength Acc} \\
+\midrule
+Claude Haiku-4.5 & 3-shot & 1.000 & 1.000 & 1.000 & 0.088$\pm$0.139 & 0.522$\pm$0.151 \\
+Claude Haiku-4.5 & zero-shot & 1.000 & 1.000 & 1.000 & 0.000 & 0.594 \\
+Gemini-2.5-Flash & 3-shot & 1.000 & 1.000 & 1.000 & 1.000 & 0.399$\pm$0.219 \\
+Gemini-2.5-Flash & zero-shot & 0.952 & 1.000 & 0.902 & 0.000 & 0.554 \\
+GPT-4o-mini & 3-shot & 0.999$\pm$0.001 & 1.000 & 1.000 & 0.937$\pm$0.108 & 0.425$\pm$0.182 \\
+GPT-4o-mini & zero-shot & 0.999 & 1.000 & 1.000 & 0.000 & 0.307 \\
+Llama-3.3-70B & 3-shot & 1.000 & 1.000 & 1.000 & 0.082$\pm$0.143 & 0.608$\pm$0.019 \\
+Llama-3.3-70B & zero-shot & 1.000 & 1.000 & 1.000 & 0.000 & 0.572 \\
+Qwen2.5-32B & 3-shot & 0.998$\pm$0.001 & 1.000 & 1.000 & 0.938$\pm$0.108 & 0.501$\pm$0.166 \\
+Qwen2.5-32B & zero-shot & 0.999 & 1.000 & 1.000 & 0.000 & 0.510 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{PPI-L3 (reasoning, LLM-as-judge overall score, 1--5 scale). Llama-3.3-70B 3-shot has 51.5\% error rate; score shown for successful completions only ($\dagger$).}
+\label{tab:ppi_l3_full}
+\scriptsize
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Overall Score} \\
+\midrule
+Claude Haiku-4.5 & 3-shot & 3.70$\pm$0.25 \\
+Claude Haiku-4.5 & zero-shot & 4.683 \\
+Gemini-2.5-Flash & 3-shot & 3.11$\pm$0.10 \\
+Gemini-2.5-Flash & zero-shot & 4.645 \\
+GPT-4o-mini & 3-shot & 3.21$\pm$0.10 \\
+GPT-4o-mini & zero-shot & 4.361 \\
+Llama-3.3-70B & 3-shot & 2.05$\pm$0.92$^\dagger$ \\
+Llama-3.3-70B & zero-shot & 4.281 \\
+Qwen2.5-32B & 3-shot & 3.51$\pm$0.04 \\
+Qwen2.5-32B & zero-shot & 4.452 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{PPI-L4 (discrimination, tested vs.\ untested protein pairs). Cit.\ Rate = fraction of responses including any evidence citation (all cited evidence is fabricated; hallucination rate = 100\%).}
+\label{tab:ppi_l4_full}
+\scriptsize
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Accuracy} & \textbf{MCC} & \textbf{Cit.\ Rate} \\
+\midrule
+Claude Haiku-4.5 & 3-shot & 0.648$\pm$0.010 & 0.390$\pm$0.020 & 1.000 \\
+Claude Haiku-4.5 & zero-shot & 0.608 & 0.334 & 1.000 \\
+Gemini-2.5-Flash & 3-shot & 0.671$\pm$0.006 & 0.382$\pm$0.004 & 1.000 \\
+Gemini-2.5-Flash & zero-shot & 0.647 & 0.358 & 1.000 \\
+GPT-4o-mini & 3-shot & 0.633$\pm$0.025 & 0.352$\pm$0.039 & 0.888$\pm$0.036 \\
+GPT-4o-mini & zero-shot & 0.699 & 0.430 & 1.000 \\
+Llama-3.3-70B & 3-shot & 0.637$\pm$0.046 & 0.371$\pm$0.056 & 0.978$\pm$0.001 \\
+Llama-3.3-70B & zero-shot & 0.703 & 0.441 & 1.000 \\
+Qwen2.5-32B & 3-shot & 0.641$\pm$0.010 & 0.369$\pm$0.009 & 0.467$\pm$0.032 \\
+Qwen2.5-32B & zero-shot & 0.645 & 0.366 & 1.000 \\
+\bottomrule
+\end{tabular}
+\end{table}

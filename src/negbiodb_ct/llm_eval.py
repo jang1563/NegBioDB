@@ -131,12 +131,8 @@ CT_L2_REQUIRED_FIELDS = [
     "decision_maker",
     "patient_impact",
 ]
-CT_L2_CATEGORY_VALUES = [
-    "efficacy", "safety", "pharmacokinetic", "enrollment", "strategic",
-    "design", "regulatory", "other",
-]
-CT_L2_SEVERITY_VALUES = ["mild", "moderate", "severe", "fatal"]
-CT_L2_DECISION_VALUES = ["sponsor", "dsmb", "regulatory", "investigator"]
+# Note: CT_L2_CATEGORY_VALUES, CT_L2_SEVERITY_VALUES, CT_L2_DECISION_VALUES were
+# removed — unused in Phase 1 evaluation. Phase 2 (multi-field accuracy) is deferred.
 
 
 def parse_ct_l2_response(response: str) -> dict | None:
@@ -325,7 +321,12 @@ def parse_ct_l4_answer(response: str) -> tuple[str | None, str | None]:
 
     first = lines[0].strip().lower()
     answer = None
-    if "untested" in first or "not tested" in first or "not been tested" in first:
+    _untested_phrases = (
+        "untested", "not tested", "not been tested", "never been tested",
+        "never tested", "hasn't been tested", "has not been tested",
+        "no testing", "no evidence of testing",
+    )
+    if any(p in first for p in _untested_phrases):
         answer = "untested"
     elif "tested" in first:
         answer = "tested"
@@ -385,7 +386,7 @@ def evaluate_ct_l4(
             for i in tested_correct
             if evidences[i] and (
                 len(evidences[i]) > 50
-                or any(kw in evidences[i].lower() for kw in CT_EVIDENCE_KEYWORDS)
+                and any(kw in evidences[i].lower() for kw in CT_EVIDENCE_KEYWORDS)
             )
         )
         result["evidence_citation_rate"] = with_evidence / len(tested_correct)

@@ -1,0 +1,119 @@
+\section{Datasheet for Datasets}
+\label{app:datasheet}
+
+Following the framework of~\citet{gebru2021datasheets}, we provide a datasheet for NegBioDB.
+
+\subsection{Motivation}
+
+\textbf{For what purpose was the dataset created?}
+NegBioDB was created to address the absence of curated negative results in biomedical AI benchmarks. Existing benchmarks treat untested entity pairs as negatives, an assumption that inflates model performance and prevents evaluation of genuine negative result understanding.
+
+\textbf{Who created the dataset and on behalf of which entity?}
+The dataset was created by a single researcher at Weill Cornell Medicine as part of a doctoral research project.
+
+\textbf{Who funded the creation of the dataset?}
+No external funding was received for this project.
+
+\subsection{Composition}
+
+\textbf{What do the instances that comprise the dataset represent?}
+Each instance represents an experimentally confirmed negative result: a biological hypothesis that was tested and found to be unsupported. Specifically:
+\begin{itemize}[nosep,leftmargin=*]
+    \item \textbf{DTI}: A compound--target pair tested for binding activity and found inactive (e.g., IC$_{50}$ $>$ 10$\mu$M).
+    \item \textbf{CT}: A drug--condition pair tested in a clinical trial that failed to meet its primary endpoint.
+    \item \textbf{PPI}: A protein--protein pair tested for physical interaction and found non-interacting.
+\end{itemize}
+
+\textbf{How many instances are there in total?}
+32.9 million negative results: 30.5M (DTI), 132,925 (CT), and 2.23M (PPI).
+
+\textbf{Does the dataset contain all possible instances or is it a sample?}
+It is a curated sample from 12 source databases. DTI includes all ChEMBL pchembl$<$5 records, PubChem confirmatory inactives, BindingDB Kd$>$10$\mu$M, and DAVIS matrix inactives. CT includes all AACT trials classified as clinical failures plus CTO copper-tier records. PPI includes IntAct curated non-interactions, HuRI screen negatives (sampled from 39.9M), hu.MAP ML-derived negatives, and STRING zero-score pairs (sampled from $>$100M).
+
+\textbf{What data does each instance consist of?}
+Entity identifiers (ChEMBL IDs, UniProt accessions, NCT IDs), experimental metadata (assay type, detection method, p-values), outcome measures (activity values, effect sizes), confidence tier assignment, and provenance information (source database, extraction method, publication year).
+
+\textbf{Is there a label or target associated with each instance?}
+Yes. All instances are labeled as negative results with a four-tier confidence classification: gold (systematic screens, multiple confirmations), silver (ML-derived or p-value based), bronze (computational or NLP-detected), copper (label-only, minimal evidence).
+
+\textbf{Is any information missing from individual instances?}
+Activity values are missing for some DTI records (especially PubChem inactives that report only active/inactive). Clinical trial p-values are available only for gold/silver tier CT records. PPI records from STRING lack experimental metadata.
+
+\textbf{Are there any errors, sources of noise, or redundancies?}
+Potential errors include: NLP misclassification of CT failure categories (bronze tier), false negatives in HuRI Y2H screens (estimated 20--40\% false negative rate for Y2H), and activity value discrepancies across sources for DTI. Deduplication indexes prevent exact duplicates but near-duplicate records from different sources are preserved as multi-source evidence.
+
+\textbf{Is the dataset self-contained?}
+Yes. The SQLite databases contain all necessary data. Chemical structures (SMILES), protein sequences, and trial metadata are stored directly. External identifiers enable linkage to source databases for additional context.
+
+\subsection{Collection Process}
+
+\textbf{How was the data associated with each instance acquired?}
+All data was acquired from public databases via their official APIs or bulk download services:
+\begin{itemize}[nosep,leftmargin=*]
+    \item ChEMBL v34 (SQL dump), PubChem (BioAssay FTP), BindingDB (servlet download), DAVIS (literature supplement)
+    \item AACT (monthly PostgreSQL dump), CTO (GitHub release), Open Targets (API), Shi \& Du 2024 (supplement)
+    \item IntAct (PSI-MI TAB), HuRI (interactome-atlas.org), hu.MAP 3.0 (bulk download), STRING v12.0 (API)
+\end{itemize}
+
+\textbf{What mechanisms or procedures were used to collect the data?}
+Automated ETL pipelines with validation checks. Drug names in CT were resolved to ChEMBL identifiers via a 4-step cascade: exact ChEMBL match $\to$ PubChem API $\to$ fuzzy matching (Jaro-Winkler $>$ 0.90) $\to$ manual CSV. CT failure categories were assigned via 3-tier detection: NLP keyword matching $\to$ p-value extraction $\to$ CTO labels.
+
+\textbf{Who was involved in the data collection process?}
+A single researcher performed all data collection, processing, and validation. 800+ automated tests verify pipeline correctness.
+
+\textbf{Over what timeframe was the data collected?}
+Data collection occurred January--March 2026. Source databases span different time periods: ChEMBL v34 (through 2024), AACT (through February 2026), IntAct (through 2024), HuRI (2020 publication).
+
+\subsection{Preprocessing, Cleaning, Labeling}
+
+\textbf{Was any preprocessing/cleaning/labeling of the data done?}
+\begin{itemize}[nosep,leftmargin=*]
+    \item \textbf{DTI}: SMILES canonicalization via RDKit, InChIKey generation, pchembl value computation, activity value unit normalization. Confidence tier assignment based on source and assay type.
+    \item \textbf{CT}: Three-tier failure classification (NLP/p-value/CTO), drug name resolution to ChEMBL, failure category assignment (8 categories). Tier upgrades applied (bronze+p-value$\to$silver).
+    \item \textbf{PPI}: UniProt accession validation, ENSG version suffix stripping, canonical pair ordering (protein1\_id $<$ protein2\_id), reservoir sampling for HuRI and STRING.
+\end{itemize}
+
+\textbf{Was the ``raw'' data saved in addition to the preprocessed/cleaned/labeled data?}
+Source database downloads are archived but not distributed due to size (AACT: 2.23 GB, ChEMBL: several GB). The processed SQLite databases and Parquet exports are the distributed artifacts.
+
+\subsection{Uses}
+
+\textbf{Has the dataset been used for any tasks already?}
+Yes, for the NegBioBench benchmark described in this paper: 180 ML experiments and 241 LLM experiments across three domains.
+
+\textbf{What (other) tasks could the dataset be used for?}
+Drug repurposing (negative results constrain hypothesis space), clinical trial design (learning from prior failures), protein interaction network refinement, negative-aware training for DTI/PPI prediction models, and LLM evaluation for scientific reasoning.
+
+\textbf{Is there anything about the composition of the dataset or the way it was collected that might impact future uses?}
+The CC BY-SA 4.0 license (required by ChEMBL's CC BY-SA 3.0 viral clause) means derivative works must maintain the same license. DTI bronze tier (94.6\% of records) has lower confidence than gold/silver tiers. CT drug resolution achieved only 20.6\% ChEMBL coverage, limiting chemical feature availability.
+
+\subsection{Distribution}
+
+\textbf{How will the dataset be distributed?}
+Via HuggingFace Datasets Hub (primary), GitHub repository (code + small exports), and Zenodo (archival DOI).
+
+\textbf{When will the dataset be released?}
+Upon paper acceptance or preprint posting.
+
+\textbf{Will the dataset be distributed under a copyright or IP license?}
+CC BY-SA 4.0 International.
+
+\textbf{Have any third parties imposed IP-based or other restrictions?}
+ChEMBL's CC BY-SA 3.0 license requires share-alike, which propagates to the full dataset. All other sources use permissive licenses (public domain, Apache 2.0, MIT, CC BY 4.0).
+
+\subsection{Maintenance}
+
+\textbf{Who will be supporting/hosting/maintaining the dataset?}
+The first author, with institutional support from Weill Cornell Medicine. HuggingFace provides persistent hosting.
+
+\textbf{How can the owner/curator/manager of the dataset be contacted?}
+Via the GitHub repository issue tracker or the corresponding author email listed in the paper.
+
+\textbf{Will the dataset be updated?}
+We plan annual updates incorporating new ChEMBL releases, AACT snapshots, and additional PPI databases. Version tags and checksums enable reproducible access to specific releases.
+
+\textbf{Will older versions of the dataset continue to be available?}
+Yes, via Zenodo DOI versioning and HuggingFace dataset revisions.
+
+\textbf{If others want to contribute to the dataset, is there a mechanism?}
+The schema includes \texttt{community\_submitted} extraction method and \texttt{curator\_validated} flags. A contribution platform is planned for future work.

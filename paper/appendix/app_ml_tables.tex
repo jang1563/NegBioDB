@@ -1,0 +1,214 @@
+\section{Complete ML Results}
+\label{app:ml_tables}
+
+This appendix presents complete per-run ML results for all 180 experiments across three domains. DTI uses a single seed (42); CT and PPI use three seeds (42, 43, 44). PPI results are reported as mean $\pm$ std across seeds.
+
+\subsection{DTI ML Results (18 runs)}
+
+\begin{table}[h]
+\centering
+\caption{DTI ML results: 3 models $\times$ 6 configurations, seed 42.}
+\label{tab:dti_ml_full}
+\scriptsize
+\begin{tabular}{@{}llllcccc@{}}
+\toprule
+\textbf{Model} & \textbf{Split} & \textbf{Negatives} & \textbf{LogAUC} & \textbf{AUPRC} & \textbf{MCC} & \textbf{AUROC} \\
+\midrule
+DeepDTA & random & negbiodb & 0.833 & 0.997 & 0.976 & 0.997 \\
+DeepDTA & random & uniform\_random & 0.824 & 0.995 & 0.939 & 0.994 \\
+DeepDTA & random & degree\_matched & 0.919 & 0.998 & 0.980 & 0.998 \\
+DeepDTA & cold\_compound & negbiodb & 0.792 & 0.995 & 0.975 & 0.996 \\
+DeepDTA & cold\_target & negbiodb & 0.325 & 0.901 & 0.041 & 0.887 \\
+DeepDTA & ddb & negbiodb & 0.824 & 0.996 & 0.975 & 0.997 \\
+\midrule
+GraphDTA & random & negbiodb & 0.843 & 0.997 & 0.977 & 0.997 \\
+GraphDTA & random & uniform\_random & 0.888 & 0.996 & 0.947 & 0.996 \\
+GraphDTA & random & degree\_matched & 0.967 & 0.999 & 0.981 & 0.999 \\
+GraphDTA & cold\_compound & negbiodb & 0.823 & 0.996 & 0.976 & 0.997 \\
+GraphDTA & cold\_target & negbiodb & 0.241 & 0.871 & 0.098 & 0.863 \\
+GraphDTA & ddb & negbiodb & 0.840 & 0.997 & 0.977 & 0.997 \\
+\midrule
+DrugBAN & random & negbiodb & 0.830 & 0.996 & 0.975 & 0.997 \\
+DrugBAN & random & uniform\_random & 0.825 & 0.995 & 0.933 & 0.994 \\
+DrugBAN & random & degree\_matched & 0.955 & 0.999 & 0.980 & 0.999 \\
+DrugBAN & cold\_compound & negbiodb & 0.828 & 0.996 & 0.976 & 0.997 \\
+DrugBAN & cold\_target & negbiodb & 0.151 & 0.782 & 0.186 & 0.760 \\
+DrugBAN & ddb & negbiodb & 0.828 & 0.996 & 0.975 & 0.997 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{CT-M1 Results (54 runs)}
+
+\begin{table}[h]
+\centering
+\caption{CT-M1 binary classification results: 3 models $\times$ 6 splits $\times$ 3 seeds. Temporal split produces single-class validation sets (all negative), yielding undefined metrics (---).}
+\label{tab:ct_m1_full}
+\scriptsize
+\begin{tabular}{@{}lllrccccc@{}}
+\toprule
+\textbf{Model} & \textbf{Split} & \textbf{Neg.} & \textbf{Seed} & \textbf{AUROC} & \textbf{AUPRC} & \textbf{MCC} & \textbf{LogAUC} & \textbf{F1} \\
+\midrule
+\multirow{18}{*}{GNN}
+& cold\_cond & negbiodb & 42 & 1.000 & 1.000 & 0.994 & 0.998 & 0.997 \\
+& cold\_cond & negbiodb & 43 & 1.000 & 1.000 & 0.990 & 0.991 & 0.995 \\
+& cold\_cond & negbiodb & 44 & 1.000 & 1.000 & 0.990 & 0.989 & 0.995 \\
+& cold\_drug & negbiodb & 42 & 1.000 & 1.000 & 0.993 & 0.999 & 0.997 \\
+& cold\_drug & negbiodb & 43 & 1.000 & 1.000 & 0.993 & 0.999 & 0.997 \\
+& cold\_drug & negbiodb & 44 & 1.000 & 1.000 & 0.991 & 0.999 & 0.995 \\
+& random & deg\_match & 42 & 0.724 & 0.724 & 0.393 & 0.170 & 0.636 \\
+& random & deg\_match & 43 & 0.768 & 0.737 & 0.454 & 0.137 & 0.639 \\
+& random & deg\_match & 44 & 0.781 & 0.741 & 0.473 & 0.132 & 0.657 \\
+& random & negbiodb & 42 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+& random & negbiodb & 43 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+& random & negbiodb & 44 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+& random & unif\_rand & 42 & 0.891 & 0.914 & 0.609 & 0.305 & 0.841 \\
+& random & unif\_rand & 43 & 0.899 & 0.922 & 0.638 & 0.331 & 0.851 \\
+& random & unif\_rand & 44 & 0.893 & 0.922 & 0.599 & 0.373 & 0.835 \\
+& temporal & negbiodb & 42 & --- & --- & --- & --- & --- \\
+& temporal & negbiodb & 43 & --- & --- & --- & --- & --- \\
+& temporal & negbiodb & 44 & --- & --- & --- & --- & --- \\
+\midrule
+\multirow{18}{*}{MLP}
+& cold\_cond & negbiodb & 42 & 1.000 & 1.000 & 0.995 & 0.989 & 0.997 \\
+& cold\_cond & negbiodb & 43 & 0.999 & 0.999 & 0.990 & 0.980 & 0.995 \\
+& cold\_cond & negbiodb & 44 & 1.000 & 1.000 & 0.984 & 0.991 & 0.992 \\
+& cold\_drug & negbiodb & 42 & 1.000 & 0.999 & 0.991 & 0.995 & 0.996 \\
+& cold\_drug & negbiodb & 43 & 1.000 & 0.999 & 0.996 & 0.993 & 0.998 \\
+& cold\_drug & negbiodb & 44 & 1.000 & 0.999 & 0.996 & 0.997 & 0.998 \\
+& random & deg\_match & 42 & 0.799 & 0.794 & 0.447 & 0.179 & 0.729 \\
+& random & deg\_match & 43 & 0.803 & 0.802 & 0.462 & 0.195 & 0.728 \\
+& random & deg\_match & 44 & 0.802 & 0.800 & 0.454 & 0.189 & 0.731 \\
+& random & negbiodb & 42 & 1.000 & 1.000 & 0.994 & 0.990 & 0.999 \\
+& random & negbiodb & 43 & 1.000 & 1.000 & 0.994 & 0.993 & 0.999 \\
+& random & negbiodb & 44 & 1.000 & 1.000 & 0.988 & 0.996 & 0.998 \\
+& random & unif\_rand & 42 & 0.884 & 0.886 & 0.597 & 0.343 & 0.796 \\
+& random & unif\_rand & 43 & 0.888 & 0.889 & 0.609 & 0.366 & 0.807 \\
+& random & unif\_rand & 44 & 0.884 & 0.888 & 0.592 & 0.387 & 0.786 \\
+& temporal & negbiodb & 42 & --- & --- & --- & --- & --- \\
+& temporal & negbiodb & 43 & --- & --- & --- & --- & --- \\
+& temporal & negbiodb & 44 & --- & --- & --- & --- & --- \\
+\midrule
+\multirow{18}{*}{XGBoost}
+& cold\_cond & negbiodb & 42 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+& cold\_cond & negbiodb & 43 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+& cold\_cond & negbiodb & 44 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+& cold\_drug & negbiodb & 42 & 1.000 & 1.000 & 0.999 & 1.000 & 1.000 \\
+& cold\_drug & negbiodb & 43 & 1.000 & 1.000 & 0.999 & 1.000 & 1.000 \\
+& cold\_drug & negbiodb & 44 & 1.000 & 1.000 & 0.999 & 1.000 & 1.000 \\
+& random & deg\_match & 42 & 0.844 & 0.846 & 0.553 & 0.260 & 0.772 \\
+& random & deg\_match & 43 & 0.844 & 0.846 & 0.553 & 0.260 & 0.772 \\
+& random & deg\_match & 44 & 0.844 & 0.846 & 0.553 & 0.260 & 0.772 \\
+& random & negbiodb & 42 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+& random & negbiodb & 43 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+& random & negbiodb & 44 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+& random & unif\_rand & 42 & 0.905 & 0.907 & 0.643 & 0.423 & 0.821 \\
+& random & unif\_rand & 43 & 0.905 & 0.907 & 0.643 & 0.423 & 0.821 \\
+& random & unif\_rand & 44 & 0.905 & 0.907 & 0.643 & 0.423 & 0.821 \\
+& temporal & negbiodb & 42 & --- & --- & --- & --- & --- \\
+& temporal & negbiodb & 43 & --- & --- & --- & --- & --- \\
+& temporal & negbiodb & 44 & --- & --- & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\subsection{CT-M2 Results (54 runs)}
+
+\begin{table}[h]
+\centering
+\caption{CT-M2 seven-way failure category prediction: 3 models $\times$ 6 splits $\times$ 3 seeds. XGBoost results are deterministic across seeds.}
+\label{tab:ct_m2_full}
+\scriptsize
+\begin{tabular}{@{}llrccccc@{}}
+\toprule
+\textbf{Model} & \textbf{Split} & \textbf{Seed} & \textbf{Macro-F1} & \textbf{Wtd-F1} & \textbf{MCC} & \textbf{Acc} \\
+\midrule
+\multirow{18}{*}{GNN}
+& cold\_condition & 42 & 0.379 & 0.640 & 0.475 & 0.610 \\
+& cold\_condition & 43 & 0.373 & 0.633 & 0.464 & 0.602 \\
+& cold\_condition & 44 & 0.377 & 0.629 & 0.460 & 0.596 \\
+& cold\_drug & 42 & 0.232 & 0.588 & 0.374 & 0.559 \\
+& cold\_drug & 43 & 0.229 & 0.583 & 0.372 & 0.561 \\
+& cold\_drug & 44 & 0.245 & 0.547 & 0.337 & 0.490 \\
+& degree\_balanced & 42 & 0.458 & 0.684 & 0.538 & 0.661 \\
+& degree\_balanced & 43 & 0.471 & 0.693 & 0.552 & 0.674 \\
+& degree\_balanced & 44 & 0.453 & 0.673 & 0.526 & 0.651 \\
+& random & 42 & 0.459 & 0.669 & 0.520 & 0.643 \\
+& random & 43 & 0.476 & 0.674 & 0.530 & 0.653 \\
+& random & 44 & 0.469 & 0.674 & 0.529 & 0.657 \\
+& scaffold & 42 & 0.183 & 0.496 & 0.240 & 0.439 \\
+& scaffold & 43 & 0.207 & 0.547 & 0.305 & 0.532 \\
+& scaffold & 44 & 0.185 & 0.528 & 0.267 & 0.521 \\
+& temporal & 42 & 0.245 & 0.608 & 0.403 & 0.572 \\
+& temporal & 43 & 0.225 & 0.573 & 0.347 & 0.514 \\
+& temporal & 44 & 0.228 & 0.566 & 0.350 & 0.515 \\
+\midrule
+\multirow{18}{*}{MLP}
+& cold\_condition & 42 & 0.271 & 0.577 & 0.369 & 0.520 \\
+& cold\_condition & 43 & 0.270 & 0.582 & 0.374 & 0.528 \\
+& cold\_condition & 44 & 0.266 & 0.576 & 0.369 & 0.520 \\
+& cold\_drug & 42 & 0.276 & 0.546 & 0.339 & 0.496 \\
+& cold\_drug & 43 & 0.287 & 0.551 & 0.344 & 0.511 \\
+& cold\_drug & 44 & 0.243 & 0.495 & 0.292 & 0.435 \\
+& degree\_balanced & 42 & 0.362 & 0.630 & 0.445 & 0.586 \\
+& degree\_balanced & 43 & 0.354 & 0.622 & 0.435 & 0.579 \\
+& degree\_balanced & 44 & 0.347 & 0.615 & 0.423 & 0.568 \\
+& random & 42 & 0.347 & 0.611 & 0.418 & 0.569 \\
+& random & 43 & 0.368 & 0.630 & 0.447 & 0.594 \\
+& random & 44 & 0.358 & 0.617 & 0.430 & 0.573 \\
+& scaffold & 42 & 0.204 & 0.531 & 0.266 & 0.517 \\
+& scaffold & 43 & 0.186 & 0.498 & 0.226 & 0.482 \\
+& scaffold & 44 & 0.198 & 0.530 & 0.270 & 0.542 \\
+& temporal & 42 & 0.202 & 0.517 & 0.284 & 0.454 \\
+& temporal & 43 & 0.210 & 0.553 & 0.311 & 0.498 \\
+& temporal & 44 & 0.212 & 0.544 & 0.304 & 0.486 \\
+\midrule
+\multirow{18}{*}{XGBoost}
+& cold\_condition & 42--44 & 0.338 & 0.686 & 0.570 & 0.725 \\
+& cold\_drug & 42--44 & 0.414 & 0.683 & 0.555 & 0.715 \\
+& degree\_balanced & 42--44 & 0.521 & 0.758 & 0.645 & 0.776 \\
+& random & 42--44 & 0.510 & 0.751 & 0.637 & 0.771 \\
+& scaffold & 42--44 & 0.193 & 0.567 & 0.374 & 0.640 \\
+& temporal & 42--44 & 0.193 & 0.602 & 0.454 & 0.669 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{PPI ML Results (54 runs, aggregated)}
+
+\begin{table}[h]
+\centering
+\caption{PPI ML results: 3 models $\times$ 6 configurations, mean $\pm$ std over 3 seeds.}
+\label{tab:ppi_ml_full}
+\scriptsize
+\begin{tabular}{@{}lllcccc@{}}
+\toprule
+\textbf{Model} & \textbf{Split} & \textbf{Negatives} & \textbf{LogAUC} & \textbf{AUPRC} & \textbf{MCC} & \textbf{AUROC} \\
+\midrule
+SiameseCNN & random & negbiodb & .517$\pm$.018 & .961$\pm$.001 & .794$\pm$.012 & .963$\pm$.000 \\
+SiameseCNN & random & unif\_rand & .552$\pm$.002 & .964$\pm$.001 & .806$\pm$.007 & .965$\pm$.001 \\
+SiameseCNN & random & deg\_match & .548$\pm$.011 & .963$\pm$.001 & .803$\pm$.005 & .964$\pm$.001 \\
+SiameseCNN & cold\_protein & negbiodb & .314$\pm$.014 & .880$\pm$.003 & .568$\pm$.019 & .873$\pm$.002 \\
+SiameseCNN & cold\_both & negbiodb & .037$\pm$.010 & .702$\pm$.031 & .070$\pm$.004 & .585$\pm$.040 \\
+SiameseCNN & ddb & negbiodb & .534$\pm$.011 & .961$\pm$.001 & .795$\pm$.004 & .962$\pm$.001 \\
+\midrule
+PIPR & random & negbiodb & .519$\pm$.009 & .962$\pm$.000 & .812$\pm$.006 & .964$\pm$.001 \\
+PIPR & random & unif\_rand & .565$\pm$.005 & .966$\pm$.000 & .810$\pm$.002 & .966$\pm$.000 \\
+PIPR & random & deg\_match & .550$\pm$.009 & .965$\pm$.001 & .817$\pm$.006 & .966$\pm$.001 \\
+PIPR & cold\_protein & negbiodb & .288$\pm$.010 & .869$\pm$.006 & .565$\pm$.019 & .859$\pm$.008 \\
+PIPR & cold\_both & negbiodb & .031$\pm$.019 & .610$\pm$.055 & $-$.018$\pm$.044 & .409$\pm$.077 \\
+PIPR & ddb & negbiodb & .537$\pm$.009 & .962$\pm$.000 & .808$\pm$.003 & .964$\pm$.000 \\
+\midrule
+MLPFeatures & random & negbiodb & .567$\pm$.005 & .962$\pm$.001 & .788$\pm$.003 & .962$\pm$.001 \\
+MLPFeatures & random & unif\_rand & .539$\pm$.175 & .949$\pm$.043 & .766$\pm$.118 & .948$\pm$.044 \\
+MLPFeatures & random & deg\_match & .458$\pm$.059 & .934$\pm$.013 & .716$\pm$.033 & .930$\pm$.012 \\
+MLPFeatures & cold\_protein & negbiodb & .476$\pm$.005 & .935$\pm$.001 & .706$\pm$.005 & .931$\pm$.001 \\
+MLPFeatures & cold\_both & negbiodb & .595$\pm$.051 & .973$\pm$.010 & .749$\pm$.043 & .950$\pm$.021 \\
+MLPFeatures & ddb & negbiodb & .564$\pm$.005 & .961$\pm$.000 & .787$\pm$.001 & .961$\pm$.000 \\
+\bottomrule
+\end{tabular}
+\end{table}

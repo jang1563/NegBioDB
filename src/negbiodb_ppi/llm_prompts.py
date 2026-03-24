@@ -186,6 +186,18 @@ def format_ppi_l2_prompt(
     return PPI_SYSTEM_PROMPT, user
 
 
+_L3_MAX_EXAMPLE_CHARS = 1200  # ~300 tokens per example context
+_L3_MAX_REASONING_CHARS = 600  # ~150 tokens per example reasoning
+
+
+def _truncate_text(text: str, max_chars: int) -> str:
+    """Truncate text at word boundary, appending '[...]' if truncated."""
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars].rsplit(" ", 1)[0]
+    return truncated + " [...]"
+
+
 def format_ppi_l3_prompt(
     record: dict,
     config: str = "zero-shot",
@@ -198,7 +210,8 @@ def format_ppi_l3_prompt(
         user = PPI_L3_QUESTION.format(context_text=context)
     else:
         examples_text = "\n\n---\n\n".join(
-            f"{ex['context_text']}\n\nExplanation:\n{ex.get('gold_reasoning', 'N/A')}"
+            f"{_truncate_text(ex['context_text'], _L3_MAX_EXAMPLE_CHARS)}\n\n"
+            f"Explanation:\n{_truncate_text(ex.get('gold_reasoning', 'N/A'), _L3_MAX_REASONING_CHARS)}"
             for ex in fewshot_examples
         )
         user = PPI_L3_FEW_SHOT.format(examples=examples_text, context_text=context)

@@ -1,0 +1,20 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Approximately 90\% of experiments produce null or inconclusive results, yet publication bias ensures the vast majority remain unreported~\citep{fanelli2012negative,mlinaric2017dealing}. This creates a systematic blind spot in biomedical AI: machine learning benchmarks treat untested compound--target pairs as negatives~\citep{huang2021therapeutics,mysinger2012dude}, an assumption that inflates reported performance by up to +0.112 LogAUC and produces models incapable of distinguishing genuinely tested inactive pairs from untested ones (MCC $\leq$ 0.18). Meanwhile, large language models confidently generate hallucinated evidence for 100\% of queried negative results, regardless of whether the experiment was ever conducted.
+
+The consequences span three biomedical domains where negative results carry critical information. In drug--target interaction (DTI), less than 1\% of compound--target space has been experimentally tested~\citep{gaulton2017chembl}, yet benchmarks like TDC~\citep{huang2021therapeutics} and DUD-E~\citep{mysinger2012dude} assume all untested pairs are negative. In clinical trials (CT), failed trials vastly outnumber successes but lack structured representation---the AACT database~\citep{tasneem2012aact} contains 216K trials with rich failure metadata that no existing benchmark leverages. In protein--protein interaction (PPI), systematic screens such as HuRI~\citep{luck2020huri} produce millions of confirmed non-interactions that benchmarks ignore in favor of random negative sampling.
+
+No existing benchmark evaluates negative result understanding. ChemBench~\citep{mirza2024chembench} tests chemical property reasoning; Mol-Instructions~\citep{fang2024molinstructions} evaluates molecular understanding; LAB-Bench~\citep{laurent2024labbench} measures laboratory skills; MedQA~\citep{jin2021medqa} tests clinical knowledge---but none specifically address the challenge of distinguishing tested from untested hypotheses, which is fundamental to the scientific process. Recent work on DTI negative evidence~\citep{li2025evidti} and benchmark quality~\citep{volkov2025welqrate,tran2020litpcba} highlights the growing recognition of this gap, but remains limited to single domains.
+
+We address this gap with four contributions:
+
+\begin{enumerate}[nosep,leftmargin=*]
+    \item \textbf{NegBioDB}: the first multi-domain database of experimentally confirmed negative results, aggregating 32.9M entries from 12 data sources across DTI, CT, and PPI with four confidence tiers (Section~\ref{sec:database}). Released under CC BY-SA 4.0 with Croissant metadata.
+
+    \item \textbf{NegBioBench}: a dual ML+LLM benchmark with 4 evaluation levels across 3 domains, totaling 421 experiments (180 ML + 241 LLM) that systematically test both predictive models and language models on negative evidence understanding (Section~\ref{sec:benchmark}).
+
+    \item \textbf{Negative source inflation}: we demonstrate that control negatives inflate DTI model LogAUC by +0.112 and show model-dependent effects in PPI ($-$0.11 to $+$0.05 LogAUC) and CT ($-$0.16 to $-$0.24 AUROC), challenging the universal assumption that negative source does not matter (Section~\ref{sec:exp-inflation}).
+
+    \item \textbf{The opacity gradient}: L4 discrimination performance correlates with data accessibility in LLM training corpora (DTI MCC 0.18 $\to$ PPI 0.44 $\to$ CT 0.56), with PPI contamination confirmed as genuine memorization via temporal stratification and protein degree analysis (Section~\ref{sec:exp-gradient}).
+\end{enumerate}

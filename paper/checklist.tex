@@ -1,0 +1,85 @@
+\section*{NeurIPS Paper Checklist}
+
+\begin{enumerate}
+
+\item {\bf Claims}
+    \item[] Question: Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: The abstract and introduction (Section~\ref{sec:introduction}) state four specific contributions---NegBioDB database, NegBioBench benchmark, negative source inflation analysis, and the opacity gradient---all supported by experimental results in Section~\ref{sec:experiments} with exact numerical values.
+
+\item {\bf Limitations}
+    \item[] Question: Does the paper discuss the limitations of the work performed by the authors?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~\ref{sec:discussion} includes a dedicated limitations paragraph addressing: solo authorship, DTI single seed, CT drug resolution coverage (20.6\%), PPI L1/L2 trivial solvability, L3 judge ceiling effect, and contamination analysis scope.
+
+\item {\bf Theory assumptions and proofs}
+    \item[] Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: This paper presents empirical results and a benchmark; it does not include theoretical results or proofs.
+
+    \item {\bf Experimental result reproducibility}
+    \item[] Question: Does the paper fully disclose all the information needed to reproduce the main experimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~\ref{sec:benchmark} describes all models, splits, and configurations. Appendix~\ref{app:splits} details splitting strategies, Appendix~\ref{app:prompts} provides full LLM prompt templates, and Appendix~\ref{app:schema} provides database schema. All hyperparameters and random seeds are specified. Complete per-run results appear in Appendices~\ref{app:ml_tables}--\ref{app:llm_tables}.
+
+\item {\bf Open access to data and code}
+    \item[] Question: Does the paper provide open access to the data and code, with sufficient instructions to faithfully reproduce the main experimental results, as described in supplemental material?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: The database (SQLite files), ML exports (Parquet), and all source code are released via GitHub and HuggingFace under CC BY-SA 4.0 (data) and MIT (code) licenses. Croissant metadata is provided for machine-readable dataset discovery. SLURM scripts for HPC execution are included.
+
+\item {\bf Experimental setting/details}
+    \item[] Question: Does the paper specify all the training and test details (e.g., data splits, hyperparameters, how they were chosen, type of optimizer) necessary to understand the results?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~\ref{sec:benchmark} specifies all models, split strategies, and evaluation metrics. Appendix~\ref{app:splits} provides complete split details including ratios, temporal cutoffs, and METIS parameters. LLM configurations (zero-shot and 3-shot with seeds 42/43/44) are specified.
+
+\item {\bf Experiment statistical significance}
+    \item[] Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: CT and PPI experiments use 3 random seeds (42, 43, 44); results are reported as mean $\pm$ standard deviation. DTI uses a single seed, which is acknowledged as a limitation in Section~\ref{sec:discussion}. LLM 3-shot results report mean $\pm$ std across 3 independent example sets.
+
+\item {\bf Experiments compute resources}
+    \item[] Question: For each experiment, does the paper provide sufficient information on the computer resources (type of compute workers, memory, time of execution) needed to reproduce the experiments?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: ML experiments were run on Cornell Cayuga HPC cluster (NVIDIA A100 GPUs, 40GB). Local LLMs (Llama, Qwen, Mistral) used vLLM on A100s. API-based LLMs used commercial endpoints (OpenAI, Google, Anthropic). Database construction ran on Apple M1 Mac (64GB RAM). Total compute: approximately 500 GPU-hours for ML training, 200 GPU-hours for local LLM inference.
+
+\item {\bf Code of ethics}
+    \item[] Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics \url{https://neurips.cc/public/EthicsGuidelines}?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: All data is derived from public databases with appropriate licenses. No human subjects or private data are involved. The work aims to improve biomedical AI evaluation, with potential benefits for drug discovery and clinical trial design.
+
+\item {\bf Broader impacts}
+    \item[] Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~\ref{sec:discussion} discusses positive impacts (improving drug discovery, preventing wasted research effort) and negative impacts (100\% evidence hallucination rate as a safety concern for LLM deployment in clinical settings). The opacity gradient finding directly warns against deploying LLMs for negative result assessment without contamination controls.
+
+\item {\bf Safeguards}
+    \item[] Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse (e.g., pre-trained language models, image generators, or scraped datasets)?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: NegBioDB contains only publicly available biomedical data (compound structures, protein sequences, clinical trial metadata) aggregated from 12 public databases. No pre-trained models are released. The data poses no risk for misuse beyond its source databases.
+
+\item {\bf Licenses for existing assets}
+    \item[] Question: Are the creators or original owners of assets (e.g., code, data, models), used in the paper, properly credited and are the license and terms of use explicitly mentioned and properly respected?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: All 12 source databases are cited with their licenses: ChEMBL (CC BY-SA 3.0), PubChem (public domain), BindingDB (CC BY 3.0), DAVIS (CC BY 4.0), AACT (public domain), CTO (MIT), Open Targets (Apache 2.0), Shi \& Du 2024 (CC BY 4.0), IntAct (CC BY 4.0), HuRI (CC BY 4.0), hu.MAP (public), STRING (CC BY 4.0). NegBioDB adopts CC BY-SA 4.0 to comply with ChEMBL's viral share-alike clause.
+
+\item {\bf New assets}
+    \item[] Question: Are new assets introduced in the paper well documented and is the documentation provided alongside the assets?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: NegBioDB is documented via: Gebru et al.\ Datasheet (Appendix~\ref{app:datasheet}), database schema (Appendix~\ref{app:schema}), Croissant JSON-LD metadata, HuggingFace dataset card, and comprehensive README. The benchmark code includes 800+ automated tests.
+
+\item {\bf Crowdsourcing and research with human subjects}
+    \item[] Question: For crowdsourcing experiments and research with human subjects, does the paper include the full text of instructions given to participants and screenshots, if applicable, as well as details about compensation (if any)?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: This research does not involve crowdsourcing or human subjects. All data comes from public databases and all experiments are computational.
+
+\item {\bf Institutional review board (IRB) approvals or equivalent for research with human subjects}
+    \item[] Question: Does the paper describe potential risks incurred by study participants, whether such risks were disclosed to the subjects, and whether Institutional Review Board (IRB) approvals (or an equivalent approval/review based on the requirements of your country or institution) were obtained?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No human subjects research is involved. Clinical trial data is sourced from the public AACT database (de-identified).
+
+\item {\bf Declaration of LLM usage}
+    \item[] Question: Does the paper describe the usage of LLMs if it is an important, original, or non-standard component of the core methods in this research?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: LLMs are a core component of the benchmark evaluation (Section~\ref{sec:benchmark}, LLM Track). Five LLMs are evaluated as subjects across 4 levels and 3 domains (241 total runs). Domain-specific LLM judges are used for L3 reasoning evaluation: GPT-4o-mini (CT), Gemini-2.5-Flash (PPI), and Gemini-2.5-Flash-Lite (DTI). All model identifiers, versions, and configurations are specified. Claude Code was used for code development and paper writing assistance.
+
+\end{enumerate}

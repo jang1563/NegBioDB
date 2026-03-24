@@ -210,6 +210,101 @@ class TestEvaluatePPIL2:
         result = evaluate_ppi_l2(preds, golds)
         assert result["parse_rate"] == pytest.approx(2 / 3)
 
+    def test_method_accuracy_matching(self):
+        """Method accuracy: substring match between predicted and gold method."""
+        pred = json.dumps({
+            "non_interacting_pairs": [
+                {"protein_1": "TP53", "protein_2": "CDK2",
+                 "method": "co-immunoprecipitation (co-IP) assay",
+                 "evidence_strength": "strong"},
+            ],
+            "total_negative_count": 1,
+            "positive_interactions_mentioned": False,
+        })
+        gold = {
+            "gold_extraction": {
+                "non_interacting_pairs": [
+                    {"protein_1": "TP53", "protein_2": "CDK2",
+                     "method": "co-immunoprecipitation (co-IP) assay",
+                     "evidence_strength": "strong"},
+                ],
+                "total_negative_count": 1,
+                "positive_interactions_mentioned": False,
+            }
+        }
+        result = evaluate_ppi_l2([pred], [gold])
+        assert result["method_accuracy"] == 1.0
+        assert result["strength_accuracy"] == 1.0
+
+    def test_method_accuracy_mismatch(self):
+        """Mismatched method → method_accuracy=0."""
+        pred = json.dumps({
+            "non_interacting_pairs": [
+                {"protein_1": "TP53", "protein_2": "CDK2",
+                 "method": "co-fractionation proteomics",
+                 "evidence_strength": "moderate"},
+            ],
+            "total_negative_count": 1,
+            "positive_interactions_mentioned": False,
+        })
+        gold = {
+            "gold_extraction": {
+                "non_interacting_pairs": [
+                    {"protein_1": "TP53", "protein_2": "CDK2",
+                     "method": "binding assay",
+                     "evidence_strength": "strong"},
+                ],
+                "total_negative_count": 1,
+                "positive_interactions_mentioned": False,
+            }
+        }
+        result = evaluate_ppi_l2([pred], [gold])
+        assert result["method_accuracy"] == 0.0
+        assert result["strength_accuracy"] == 0.0
+
+    def test_method_accuracy_substring_match(self):
+        """Substring match: gold 'binding assay' in pred 'affinity binding assay'."""
+        pred = json.dumps({
+            "non_interacting_pairs": [
+                {"protein_1": "TP53", "protein_2": "CDK2",
+                 "method": "affinity binding assay"},
+            ],
+            "total_negative_count": 1,
+        })
+        gold = {
+            "gold_extraction": {
+                "non_interacting_pairs": [
+                    {"protein_1": "TP53", "protein_2": "CDK2",
+                     "method": "binding assay"},
+                ],
+                "total_negative_count": 1,
+            }
+        }
+        result = evaluate_ppi_l2([pred], [gold])
+        assert result["method_accuracy"] == 1.0
+
+    def test_method_accuracy_unmatched_pairs_not_counted(self):
+        """Method accuracy only counts matched pairs (by protein names)."""
+        pred = json.dumps({
+            "non_interacting_pairs": [
+                {"protein_1": "UNKNOWN1", "protein_2": "UNKNOWN2",
+                 "method": "wrong method"},
+            ],
+            "total_negative_count": 1,
+        })
+        gold = {
+            "gold_extraction": {
+                "non_interacting_pairs": [
+                    {"protein_1": "TP53", "protein_2": "CDK2",
+                     "method": "binding assay"},
+                ],
+                "total_negative_count": 1,
+            }
+        }
+        result = evaluate_ppi_l2([pred], [gold])
+        # No matched pairs → 0/0 → 0.0
+        assert result["method_accuracy"] == 0.0
+
     def test_empty_predictions(self):
         result = evaluate_ppi_l2([], [])
         assert result["n_total"] == 0
@@ -329,6 +424,10 @@ class TestParsePPIL4Answer:
         answer, _ = parse_ppi_l4_answer("This pair has not been tested\nEvidence...")
         assert answer == "untested"
 
+    def test_never_been_tested_variant(self):
+        answer, _ = parse_ppi_l4_answer("This pair has never been tested in any study.")
+        assert answer == "untested"
+
     def test_no_evidence(self):
         answer, evidence = parse_ppi_l4_answer("tested")
         assert answer == "tested"
@@ -378,14 +477,22 @@ class TestEvaluatePPIL4:
         result = evaluate_ppi_l4(preds, golds, temporal)
         assert result["contamination_flag"] is False
 
-    def test_evidence_citation_rate(self):
+    def test_evidence_citation_rate_and_logic(self):
+        """Evidence needs BOTH >50 chars AND domain keyword (AND logic)."""
         preds = [
-            "tested\nThis pair was tested in IntAct using co-IP assay",
-            "tested\nI think so",  # too short, no keywords
+            # >50 chars AND contains "intact" → pass
+            "tested\nThis pair was tested in IntAct database using a co-immunoprecipitation assay with strong results",
+            # >50 chars but NO keyword → fail
+            "tested\nI think this pair was definitely tested somewhere in some large study with lots of results",
+            # <50 chars but has keyword → fail
+            "tested\nIntAct co-IP",
+            # >50 chars AND keyword → pass
+            "tested\nThe proteins were tested via yeast two-hybrid screening in the HuRI project with multiple replicates",
         ]
-        golds = ["tested", "tested"]
+        golds = ["tested", "tested", "tested", "tested"]
         result = evaluate_ppi_l4(preds, golds)
-        assert result["evidence_citation_rate"] == 0.5
+        # Only 2 of 4 pass both conditions
+        assert result["evidence_citation_rate"] == pytest.approx(0.5)
 
     def test_ppi_evidence_keywords(self):
         """PPI-specific keywords differ from CT and DTI."""

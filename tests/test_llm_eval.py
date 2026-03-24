@@ -277,6 +277,10 @@ class TestParseL4Answer:
         answer2, _ = parse_l4_answer("never tested")
         assert answer2 == "untested"
 
+    def test_never_been_tested(self):
+        answer, _ = parse_l4_answer("This compound has never been tested against EGFR.")
+        assert answer == "untested"
+
     def test_hasnt_been_tested(self):
         answer, _ = parse_l4_answer("This compound hasn't been tested against EGFR.")
         assert answer == "untested"
@@ -319,14 +323,14 @@ class TestEvaluateL4:
         result = evaluate_l4(preds, gold)
         assert result["evidence_citation_rate"] == 0.0
 
-    def test_evidence_keyword_short_accepted(self):
-        """Short evidence WITH a keyword should count."""
+    def test_evidence_keyword_short_rejected(self):
+        """Short evidence WITH a keyword should NOT count (AND logic: >50 AND keyword)."""
         preds = [
-            "tested\nChEMBL ID found",  # short but has keyword
+            "tested\nChEMBL ID found",  # has keyword but too short
         ]
         gold = ["tested"]
         result = evaluate_l4(preds, gold)
-        assert result["evidence_citation_rate"] == 1.0
+        assert result["evidence_citation_rate"] == 0.0
 
     def test_temporal(self):
         preds = ["tested", "tested", "untested", "untested"]

@@ -192,6 +192,12 @@ def evaluate_ppi_l2(
     positive_correct = 0
     positive_total = 0
 
+    # Method and evidence-strength accuracy (per matched pair)
+    method_correct = 0
+    method_total = 0
+    strength_correct = 0
+    strength_total = 0
+
     for pred_str, gold in zip(predictions, gold_records):
         parsed = parse_ppi_l2_response(pred_str)
         if parsed is None:
@@ -214,6 +220,41 @@ def evaluate_ppi_l2(
         total_tp += tp
         total_fp += len(pred_pairs - gold_pairs)
         total_fn += len(gold_pairs - pred_pairs)
+
+        # Build gold pair map for field-level matching
+        gold_pair_map: dict[tuple[str, str], dict] = {}
+        for gp in gold_ext.get("non_interacting_pairs", []):
+            gp1 = _normalize_protein(str(gp.get("protein_1", "")))
+            gp2 = _normalize_protein(str(gp.get("protein_2", "")))
+            if gp1 and gp2:
+                gold_pair_map[(min(gp1, gp2), max(gp1, gp2))] = gp
+
+        # Method + evidence_strength accuracy (only for matched pairs)
+        for pp in parsed.get("non_interacting_pairs", []):
+            pp1 = _normalize_protein(str(pp.get("protein_1", "")))
+            pp2 = _normalize_protein(str(pp.get("protein_2", "")))
+            if not pp1 or not pp2:
+                continue
+            pkey = (min(pp1, pp2), max(pp1, pp2))
+            if pkey not in gold_pair_map:
+                continue
+            gp = gold_pair_map[pkey]
+
+            # Method matching (substring)
+            gold_m = (gp.get("method") or "").strip().lower()
+            pred_m = (pp.get("method") or "").strip().lower()
+            if gold_m:
+                method_total += 1
+                if pred_m and (pred_m in gold_m or gold_m in pred_m):
+                    method_correct += 1
+
+            # Evidence strength matching (exact)
+            gold_s = (gp.get("evidence_strength") or "").strip().lower()
+            pred_s = (pp.get("evidence_strength") or "").strip().lower()
+            if gold_s:
+                strength_total += 1
+                if pred_s == gold_s:
+                    strength_correct += 1
 
         # Count accuracy
         gold_count = gold_ext.get("total_negative_count")
@@ -242,6 +283,8 @@ def evaluate_ppi_l2(
         "entity_precision": precision,
         "entity_recall": recall,
         "count_accuracy": count_correct / count_total if count_total else 0.0,
+        "method_accuracy": method_correct / method_total if method_total else 0.0,
+        "strength_accuracy": strength_correct / strength_total if strength_total else 0.0,
         "positive_mention_accuracy": positive_correct / positive_total if positive_total else 0.0,
         "parse_rate": n_valid_json / n_total if n_total else 0.0,
         "n_valid_json": n_valid_json,
@@ -352,7 +395,12 @@ def parse_ppi_l4_answer(response: str) -> tuple[str | None, str | None]:
 
     first = lines[0].strip().lower()
     answer = None
-    if "untested" in first or "not tested" in first or "not been tested" in first:
+    _untested_phrases = (
+        "untested", "not tested", "not been tested", "never been tested",
+        "never tested", "hasn't been tested", "has not been tested",
+        "no testing", "no evidence of testing",
+    )
+    if any(p in first for p in _untested_phrases):
         answer = "untested"
     elif "tested" in first:
         answer = "tested"
@@ -412,7 +460,7 @@ def evaluate_ppi_l4(
             for i in tested_correct
             if evidences[i] and (
                 len(evidences[i]) > 50
-                or any(kw in evidences[i].lower() for kw in PPI_EVIDENCE_KEYWORDS)
+                and any(kw in evidences[i].lower() for kw in PPI_EVIDENCE_KEYWORDS)
             )
         )
         result["evidence_citation_rate"] = with_evidence / len(tested_correct)

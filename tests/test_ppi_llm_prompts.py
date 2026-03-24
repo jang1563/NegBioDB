@@ -7,6 +7,9 @@ from negbiodb_ppi.llm_prompts import (
     PPI_L1_CATEGORIES,
     PPI_SYSTEM_PROMPT,
     PPI_TASK_FORMATTERS,
+    _L3_MAX_EXAMPLE_CHARS,
+    _L3_MAX_REASONING_CHARS,
+    _truncate_text,
     format_ppi_l1_prompt,
     format_ppi_l2_prompt,
     format_ppi_l3_prompt,
@@ -189,6 +192,92 @@ class TestPPIL3Prompt:
         ]
         _, user = format_ppi_l3_prompt(sample_l3_record, "3-shot", examples)
         assert "different compartments" in user
+
+    def test_gold_reasoning_appears_in_prompt(self, sample_l3_record):
+        """gold_reasoning field shows up in Explanation section."""
+        reasoning = "These proteins have distinct biological roles."
+        examples = [
+            {
+                "context_text": "Protein 1: A\nProtein 2: B",
+                "gold_reasoning": reasoning,
+            },
+        ]
+        _, user = format_ppi_l3_prompt(sample_l3_record, "3-shot", examples)
+        assert reasoning in user
+        assert "Explanation:" in user
+
+    def test_missing_gold_reasoning_shows_na(self, sample_l3_record):
+        """Records without gold_reasoning should show 'N/A'."""
+        examples = [
+            {"context_text": "Protein 1: A\nProtein 2: B"},
+        ]
+        _, user = format_ppi_l3_prompt(sample_l3_record, "3-shot", examples)
+        assert "Explanation:\nN/A" in user
+
+    def test_truncation_of_long_context(self, sample_l3_record):
+        """Long context_text in fewshot examples gets truncated."""
+        long_context = "A " * 2000  # ~4000 chars, well above _L3_MAX_EXAMPLE_CHARS
+        examples = [
+            {
+                "context_text": long_context,
+                "gold_reasoning": "Short reasoning.",
+            },
+        ]
+        _, user = format_ppi_l3_prompt(sample_l3_record, "3-shot", examples)
+        # The full 4000-char context should NOT appear
+        assert long_context not in user
+        # But truncation marker should
+        assert "[...]" in user
+
+    def test_truncation_of_long_reasoning(self, sample_l3_record):
+        """Long gold_reasoning gets truncated."""
+        long_reasoning = "B " * 1000  # ~2000 chars, above _L3_MAX_REASONING_CHARS
+        examples = [
+            {
+                "context_text": "Short context.",
+                "gold_reasoning": long_reasoning,
+            },
+        ]
+        _, user = format_ppi_l3_prompt(sample_l3_record, "3-shot", examples)
+        assert long_reasoning not in user
+        assert "[...]" in user
+
+    def test_short_text_not_truncated(self, sample_l3_record):
+        """Short fewshot text should not be truncated."""
+        short_context = "Protein 1: X\nProtein 2: Y"
+        examples = [
+            {
+                "context_text": short_context,
+                "gold_reasoning": "Short.",
+            },
+        ]
+        _, user = format_ppi_l3_prompt(sample_l3_record, "3-shot", examples)
+        assert short_context in user
+        assert "Short." in user
+        # No truncation marker for short text
+        # (only check within the examples section)
+
+
+class TestTruncateText:
+    def test_short_text_unchanged(self):
+        assert _truncate_text("hello world", 100) == "hello world"
+
+    def test_exact_limit_unchanged(self):
+        text = "a" * 100
+        assert _truncate_text(text, 100) == text
+
+    def test_long_text_truncated(self):
+        text = "word " * 300  # 1500 chars
+        result = _truncate_text(text, 100)
+        assert len(result) <= 110  # allow for "[...]"
+        assert result.endswith("[...]")
+
+    def test_truncation_at_word_boundary(self):
+        text = "abcdefghij klmnopqrst uvwxyz"
+        result = _truncate_text(text, 15)
+        # Should truncate before second word if possible
+        assert "[...]" in result
+        assert len(result.replace(" [...]", "")) <= 15
 
 
 # ── PPI-L4 Tests ──────────────────────────────────────────────────────────

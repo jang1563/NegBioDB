@@ -124,7 +124,7 @@ def evaluate_l2(
 ) -> dict:
     """Evaluate L2 structured extraction.
 
-    Returns: schema_compliance, field_f1, entity_f1, avg_field_f1.
+    Returns: schema_compliance, entity_f1, field_accuracy, n_valid_json, n_total.
     """
     n_valid_json = 0
     field_scores = []
@@ -262,7 +262,7 @@ def parse_l4_answer(response: str) -> tuple[str | None, str | None]:
     first = lines[0].strip().lower()
     answer = None
     _UNTESTED_PATTERNS = [
-        "untested", "not tested", "not been tested",
+        "untested", "not tested", "not been tested", "never been tested",
         "never tested", "hasn't been tested", "has not been tested",
         "no testing", "no evidence of testing",
     ]
@@ -320,7 +320,7 @@ def evaluate_l4(
         for i, (a, g, m) in enumerate(zip(answers, gold_answers, valid_mask))
         if m and a == "tested" and g == "tested"
     ]
-    # Evidence must be substantive: >50 chars or contain known DB/DOI keywords
+    # Evidence must be substantive: >50 chars AND contain known DB/DOI keywords
     _EVIDENCE_KEYWORDS = {"chembl", "pubchem", "bindingdb", "doi", "pmid", "assay", "ic50", "ki", "kd"}
 
     if tested_correct:
@@ -329,7 +329,7 @@ def evaluate_l4(
             for i in tested_correct
             if evidences[i] and (
                 len(evidences[i]) > 50
-                or any(kw in evidences[i].lower() for kw in _EVIDENCE_KEYWORDS)
+                and any(kw in evidences[i].lower() for kw in _EVIDENCE_KEYWORDS)
             )
         )
         result["evidence_citation_rate"] = with_evidence / len(tested_correct)

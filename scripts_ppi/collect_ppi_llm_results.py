@@ -24,7 +24,7 @@ RESULTS_DIR = PROJECT_ROOT / "results" / "ppi_llm"
 
 PRIMARY_METRICS = {
     "ppi-l1": ["accuracy", "macro_f1", "mcc"],
-    "ppi-l2": ["schema_compliance", "entity_f1", "count_accuracy"],
+    "ppi-l2": ["schema_compliance", "entity_f1", "count_accuracy", "method_accuracy", "strength_accuracy"],
     "ppi-l3": ["overall"],
     "ppi-l4": ["accuracy", "mcc", "evidence_citation_rate"],
 }
@@ -81,6 +81,26 @@ def load_all_results(results_dir: Path) -> list[dict]:
             model = prefix[len(task) + 1:]
             config = meta.get("config", "unknown")
 
+        # Count ERROR predictions for api_failure detection
+        error_rate = 0.0
+        api_failure = False
+        pred_path = run_dir / "predictions.jsonl"
+        if pred_path.exists():
+            error_count = 0
+            total_preds = 0
+            with open(pred_path) as pf:
+                for line in pf:
+                    total_preds += 1
+                    try:
+                        rec = json.loads(line)
+                        if str(rec.get("prediction", "")).startswith("ERROR:"):
+                            error_count += 1
+                    except json.JSONDecodeError:
+                        error_count += 1
+            if total_preds > 0:
+                error_rate = error_count / total_preds
+                api_failure = error_rate > 0.5
+
         results.append({
             "run_name": name,
             "task": task,
@@ -89,6 +109,8 @@ def load_all_results(results_dir: Path) -> list[dict]:
             "fewshot_set": fs_set,
             "metrics": metrics,
             "meta": meta,
+            "error_rate": error_rate,
+            "api_failure": api_failure,
         })
 
     return results
@@ -96,28 +118,36 @@ def load_all_results(results_dir: Path) -> list[dict]:
 
 def aggregate_results(results: list[dict]) -> list[dict]:
     """Aggregate metrics across few-shot sets (mean +/- std)."""
-    groups = defaultdict(list)
+    groups: dict[tuple, list[dict]] = defaultdict(list)
     for r in results:
         key = (r["task"], r["model"], r["config"])
-        groups[key].append(r["metrics"])
+        groups[key].append(r)
 
     aggregated = []
-    for (task, model, config), metric_list in sorted(groups.items()):
-        effective_list = metric_list
-        if config == "zero-shot" and len(metric_list) > 1:
-            effective_list = [metric_list[0]]
+    for (task, model, config), run_list in sorted(groups.items()):
+        effective_list = run_list
+        if config == "zero-shot" and len(run_list) > 1:
+            effective_list = [run_list[0]]
+
+        metric_list = [r["metrics"] for r in effective_list]
+
+        # Aggregate error_rate
+        error_rates = [r.get("error_rate", 0.0) for r in effective_list]
+        any_api_failure = any(r.get("api_failure", False) for r in effective_list)
 
         row = {
             "task": task,
             "model": model,
             "config": config,
             "n_runs": len(effective_list),
+            "error_rate_mean": float(np.mean(error_rates)),
+            "api_failure": any_api_failure,
         }
 
         metrics = PRIMARY_METRICS.get(task, [])
         for metric in metrics:
             values = []
-            for m in effective_list:
+            for m in metric_list:
                 val = m.get(metric)
                 if isinstance(val, dict):
                     val = val.get("mean")
@@ -156,8 +186,13 @@ def format_table(aggregated: list[dict]) -> str:
     lines = [header]
     lines.append("|" + "|".join(["---"] * (4 + len(metric_cols))) + "|")
 
+    has_api_failure = False
     for row in aggregated:
-        line = f"| {row['task']} | {row['model']} | {row['config']} | {row['n_runs']} |"
+        marker = ""
+        if row.get("api_failure"):
+            marker = " †"
+            has_api_failure = True
+        line = f"| {row['task']} | {row['model']}{marker} | {row['config']} | {row['n_runs']} |"
         for m in metric_cols:
             mean = row.get(f"{m}_mean")
             std = row.get(f"{m}_std")
@@ -169,6 +204,10 @@ def format_table(aggregated: list[dict]) -> str:
             else:
                 line += " — |"
         lines.append(line)
+
+    if has_api_failure:
+        lines.append("")
+        lines.append("† = >50% of predictions are API errors (e.g., context overflow)")
 
     return "\n".join(lines)
 

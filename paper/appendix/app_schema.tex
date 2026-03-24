@@ -1,0 +1,139 @@
+\section{Database Schema}
+\label{app:schema}
+
+NegBioDB uses three separate SQLite databases, one per domain, sharing common design patterns: WAL journal mode, foreign key enforcement, COALESCE-based deduplication indexes, and a four-tier confidence system (gold/silver/bronze/copper). Full DDL for all migrations is available in the repository. Below we summarize the key tables.
+
+\subsection{DTI Domain Schema}
+
+Two migrations: \texttt{001\_initial\_schema} (core tables) and \texttt{002\_target\_variants} (variant support).
+
+\begin{small}
+\begin{verbatim}
+-- Core entity tables
+compounds       (compound_id PK, canonical_smiles, inchikey UNIQUE,
+                 inchikey_connectivity, pubchem_cid, chembl_id,
+                 molecular_weight, logp, hbd, hba, tpsa, qed, ...)
+
+targets         (target_id PK, uniprot_accession UNIQUE,
+                 chembl_target_id, gene_symbol, target_family,
+                 development_level CHECK IN (Tclin/Tchem/Tbio/Tdark), ...)
+
+assays          (assay_id PK, source_db, source_assay_id,
+                 assay_format CHECK IN (biochemical/cell-based/in_vivo),
+                 screen_type, z_factor, pubmed_id, ...)
+
+-- Core fact table (30.5M rows)
+negative_results (result_id PK, compound_id FK, target_id FK, assay_id FK,
+                  result_type CHECK IN (hard_negative/conditional_negative/
+                    methodological_negative/dose_time_negative/
+                    hypothesis_negative),
+                  confidence_tier CHECK IN (gold/silver/bronze/copper),
+                  activity_type, activity_value, pchembl_value,
+                  source_db, source_record_id, extraction_method, ...)
+
+-- Dedup: UNIQUE(compound_id, target_id, COALESCE(assay_id,-1),
+--               source_db, source_record_id)
+
+-- Aggregation (for ML export)
+compound_target_pairs (pair_id PK, compound_id FK, target_id FK,
+                       num_assays, num_sources, best_confidence,
+                       compound_degree, target_degree, ...)
+
+-- Variant support (migration 002)
+target_variants (variant_id PK, target_id FK, variant_label,
+                 source_db, UNIQUE(target_id, variant_label, ...))
+\end{verbatim}
+\end{small}
+
+\subsection{CT Domain Schema}
+
+Two migrations: \texttt{001\_ct\_initial\_schema} (core tables) and \texttt{002\_schema\_fixes} (expert review fixes).
+
+\begin{small}
+\begin{verbatim}
+-- Entity tables
+interventions   (intervention_id PK, intervention_type CHECK IN
+                  (drug/biologic/device/...),
+                 intervention_name, chembl_id, canonical_smiles,
+                 inchikey, molecular_type, ...)
+
+conditions      (condition_id PK, condition_name, mesh_id,
+                 icd10_code, therapeutic_area, ...)
+
+clinical_trials (trial_id PK, source_trial_id UNIQUE,
+                 overall_status, trial_phase, enrollment_actual,
+                 primary_endpoint, why_stopped,
+                 termination_type CHECK IN (clinical_failure/
+                   administrative/external_event/unknown), ...)
+
+-- Core fact table (132,925 rows)
+trial_failure_results (result_id PK, intervention_id FK,
+                       condition_id FK, trial_id FK,
+  failure_category CHECK IN (efficacy/safety/pharmacokinetic/
+    enrollment/strategic/regulatory/design/other),
+  confidence_tier CHECK IN (gold/silver/bronze/copper),
+  p_value_primary, effect_size, serious_adverse_events,
+  highest_phase_reached, result_interpretation CHECK IN
+    (definitive_negative/inconclusive_underpowered/
+     mixed_endpoints/futility_stopped/safety_stopped/
+     administrative),
+  source_db, extraction_method, ...)
+
+-- Dedup: UNIQUE(intervention_id, condition_id,
+--               COALESCE(trial_id,-1), source_db, source_record_id)
+
+-- Junction tables
+trial_interventions (trial_id FK, intervention_id FK, arm_role)
+trial_conditions    (trial_id FK, condition_id FK)
+intervention_targets (intervention_id FK, uniprot_accession, ...)
+\end{verbatim}
+\end{small}
+
+\subsection{PPI Domain Schema}
+
+Two migrations: \texttt{001\_ppi\_initial\_schema} (core tables) and \texttt{002\_llm\_annotations} (protein annotations for LLM benchmark).
+
+\begin{small}
+\begin{verbatim}
+-- Entity table
+proteins        (protein_id PK, uniprot_accession UNIQUE,
+                 gene_symbol, amino_acid_sequence, sequence_length,
+                 subcellular_location,
+                 function_description, go_terms,
+                 domain_annotations, ...)  -- migration 002
+
+-- Core fact table (2.23M rows)
+ppi_negative_results (result_id PK, protein1_id FK, protein2_id FK,
+  experiment_id FK,
+  evidence_type CHECK IN (experimental_non_interaction/
+    ml_predicted_negative/low_score_negative/
+    compartment_separated/literature_reported),
+  confidence_tier CHECK IN (gold/silver/bronze/copper),
+  interaction_score, detection_method,
+  source_db, extraction_method, ...,
+  CHECK (protein1_id < protein2_id))  -- canonical ordering
+
+-- Dedup: UNIQUE(protein1_id, protein2_id,
+--               COALESCE(experiment_id,-1),
+--               source_db, source_record_id)
+
+-- Aggregation
+protein_protein_pairs (pair_id PK, protein1_id FK, protein2_id FK,
+                       num_experiments, num_sources, best_confidence,
+                       protein1_degree, protein2_degree, ...,
+                       CHECK (protein1_id < protein2_id))
+
+-- LLM support (migration 002)
+ppi_publication_abstracts (pmid PK, title, abstract, ...)
+\end{verbatim}
+\end{small}
+
+\subsection{Common Design Patterns}
+
+\begin{itemize}[nosep,leftmargin=*]
+    \item \textbf{Deduplication:} All fact tables use \texttt{COALESCE(fk, -1)} in UNIQUE indexes to handle NULL foreign keys (SQLite treats NULLs as distinct in UNIQUE constraints).
+    \item \textbf{Confidence tiers:} Four-level system across all domains: gold (systematic screens, multiple confirmations) $>$ silver (ML-derived, p-value based) $>$ bronze (computational, NLP-detected) $>$ copper (label-only).
+    \item \textbf{Aggregation tables:} Pre-computed pair-level statistics for ML export, avoiding expensive JOINs during dataset construction.
+    \item \textbf{Symmetric pairs (PPI):} \texttt{CHECK (protein1\_id $<$ protein2\_id)} enforces canonical ordering, preventing duplicate pair representations.
+    \item \textbf{Schema migrations:} All databases track applied migrations in a \texttt{schema\_migrations} table for reproducible upgrades.
+\end{itemize}

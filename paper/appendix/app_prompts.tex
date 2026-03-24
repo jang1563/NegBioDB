@@ -1,0 +1,258 @@
+\section{LLM Prompt Examples}
+\label{app:prompts}
+
+This appendix shows representative prompt templates for each evaluation level across all three domains. Each domain uses a domain-specific system prompt and task-specific user prompts. All prompts follow a zero-shot and 3-shot structure.
+
+\subsection{System Prompts}
+
+\begin{small}
+\begin{verbatim}
+DTI: "You are a pharmaceutical scientist with expertise in drug-target
+interactions, assay development, and medicinal chemistry. Provide precise,
+evidence-based answers."
+
+CT:  "You are a clinical trial expert with deep knowledge of drug
+development, regulatory science, and clinical pharmacology."
+
+PPI: "You are a protein biochemist with expertise in protein-protein
+interactions, structural biology, and proteomics experimental methods.
+Provide precise, evidence-based answers."
+\end{verbatim}
+\end{small}
+
+\subsection{L1: Multiple Choice Classification}
+
+\textbf{DTI L1} (4-way: hard negative / conditional negative / methodological negative / dose-time negative):
+\begin{small}
+\begin{verbatim}
+[context_text with evidence description]
+
+Respond with ONLY the letter of the correct answer: A, B, C, or D.
+\end{verbatim}
+\end{small}
+
+\textbf{CT L1} (5-way: safety / efficacy / enrollment / strategic / other):
+\begin{small}
+\begin{verbatim}
+Based on the clinical trial information below, classify the primary
+reason for this trial's failure.
+
+[context_text with trial details]
+
+Categories:
+A) Safety -- Trial failed due to drug toxicity, adverse events, or
+   safety signals
+B) Efficacy -- Trial failed to demonstrate therapeutic benefit vs control
+C) Enrollment -- Trial failed to recruit sufficient participants
+D) Strategic -- Trial was discontinued for business, strategic, or
+   portfolio reasons
+E) Other -- Trial failed due to study design flaws, regulatory issues,
+   or other reasons
+
+Respond with ONLY a single letter (A, B, C, D, or E).
+\end{verbatim}
+\end{small}
+
+\textbf{PPI L1} (4-way: direct experimental / systematic screen / computational inference / database score absence):
+\begin{small}
+\begin{verbatim}
+Based on the evidence description below, classify the type and quality
+of evidence supporting this protein non-interaction.
+
+[context_text with evidence description]
+
+Categories:
+A) Direct experimental -- A specific binding assay (co-IP, pulldown,
+   SPR, etc.) found no physical interaction
+B) Systematic screen -- A high-throughput binary screen (Y2H, LUMIER,
+   etc.) found no interaction
+C) Computational inference -- ML analysis of co-fractionation or complex
+   data predicts no interaction
+D) Database score absence -- Zero or negligible combined interaction
+   score across multiple evidence channels
+
+Respond with ONLY a single letter (A, B, C, or D).
+\end{verbatim}
+\end{small}
+
+\subsection{L2: Structured Extraction}
+
+\textbf{DTI L2} (JSON extraction from abstract):
+\begin{small}
+\begin{verbatim}
+Extract all negative drug-target interaction results from the following
+abstract.
+
+Abstract: [abstract_text]
+
+For each negative result found, extract:
+- compound: compound/drug name
+- target: target protein/gene name
+- target_uniprot: UniProt accession (if determinable)
+- activity_type: type of measurement (IC50, Ki, Kd, EC50, etc.)
+- activity_value: reported value with units
+- activity_relation: relation (=, >, <, ~)
+- assay_format: biochemical, cell-based, or in vivo
+- outcome: inactive, weak, or inconclusive
+
+Also report:
+- total_inactive_count: total number of inactive results mentioned
+- positive_results_mentioned: true/false
+
+Respond in JSON format.
+\end{verbatim}
+\end{small}
+
+\textbf{CT L2} (JSON extraction from termination report):
+\begin{small}
+\begin{verbatim}
+Extract structured failure information from the following clinical trial
+termination report. Return a JSON object with the fields specified below.
+
+[context_text]
+
+Required JSON fields:
+- failure_category: one of [efficacy, safety, pharmacokinetic,
+  enrollment, strategic, design, regulatory, other]
+- failure_subcategory: specific reason
+- affected_system: organ system affected (null if not applicable)
+- severity_indicator: one of [mild, moderate, severe, fatal, null]
+- quantitative_evidence: true if text mentions specific numbers
+- decision_maker: who terminated [sponsor, dsmb, regulatory,
+  investigator, null]
+- patient_impact: brief description of patient safety impact
+
+Return ONLY valid JSON, no additional text.
+\end{verbatim}
+\end{small}
+
+\textbf{PPI L2} (JSON extraction of non-interacting pairs):
+\begin{small}
+\begin{verbatim}
+Extract all protein pairs reported as non-interacting from the following
+evidence summary. Return a JSON object with the fields specified below.
+
+[context_text]
+
+Required JSON fields:
+- non_interacting_pairs: list of objects, each with:
+    - protein_1: gene symbol or UniProt accession
+    - protein_2: gene symbol or UniProt accession
+    - method: experimental method used
+    - evidence_strength: one of [strong, moderate, weak]
+- total_negative_count: total number of non-interacting pairs mentioned
+- positive_interactions_mentioned: true if any positive interactions
+  are also mentioned
+
+Return ONLY valid JSON, no additional text.
+\end{verbatim}
+\end{small}
+
+\subsection{L3: Scientific Reasoning}
+
+\textbf{DTI L3}:
+\begin{small}
+\begin{verbatim}
+[context_text describing compound-target pair and inactivity evidence]
+
+Provide a detailed scientific explanation (3-5 paragraphs) covering:
+1. Structural compatibility between compound and target binding site
+2. Known selectivity profile and mechanism of action
+3. Relevant SAR (structure-activity relationship) data
+4. Pharmacological context and therapeutic implications
+\end{verbatim}
+\end{small}
+
+\textbf{CT L3}:
+\begin{small}
+\begin{verbatim}
+The following clinical trial was confirmed as a FAILURE. Based on the
+trial data below, provide a scientific explanation for why this drug
+failed in this clinical trial.
+
+[context_text]
+
+Your explanation should address:
+1. Mechanism -- What is the drug's mechanism of action and why might
+   it be insufficient for this condition?
+2. Evidence interpretation -- What do the statistical results tell us?
+3. Clinical factors -- Trial design, patient population, or disease
+   biology factors?
+4. Broader context -- Known challenges of treating this condition?
+
+Provide a thorough explanation in 3-5 paragraphs.
+\end{verbatim}
+\end{small}
+
+\textbf{PPI L3}:
+\begin{small}
+\begin{verbatim}
+The following two proteins have been experimentally tested and confirmed
+to NOT physically interact. Based on the protein information below,
+provide a scientific explanation for why they are unlikely to form a
+physical interaction.
+
+[context_text]
+
+Your explanation should address:
+1. Biological plausibility -- Are there biological reasons (function,
+   pathway, localization) that make interaction unlikely?
+2. Structural reasoning -- Do domain architectures, binding interfaces,
+   or steric factors argue against interaction?
+3. Mechanistic completeness -- Are multiple relevant factors considered?
+4. Specificity -- Are claims specific to these proteins or generic?
+
+Provide a thorough explanation in 3-5 paragraphs.
+\end{verbatim}
+\end{small}
+
+\subsection{L4: Tested vs.\ Untested Discrimination}
+
+All three domains use a similar L4 structure:
+
+\begin{small}
+\begin{verbatim}
+DTI: "Has the following compound-target pair been experimentally
+tested for binding activity?"
+[compound name + target name]
+
+CT:  "Has the following drug-condition combination ever been tested
+in a registered clinical trial?"
+[drug name + condition name]
+
+PPI: "Has the following protein pair ever been experimentally tested
+for physical interaction?"
+[protein A gene symbol + protein B gene symbol]
+
+Response format (all domains):
+"On the first line, respond with ONLY 'tested' or 'untested'.
+On the second line, provide brief evidence for your answer."
+\end{verbatim}
+\end{small}
+
+\subsection{Few-Shot Configuration}
+
+For 3-shot prompting, three independent example sets are sampled (seeds 42, 43, 44), and results are reported as mean $\pm$ std across the three sets. Examples are formatted as:
+
+\begin{small}
+\begin{verbatim}
+Here are examples of [task description]:
+
+[Example 1 context]
+Answer: [gold answer]
+
+---
+
+[Example 2 context]
+Answer: [gold answer]
+
+---
+
+[Example 3 context]
+Answer: [gold answer]
+
+Now [task instruction]:
+
+[Test instance context]
+\end{verbatim}
+\end{small}

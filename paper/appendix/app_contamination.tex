@@ -1,0 +1,104 @@
+\section{Full PPI Contamination Analysis}
+\label{app:contamination}
+
+This appendix presents the complete PPI L4 contamination analysis, including temporal stratification and protein popularity controls.
+
+\subsection{Temporal Contamination}
+
+Table~\ref{tab:ppi_contam_full} shows per-run accuracy for pre-2015 and post-2020 IntAct interaction pairs across all 20 PPI-L4 runs (5 models $\times$ 4 configs). All 20 runs exceed the 0.15 contamination threshold~\citep{balloccu2024leak}, with gaps ranging from 0.361 to 0.612.
+
+\begin{table}[h]
+\centering
+\caption{PPI L4 temporal contamination: accuracy on pre-2015 vs.\ post-2020 pairs. Gap $>$ 0.15 indicates likely memorization. All runs flagged.}
+\label{tab:ppi_contam_full}
+\scriptsize
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \textbf{Acc pre-2015} & \textbf{Acc post-2020} & \textbf{Gap} & \textbf{Flag} \\
+\midrule
+Claude Haiku-4.5 & 3-shot (set 0) & 0.598 & 0.041 & 0.557 & YES \\
+Claude Haiku-4.5 & 3-shot (set 1) & 0.618 & 0.051 & 0.567 & YES \\
+Claude Haiku-4.5 & 3-shot (set 2) & 0.569 & 0.031 & 0.538 & YES \\
+Claude Haiku-4.5 & zero-shot & 0.422 & 0.020 & 0.401 & YES \\
+\midrule
+Gemini-2.5-Flash & 3-shot (set 0) & 0.765 & 0.184 & 0.581 & YES \\
+Gemini-2.5-Flash & 3-shot (set 1) & 0.686 & 0.133 & 0.554 & YES \\
+Gemini-2.5-Flash & 3-shot (set 2) & 0.706 & 0.184 & 0.522 & YES \\
+Gemini-2.5-Flash & zero-shot & 0.588 & 0.133 & 0.456 & YES \\
+\midrule
+GPT-4o-mini & 3-shot (set 0) & 0.569 & 0.112 & 0.456 & YES \\
+GPT-4o-mini & 3-shot (set 1) & 0.422 & 0.051 & 0.371 & YES \\
+GPT-4o-mini & 3-shot (set 2) & 0.569 & 0.092 & 0.477 & YES \\
+GPT-4o-mini & zero-shot & 0.762 & 0.245 & 0.517 & YES \\
+\midrule
+Llama-3.3-70B & 3-shot (set 0) & 0.422 & 0.041 & 0.381 & YES \\
+Llama-3.3-70B & 3-shot (set 1) & 0.745 & 0.133 & 0.612 & YES \\
+Llama-3.3-70B & 3-shot (set 2) & 0.402 & 0.041 & 0.361 & YES \\
+Llama-3.3-70B & zero-shot & 0.794 & 0.204 & 0.590 & YES \\
+\midrule
+Qwen2.5-32B & 3-shot (set 0) & 0.588 & 0.112 & 0.476 & YES \\
+Qwen2.5-32B & 3-shot (set 1) & 0.510 & 0.061 & 0.449 & YES \\
+Qwen2.5-32B & 3-shot (set 2) & 0.529 & 0.082 & 0.448 & YES \\
+Qwen2.5-32B & zero-shot & 0.598 & 0.071 & 0.527 & YES \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Contamination vs.\ Protein Popularity}
+
+A potential confound: pre-2015 proteins may be better-studied (higher degree in interaction networks), and models might simply know more about popular proteins regardless of memorization. To control for this, we stratify L4 accuracy by protein pair degree (median split at degree 172.2).
+
+Table~\ref{tab:ppi_contam_popularity} shows that the temporal gap persists in \emph{both} high-degree and low-degree protein pairs for all five models. Model-averaged gaps:
+\begin{itemize}[nosep,leftmargin=*]
+    \item \textbf{High-degree pairs}: gaps 0.44--0.62 (all $\gg$ 0.15)
+    \item \textbf{Low-degree pairs}: gaps 0.30--0.57 (all $\gg$ 0.15)
+\end{itemize}
+
+This confirms that the temporal signal reflects genuine memorization of interaction databases, not a popularity confound. Notably, Gemini-2.5-Flash shows a \emph{stronger} gap for low-degree pairs (0.53 vs.\ 0.50), suggesting it has particularly memorized obscure protein interactions.
+
+\begin{table}[h]
+\centering
+\caption{PPI L4 contamination stratified by protein popularity. Gap persists for both high-degree and low-degree pairs, confirming true memorization.}
+\label{tab:ppi_contam_popularity}
+\scriptsize
+\begin{tabular}{@{}llcccccc@{}}
+\toprule
+\textbf{Model} & \textbf{Config} & \multicolumn{2}{c}{\textbf{Pre-2015 Acc}} & \multicolumn{2}{c}{\textbf{Post-2020 Acc}} & \multicolumn{2}{c}{\textbf{Gap}} \\
+\cmidrule(lr){3-4} \cmidrule(lr){5-6} \cmidrule(lr){7-8}
+& & High & Low & High & Low & High & Low \\
+\midrule
+Haiku-4.5 & 3-shot & 0.661 & 0.514 & 0.045 & 0.037 & 0.615 & 0.478 \\
+Haiku-4.5 & zero-shot & 0.518 & 0.304 & 0.045 & 0.000 & 0.472 & 0.304 \\
+Gemini & 3-shot & 0.768 & 0.660 & 0.250 & 0.099 & 0.518 & 0.561 \\
+Gemini & zero-shot & 0.643 & 0.522 & 0.205 & 0.074 & 0.438 & 0.448 \\
+GPT-4o-mini & 3-shot & 0.637 & 0.377 & 0.099 & 0.074 & 0.539 & 0.303 \\
+GPT-4o-mini & zero-shot & 0.855 & 0.652 & 0.250 & 0.241 & 0.605 & 0.411 \\
+Llama-3.3 & 3-shot & 0.643 & 0.377 & 0.129 & 0.025 & 0.514 & 0.352 \\
+Llama-3.3 & zero-shot & 0.857 & 0.717 & 0.273 & 0.148 & 0.584 & 0.569 \\
+Qwen2.5 & 3-shot & 0.655 & 0.406 & 0.129 & 0.050 & 0.526 & 0.357 \\
+Qwen2.5 & zero-shot & 0.679 & 0.500 & 0.091 & 0.056 & 0.588 & 0.444 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Model-Averaged Summary}
+
+\begin{table}[h]
+\centering
+\caption{Model-averaged contamination gaps by protein popularity.}
+\label{tab:ppi_contam_summary}
+\scriptsize
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Model} & \textbf{Avg Gap (High)} & \textbf{Avg Gap (Low)} & \textbf{Verdict} \\
+\midrule
+Claude Haiku-4.5 & 0.580 & 0.434 & True contamination \\
+Gemini-2.5-Flash & 0.498 & 0.532 & True contamination (stronger for obscure) \\
+GPT-4o-mini & 0.555 & 0.330 & True contamination \\
+Llama-3.3-70B & 0.532 & 0.406 & True contamination \\
+Qwen2.5-32B & 0.541 & 0.378 & True contamination \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key finding:} All five models show contamination gaps exceeding the 0.15 threshold in both high-degree and low-degree strata. The contamination signal is robust to protein popularity and reflects genuine memorization of interaction databases rather than a confound with protein familiarity.

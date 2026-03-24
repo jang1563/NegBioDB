@@ -1,0 +1,56 @@
+\section{Splitting Strategy Details}
+\label{app:splits}
+
+This appendix describes the splitting strategies used across the three domains and their implementation details.
+
+\subsection{Split Strategy Overview}
+
+\begin{table}[h]
+\centering
+\caption{Split strategies by domain. \checkmark = implemented, --- = not applicable.}
+\label{tab:split_overview}
+\scriptsize
+\begin{tabular}{@{}lcccp{5.5cm}@{}}
+\toprule
+\textbf{Strategy} & \textbf{DTI} & \textbf{CT} & \textbf{PPI} & \textbf{Description} \\
+\midrule
+Random & \checkmark & \checkmark & \checkmark & Stratified random assignment (70/10/20) \\
+Cold\_compound/drug & \checkmark & \checkmark & --- & All pairs with held-out compounds in test \\
+Cold\_target/condition & \checkmark & \checkmark & --- & All pairs with held-out targets in test \\
+Cold\_protein & --- & --- & \checkmark & All pairs with held-out proteins in test \\
+Cold\_both & --- & --- & \checkmark & METIS graph partitioning; unseen proteins on both sides \\
+Temporal & --- & \checkmark & --- & $\leq$2017 train, 2018--19 val, $\geq$2020 test \\
+Scaffold & --- & \checkmark & --- & Murcko scaffold-based grouping \\
+DDB & \checkmark & --- & \checkmark & Degree-balanced binning \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cold Splitting}
+
+\textbf{Cold compound/drug/protein.} Entities are randomly partitioned into train/val/test groups. All pairs containing a held-out entity are assigned to the corresponding fold. This tests generalization to unseen chemical or biological entities.
+
+\textbf{Cold\_both (PPI only).} We use METIS graph partitioning~\citep{karypis1998metis} to partition proteins into three groups such that proteins in the test set have no interactions with proteins in the training set. This creates a maximally challenging generalization test where \emph{both} proteins in a test pair are unseen during training. Implementation uses the \texttt{pymetis} library with $k$=3 partitions, targeting 70/10/20 splits. The resulting test partition contains only 1.7\% positive examples (242/14,037) due to the extreme network separation, creating a highly imbalanced evaluation setting.
+
+\subsection{Temporal Splitting (CT only)}
+
+Clinical trials are split by primary completion date: trials completing $\leq$2017 form the training set (42,676 pairs), 2018--2019 form validation (9,257 pairs), and $\geq$2020 form the test set (50,917 pairs). This mimics a realistic prospective prediction scenario. A known limitation: the temporal split can produce single-class validation sets (all negative) for CT-M1, since successful trials are rare in certain time windows. When this occurs, AUROC and other threshold-dependent metrics are undefined.
+
+\subsection{Scaffold Splitting (CT only)}
+
+For interventions with resolved SMILES structures (41,240 of 102,850 CT pairs), we compute Murcko scaffolds~\citep{bemis1996murcko} using RDKit. Pairs are grouped by scaffold, then scaffolds are assigned to train/val/test folds. The remaining 61,610 pairs without SMILES are assigned NULL scaffolds and randomly distributed. This tests whether models generalize to structurally novel drug classes.
+
+\subsection{Degree-Balanced Splitting (DTI, PPI)}
+
+Following~\citet{zheng2020ddb}, entities are binned by their interaction degree (number of partners), and each bin is independently split into train/val/test. This ensures that high-degree and low-degree entities are proportionally represented in each fold, preventing evaluation bias toward well-studied entities. In our experiments, DDB performance was similar to random splitting across all domains (Table~\ref{tab:ml_results}), suggesting degree imbalance is not a major confound in NegBioDB.
+
+\subsection{Control Negative Generation}
+
+For Experiment~1 (negative source inflation), we generate two types of control negatives:
+
+\begin{itemize}[nosep,leftmargin=*]
+    \item \textbf{Uniform random:} Randomly sampled entity pairs not present in the positive set or NegBioDB negatives. Equal in size to the NegBioDB negative set.
+    \item \textbf{Degree-matched:} Random pairs where each entity's degree matches the degree distribution of the NegBioDB negative set. This controls for the hypothesis that degree alone explains performance differences.
+\end{itemize}
+
+Both control sets are generated per-seed for CT and PPI (3 seeds) and once for DTI (seed 42). Conflicts between control negatives and positive pairs are removed before training.

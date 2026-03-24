@@ -1,0 +1,40 @@
+\section{NegBioBench: Evaluation Framework}
+\label{sec:benchmark}
+
+NegBioBench is a dual ML+LLM benchmark designed to evaluate both predictive models and language models on negative biological evidence. We describe the two evaluation tracks and our methodology for measuring genuine understanding versus memorization.
+
+\subsection{ML Track}
+
+The ML track evaluates whether predictive models can distinguish experimentally confirmed negatives from positives, and whether standard evaluation practices inflate reported performance.
+
+\textbf{Tasks.} We define two task types: \emph{M1} (binary classification: negative vs.\ positive) across all three domains, and \emph{M2} (7-way failure category prediction) for CT only. Positive examples come from established sources: DAVIS actives for DTI, CTO successful trials~\citep{siah2021cto} for CT, and HuRI positive interactions~\citep{luck2020huri} for PPI.
+
+\textbf{Splitting strategies.} We implement domain-appropriate cold splits to test generalization: cold\_drug and cold\_target (DTI), cold\_drug and cold\_condition (CT), cold\_protein and cold\_both via METIS graph partitioning~\citep{karypis1998metis} (PPI), plus random, temporal, scaffold~\citep{bemis1996murcko}, and degree-balanced (DDB)~\citep{zheng2020ddb} splits where applicable.
+
+\textbf{Control negatives.} To measure the effect of negative source on model performance (\emph{Experiment~1}), we train identical models on NegBioDB negatives versus two control sets: uniform random pairs and degree-matched random pairs. This directly tests whether curated negatives carry different signal than assumed negatives.
+
+\textbf{Models.} Three architectures per domain: DeepDTA~\citep{ozturk2018deepdta}, GraphDTA~\citep{nguyen2021graphdta}, and DrugBAN~\citep{bai2023drugban} for DTI; XGBoost~\citep{chen2016xgboost}, MLP, and GNN for CT; SiameseCNN, PIPR~\citep{chen2019pipr}, and MLPFeatures for PPI. Metrics include AUROC, LogAUC$_{[0.001,0.1]}$~\citep{mysinger2010logauc}, AUPRC, and MCC~\citep{matthews1975mcc}.
+
+\subsection{LLM Track}
+
+The LLM track evaluates language models across four levels of increasing cognitive demand:
+
+\textbf{L1 (Multiple Choice).} Classification of negative evidence into domain-specific categories (4-way for DTI/PPI, 5-way for CT). Tests whether LLMs can recognize evidence types from textual descriptions.
+
+\textbf{L2 (Extraction).} Structured JSON extraction of key fields from evidence text (compound/target identifiers, assay types, p-values). Tests whether LLMs can parse scientific evidence into machine-readable formats.
+
+\textbf{L3 (Reasoning).} Open-ended scientific reasoning about why a negative result was observed and its implications. Evaluated by an LLM-as-judge on four dimensions: accuracy, completeness, reasoning quality, and specificity.
+
+\textbf{L4 (Discrimination).} Binary classification of whether a given entity pair has been \emph{experimentally tested and found inactive} versus \emph{never tested}. This is the critical level: it tests whether LLMs possess genuine understanding of negative results or merely recall information from training data.
+
+\textbf{Models and configurations.} Five models span the capability spectrum: Llama-3.3-70B~\citep{dubey2024llama3}, Qwen2.5-32B~\citep{yang2024qwen2}, GPT-4o-mini~\citep{openai2024gpt4o}, Gemini-2.5-Flash~\citep{google2025gemini}, and Claude Haiku-4.5~\citep{anthropic2025claude}. Each is evaluated in zero-shot and three few-shot configurations (different random example sets), yielding 4 configurations per model--level pair.
+
+\subsection{Evaluation Methodology}
+
+NegBioBench makes three methodological contributions relevant to the evaluation landscape:
+
+\textbf{L4 as a contamination probe.} L4 discrimination performance reveals whether models have memorized negative results from training data. We incorporate temporal stratification (pre-2015 vs.\ post-2020 publication dates) to detect contamination: a performance gap exceeding 0.15 indicates likely memorization rather than reasoning~\citep{sainz2024contamination}.
+
+\textbf{Cross-domain comparison.} By applying identical evaluation levels across three domains with different data accessibility profiles, we can isolate the effect of training data composition on LLM performance---independent of biological task difficulty.
+
+\textbf{Anti-contamination design.} L1--L3 use paraphrased evidence text to reduce verbatim memorization advantage. L4 temporal holdouts ensure post-training-cutoff examples are included. All hallucinated evidence citations are tracked to measure confabulation rates.

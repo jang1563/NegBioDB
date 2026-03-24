@@ -267,6 +267,10 @@ class TestParseCTL4Answer:
         answer, _ = parse_ct_l4_answer("This combination has not been tested\nEvidence...")
         assert answer == "untested"
 
+    def test_never_been_tested_variant(self):
+        answer, _ = parse_ct_l4_answer("This drug-disease combination has never been tested in a trial.")
+        assert answer == "untested"
+
     def test_no_evidence(self):
         answer, evidence = parse_ct_l4_answer("tested")
         assert answer == "tested"
@@ -321,13 +325,19 @@ class TestEvaluateCTL4:
         assert result["contamination_flag"] is False
 
     def test_evidence_citation_rate(self):
+        """Evidence needs BOTH >50 chars AND domain keyword (AND logic)."""
         preds = [
-            "tested\nNCT01234567 showed positive results",  # has NCT → evidence
-            "tested\nI think so",  # too short, no keywords
+            # >50 chars AND contains "nct" keyword → pass
+            "tested\nTrial NCT01234567 demonstrated that the drug was effective in reducing primary endpoint with p-value 0.003",
+            # >50 chars but NO keyword → fail
+            "tested\nI think the drug was probably tested somewhere in a large randomized clinical study recently",
+            # <50 chars but has keyword → fail
+            "tested\nNCT01234567 showed results",
         ]
-        golds = ["tested", "tested"]
+        golds = ["tested", "tested", "tested"]
         result = evaluate_ct_l4(preds, golds)
-        assert result["evidence_citation_rate"] == 0.5
+        # Only 1 of 3 passes both conditions
+        assert result["evidence_citation_rate"] == pytest.approx(1 / 3)
 
     def test_ct_evidence_keywords(self):
         """CT-specific keywords differ from DTI."""
