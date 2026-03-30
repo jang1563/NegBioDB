@@ -108,7 +108,7 @@ Now explain the following:
 
 ### A.4.3 LLM-as-Judge Rubric
 
-Responses are evaluated by a judge model (Gemini 2.5 Flash-Lite) using the following rubric:
+Responses are evaluated by a judge model (Gemini 2.5 Flash) using the following rubric:
 
 ```
 Rate the following scientific explanation of why a compound is inactive against a target.
@@ -171,11 +171,10 @@ The answer format instruction is appended after both zero-shot and few-shot temp
 
 | Model | Provider | Inference |
 |-------|----------|-----------|
-| Llama-3.3-70B-Instruct-AWQ | vLLM | Local (A100 GPU) |
-| Qwen2.5-32B-Instruct-AWQ | vLLM | Local (A100 GPU) |
-| Mistral-7B-Instruct-v0.3 | vLLM | Local (A100 GPU) |
-| GPT-4o-mini | OpenAI API | Cloud |
+| Claude Haiku-4.5 | Anthropic API | Cloud |
 | Gemini 2.5 Flash | Google Gemini API | Cloud |
-| Gemini 2.5 Flash-Lite | Google Gemini API | Cloud |
+| GPT-4o-mini | OpenAI API | Cloud |
+| Qwen2.5-7B-Instruct | vLLM | Local (A100 GPU) |
+| Llama-3.1-8B-Instruct | vLLM | Local (A100 GPU) |
 
 Gemini 2.5 Flash uses `thinkingConfig: {thinkingBudget: 0}` to disable internal reasoning tokens and ensure the full output budget is available for the response.

@@ -8,7 +8,7 @@
 |--------|-----------|-----------|--------------|--------------|
 | DTI (Drug-Target Interaction) | 30,459,583 | 24/24 complete | Gemini 1.000 (3-shot) | ≤ 0.18 (near random) |
 | CT (Clinical Trial Failure) | 132,925 | 108/108 complete | Gemini 0.68 | Gemini 0.56 |
-| PPI (Protein-Protein Interaction) | 2,220,786 | 54/54 complete | ~1.000 (3-shot artifact) | Llama 0.441 |
+| PPI (Protein-Protein Interaction) | 2,229,670 | 54/54 complete | ~1.000 (3-shot artifact) | Llama 0.441 |
 | GE (Gene Essentiality / DepMap) | 28,759,256 | Seed 42 complete | 4/5 models complete | Pending (Llama) |
 
 **Key insight:** LLM discrimination ability (L4 MCC) increases with task complexity: DTI (~0.05–0.18) < PPI (~0.33–0.44) < CT (~0.48–0.56). All domains show evidence of training data contamination in PPI/CT.
@@ -85,10 +85,10 @@ Aggregated over 3 seeds (source: `results/ct_table_m2_aggregated.csv`):
 |------|--------|-------------|-------|---------|---------|
 | L1 (5-way MCQ, acc) | **0.68** | 0.64 | 0.66 | 0.65 | 0.63 |
 | L2 (extraction, field_f1) | 0.75 | 0.73 | 0.48 | **0.81** | 0.77 |
-| L3 (reasoning, /5.0) | — | — | — | — | — |
+| L3 (reasoning, /5.0) | ~4.7 | ~4.6 | ~4.4 | ~4.5 | ~4.6 |
 | L4 (discrim, MCC) | **0.56** | 0.49 | 0.50 | 0.48 | 0.50 |
 
-**Key finding:** CT LLMs show meaningful discrimination (MCC ~0.5). L3 ceiling effect — GPT-4o-mini judge gave 4.4–5.0/5 (too lenient). L2 Qwen/Llama outperform API models.
+**Key finding:** CT LLMs show meaningful discrimination (MCC ~0.5). L3 ceiling effect — all models score 4.4–4.7/5.0 (judge too lenient; scores not discriminative). L2 Qwen/Llama outperform API models on field F1.
 
 ---
 
@@ -97,7 +97,7 @@ Aggregated over 3 seeds (source: `results/ct_table_m2_aggregated.csv`):
 **Status as of 2026-03-23:** ML 54/54 complete (seeds 42/43/44), LLM 80/80 complete, L3 judged.
 
 ### Database
-- 2,220,786 negative results (IntAct 779 / HuRI 500K / hu.MAP 1.23M / STRING 500K)
+- 2,229,670 negative results in DB (IntAct 779 / HuRI 500K / hu.MAP 1.23M / STRING 500K); 2,220,786 export rows after split filtering
 - 61,728 positive pairs (HuRI Y2H), 18,412 proteins
 
 ### ML Results (PPI-M1: Binary Non-interaction Prediction)

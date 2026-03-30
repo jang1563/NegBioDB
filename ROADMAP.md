@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-30 (v19 — All 4 domains complete: DTI ✅ CT ✅ PPI ✅ GE ✅)
+> Last updated: 2026-03-30 (v19 — DTI ✅ CT ✅ PPI ✅ GE near-complete: ML seed 42 done, LLM 4/5 models done)
 
 ---
 
@@ -523,7 +523,7 @@ DTIContext {
 ```
 DTI (Phase 1 — COMPLETE)
   │
-  ├── Clinical Trial Failure (Phase 1-CT — IN PROGRESS)
+  ├── Clinical Trial Failure (Phase 1-CT — COMPLETE ✅)
   │     └── 132,925 failure results loaded, benchmarks designed
   │
   ├── Gene Function (CRISPR KO/KD negatives)

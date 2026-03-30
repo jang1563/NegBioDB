@@ -1,6 +1,7 @@
 # NegBioDB Pipeline Makefile
 
-.PHONY: setup db test clean
+.PHONY: setup db test clean \
+        ge-db ge-download-depmap ge-load-depmap ge-load-rnai ge-export ge-all ge-clean ge-test
 
 # === Week 1: Scaffolding ===
 
@@ -149,3 +150,31 @@ ppi-clean:
 
 ppi-test: setup
 	uv run pytest tests/test_ppi_db.py tests/test_protein_mapper.py tests/test_etl_huri.py tests/test_etl_intact.py tests/test_etl_humap.py tests/test_etl_string.py -v
+
+# === GE/DepMap Domain ===
+
+ge-db:
+	uv run python -c "from negbiodb_depmap.depmap_db import init_db; init_db()"
+	@echo "GE database initialized."
+
+ge-download-depmap:
+	uv run python scripts_depmap/download_depmap.py
+
+ge-load-depmap: ge-db ge-download-depmap
+	uv run python scripts_depmap/load_depmap.py
+
+ge-load-rnai: ge-db ge-download-depmap
+	uv run python scripts_depmap/load_rnai.py
+
+ge-export: ge-db
+	uv run python scripts_depmap/export_ge_ml_dataset.py
+
+ge-all: ge-db ge-load-depmap ge-load-rnai ge-export
+	@echo "GE pipeline complete."
+
+ge-clean:
+	rm -f data/negbiodb_depmap.db
+	@echo "GE database removed."
+
+ge-test: setup
+	uv run pytest tests/test_ge_db.py tests/test_ge_features.py tests/test_etl_depmap.py tests/test_etl_rnai.py tests/test_ge_export.py -v

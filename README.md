@@ -10,7 +10,7 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 ## Key Features
 
 - **Four domains**: Drug-Target Interaction (DTI), Clinical Trial Failure (CT), Protein-Protein Interaction (PPI), Gene Essentiality (GE/DepMap)
-- **~62M negative results** across 4 SQLite databases (30.5M DTI + 133K CT + 2.2M PPI + 28.8M GE)
+- **~61.6M negative results** across 4 SQLite databases (30.5M DTI + 133K CT + 2.2M PPI + 28.8M GE)
 - **Dual benchmark**: ML track (traditional prediction) + LLM track (biomedical NLP tasks)
 - **242 ML runs** + **321 LLM runs** completed across all domains
 - **Multiple split strategies**: random, cold-entity, temporal, scaffold, degree-balanced
@@ -27,6 +27,8 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 | **GE** | 28,759,256 | 19,554 genes, 2,132 cell lines | DepMap (CRISPR, RNAi) | ~16 GB |
 | **Total** | **~61.6M** | | **14 sources** | **~38 GB** |
 
+*PPI DB total: 2,229,670; export rows after split filtering: 2,220,786.*
+
 ## Project Status
 
 | Domain | ETL | ML Benchmark | LLM Benchmark | Status |
@@ -34,9 +36,9 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 | DTI | 4 sources | 24/24 runs | 81/81 runs | Complete |
 | CT | 4 sources | 108/108 runs | 80/80 runs | Complete |
 | PPI | 4 sources | 54/54 runs | 80/80 runs | Complete |
-| GE | 2 sources | 42/42 runs (seed 42) | 80/80 runs* | ML complete, LLM complete |
+| GE | 2 sources | 14/14 runs (seed 42) | 64/80 runs* | Seed 42 ML complete, LLM 4/5 models |
 
-*Llama 3.1-70B results pending GPU availability on HPC.
+*Llama 3.1-8B results pending HPC GPU availability; seeds 43/44 in progress.
 
 ---
 
@@ -192,7 +194,7 @@ uv run python scripts_depmap/collect_ge_results.py --llm
 ## Testing
 
 ```bash
-# All tests (~1,300 total across 4 domains)
+# All tests (~1,000 total across 4 domains)
 PYTHONPATH=src uv run pytest tests/ -v
 
 # By domain
@@ -273,7 +275,7 @@ NegBioDB/
 ├── migrations_ct/             # CT SQL schema migrations
 ├── migrations_ppi/            # PPI SQL schema migrations
 ├── migrations_depmap/         # GE SQL schema migrations
-├── tests/                     # Test suite (~1,300 tests across 4 domains)
+├── tests/                     # Test suite (~1,000 tests across 4 domains)
 ├── docs/                      # Methodology notes and prompt appendices
 ├── paper/                     # LaTeX source (NeurIPS 2026 submission)
 ├── data/                      # SQLite databases (not in repo, ~38 GB)
