@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=48:00:00
-#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/l3_judge_%j.log
-#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/l3_judge_%j.err
+#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/l3_judge_%j.log
+#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/l3_judge_%j.err
 
 # Run L3 LLM-as-Judge evaluation with Gemini API.
 # Usage:
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # Use scratch conda env copy to bypass NFS /home degradation
-SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 

@@ -33,9 +33,11 @@ def main():
 
     from negbiodb_depmap.depmap_db import get_connection
     from negbiodb_depmap.export import (
+        apply_split_to_dataset,
         build_ge_m1,
         build_ge_m2,
         export_ge_negatives,
+        generate_degree_matched_negatives,
         generate_uniform_random_negatives,
         load_essential_positives,
     )
@@ -48,16 +50,35 @@ def main():
     conn = get_connection(db_path)
 
     try:
-        # Load negatives
-        neg_query = """
-        SELECT p.gene_id, p.cell_line_id, g.entrez_id, g.gene_symbol,
-               c.model_id, p.gene_degree, p.cell_line_degree,
-               p.mean_gene_effect, p.best_confidence
-        FROM gene_cell_pairs p
-        JOIN genes g ON p.gene_id = g.gene_id
-        JOIN cell_lines c ON p.cell_line_id = c.cell_line_id
-        """
-        neg_df = pd.read_sql_query(neg_query, conn)
+        # Load negatives based on source type
+        if args.neg_source == "negbiodb":
+            neg_query = """
+            SELECT p.gene_id, p.cell_line_id, g.entrez_id, g.gene_symbol,
+                   c.model_id, p.gene_degree, p.cell_line_degree,
+                   p.mean_gene_effect, p.best_confidence
+            FROM gene_cell_pairs p
+            JOIN genes g ON p.gene_id = g.gene_id
+            JOIN cell_lines c ON p.cell_line_id = c.cell_line_id
+            """
+            neg_df = pd.read_sql_query(neg_query, conn)
+        elif args.neg_source == "uniform_random":
+            # Load DB negatives first to determine sample size
+            n_db_neg = conn.execute("SELECT COUNT(*) FROM gene_cell_pairs").fetchone()[0]
+            neg_df = generate_uniform_random_negatives(conn, n_samples=n_db_neg, seed=args.seed)
+            logger.info("Generated %d uniform random control negatives", len(neg_df))
+        elif args.neg_source == "degree_matched":
+            # Load DB negatives to match their degree distribution
+            neg_query = """
+            SELECT p.gene_id, p.cell_line_id, g.entrez_id, g.gene_symbol,
+                   c.model_id, p.gene_degree, p.cell_line_degree,
+                   p.mean_gene_effect, p.best_confidence
+            FROM gene_cell_pairs p
+            JOIN genes g ON p.gene_id = g.gene_id
+            JOIN cell_lines c ON p.cell_line_id = c.cell_line_id
+            """
+            db_neg_df = pd.read_sql_query(neg_query, conn)
+            neg_df = generate_degree_matched_negatives(conn, db_neg_df, seed=args.seed)
+            logger.info("Generated %d degree-matched control negatives", len(neg_df))
 
         # Load positives
         if args.gene_effect_file and args.dependency_file:
@@ -88,12 +109,8 @@ def main():
         y = dataset["label"].values
 
         # Split
-        split_col = f"split_{args.split}_v1"
-        if split_col not in dataset.columns:
-            # Use random 70/10/20
-            from negbiodb_depmap.llm_dataset import assign_splits
-            dataset = assign_splits(dataset, seed=args.seed)
-            split_col = "split"
+        dataset = apply_split_to_dataset(dataset, args.split, seed=args.seed)
+        split_col = "split"
 
         train_mask = dataset[split_col] == "train"
         val_mask = dataset[split_col] == "val"

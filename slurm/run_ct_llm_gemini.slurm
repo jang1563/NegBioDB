@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=48:00:00
-#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ct_llm_gemini_%j.log
-#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ct_llm_gemini_%j.err
+#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ct_llm_gemini_%j.log
+#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ct_llm_gemini_%j.err
 
 # Run CT LLM benchmark with Gemini API (CPU only, long runtime for rate limits).
 # Usage:
@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 

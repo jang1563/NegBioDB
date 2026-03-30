@@ -12,6 +12,7 @@ import pytest
 
 from negbiodb_depmap.depmap_db import get_connection, run_ge_migrations, refresh_all_ge_pairs
 from negbiodb_depmap.export import (
+    apply_split_to_dataset,
     build_ge_m1,
     build_ge_m2,
     export_ge_negatives,
@@ -277,6 +278,103 @@ class TestBuildM2:
             assert (result["label"] == 2).sum() == 1  # non-essential
         finally:
             conn.close()
+
+
+# ── apply_split_to_dataset tests ─────────────────────────────────────────
+
+
+class TestApplySplitToDataset:
+    """Test dataset-level split application for ML training."""
+
+    @pytest.fixture
+    def combined_df(self):
+        """Combined pos+neg DataFrame with 100 rows, 5 genes × 4 cell lines."""
+        rng = np.random.RandomState(0)
+        n = 100
+        genes = rng.choice([1, 2, 3, 4, 5], n)
+        cls = rng.choice([10, 20, 30, 40], n)
+        return pd.DataFrame({
+            "gene_id": genes,
+            "cell_line_id": cls,
+            "label": rng.choice([0, 1], n),
+            "gene_degree": rng.randint(1, 2000, n),
+        })
+
+    def test_random_split_coverage(self, combined_df):
+        result = apply_split_to_dataset(combined_df, "random", seed=42)
+        assert "split" in result.columns
+        assert set(result["split"].unique()) == {"train", "val", "test"}
+        assert len(result) == len(combined_df)
+
+    def test_random_split_ratios(self, combined_df):
+        result = apply_split_to_dataset(combined_df, "random", seed=42)
+        n = len(combined_df)
+        assert abs(sum(result["split"] == "train") - int(n * 0.7)) <= 1
+        assert abs(sum(result["split"] == "val") - int(n * 0.1)) <= 1
+
+    def test_cold_gene_no_leakage(self, combined_df):
+        result = apply_split_to_dataset(combined_df, "cold_gene", seed=42)
+        train_genes = set(result.loc[result["split"] == "train", "gene_id"])
+        test_genes = set(result.loc[result["split"] == "test", "gene_id"])
+        assert len(train_genes & test_genes) == 0
+
+    def test_cold_cell_line_no_leakage(self, combined_df):
+        result = apply_split_to_dataset(combined_df, "cold_cell_line", seed=42)
+        train_cls = set(result.loc[result["split"] == "train", "cell_line_id"])
+        test_cls = set(result.loc[result["split"] == "test", "cell_line_id"])
+        assert len(train_cls & test_cls) == 0
+
+    def test_cold_both_metis_property(self):
+        """In Metis-style: train pairs have both entities in train partition."""
+        rng = np.random.RandomState(0)
+        n = 500
+        # Use enough entities so val partition isn't empty (5% of 20 = 1)
+        genes = rng.choice(range(1, 21), n)
+        cls = rng.choice(range(100, 121), n)
+        df = pd.DataFrame({
+            "gene_id": genes,
+            "cell_line_id": cls,
+            "label": rng.choice([0, 1], n),
+        })
+        result = apply_split_to_dataset(df, "cold_both", seed=42)
+        assert set(result["split"].unique()) == {"train", "val", "test"}
+        assert len(result) == n
+
+    def test_degree_balanced_coverage(self, combined_df):
+        result = apply_split_to_dataset(combined_df, "degree_balanced", seed=42)
+        assert set(result["split"].unique()) == {"train", "val", "test"}
+        assert len(result) == len(combined_df)
+
+    def test_different_splits_differ(self, combined_df):
+        """Different strategies should produce different assignments."""
+        r1 = apply_split_to_dataset(combined_df, "random", seed=42)
+        r2 = apply_split_to_dataset(combined_df, "cold_gene", seed=42)
+        # At least some rows should differ
+        assert not (r1["split"] == r2["split"]).all()
+
+    def test_different_seeds_differ(self, combined_df):
+        r1 = apply_split_to_dataset(combined_df, "random", seed=42)
+        r2 = apply_split_to_dataset(combined_df, "random", seed=99)
+        assert not (r1["split"] == r2["split"]).all()
+
+    def test_same_seed_reproducible(self, combined_df):
+        r1 = apply_split_to_dataset(combined_df, "cold_gene", seed=42)
+        r2 = apply_split_to_dataset(combined_df, "cold_gene", seed=42)
+        assert (r1["split"] == r2["split"]).all()
+
+    def test_unknown_strategy_raises(self, combined_df):
+        with pytest.raises(ValueError, match="Unknown split strategy"):
+            apply_split_to_dataset(combined_df, "bogus")
+
+    def test_degree_balanced_no_degree_col_falls_back(self):
+        """Without gene_degree column, should fall back to random."""
+        df = pd.DataFrame({
+            "gene_id": [1, 2, 3, 4],
+            "cell_line_id": [10, 20, 30, 40],
+            "label": [0, 1, 0, 1],
+        })
+        result = apply_split_to_dataset(df, "degree_balanced", seed=42)
+        assert "split" in result.columns
 
 
 # ── Control negatives ─────────────────────────────────────────────────────

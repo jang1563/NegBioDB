@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SBATCH="/opt/ohpc/pub/software/slurm/24.05.2/bin/sbatch"
-SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
 SLURM_DIR="${SCRATCH}/negbiodb/slurm"
 
 TASKS="l1 l4 l3"  # L2 deferred (needs gold annotations)
@@ -109,4 +109,4 @@ fi
 
 echo ""
 echo "=== All jobs submitted ==="
-echo "Monitor: /opt/ohpc/pub/software/slurm/24.05.2/bin/squeue -u jak4013"
+echo "Monitor: /opt/ohpc/pub/software/slurm/24.05.2/bin/squeue -u $USER"

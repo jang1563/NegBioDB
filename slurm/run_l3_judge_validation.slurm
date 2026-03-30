@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=4:00:00
-#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/l3_judge_val_%j.log
-#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/l3_judge_val_%j.err
+#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/l3_judge_val_%j.log
+#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/l3_judge_val_%j.err
 
 # Run L3 second-judge validation with GPT-4o-mini.
 # Judges 3 representative runs (120 items total).
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 

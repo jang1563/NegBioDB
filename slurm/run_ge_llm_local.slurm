@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
-#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_llm_local_%j.log
-#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_llm_local_%j.err
+#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_llm_local_%j.log
+#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_llm_local_%j.err
 
 # Run GE LLM benchmark with local model (vLLM server).
 # Usage:
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 MODEL_DIR="${SCRATCH}/models"
@@ -51,11 +51,27 @@ export PATH="${SCRATCH_ENV}/bin:${PATH}"
 export CONDA_PREFIX="${SCRATCH_ENV}"
 export PYTHONPATH="${PROJECT_DIR}/src"
 export HF_HOME="${SCRATCH}/hf_cache"
-# Load HuggingFace token for gated models (e.g., Llama)
-HF_TOKEN_FILE="${HOME}/.cache/huggingface/token"
-if [[ -f "${HF_TOKEN_FILE}" ]]; then
-    export HF_TOKEN="$(cat "${HF_TOKEN_FILE}")"
-    export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
+# Provide CUDA libs (cudnn, cublas) for PyTorch/vLLM
+_NVIDIA_LIBS="${CONDA_PREFIX:-/path/to/conda}/miniconda3/envs/negbiodb-llm/lib/python3.11/site-packages/nvidia"
+for _d in "${_NVIDIA_LIBS}"/*/lib; do
+    [ -d "${_d}" ] && export LD_LIBRARY_PATH="${_d}:${LD_LIBRARY_PATH:-}"
+done
+# Load HuggingFace token for gated models (e.g., Llama).
+# Check standard cache, HF_HOME, and scratch root (in priority order).
+HF_TOKEN=""
+for _tok in "${HOME}/.cache/huggingface/token" \
+            "${HF_HOME}/token" \
+            "${SCRATCH}/.hf_token"; do
+    if [[ -f "${_tok}" ]]; then
+        HF_TOKEN="$(cat "${_tok}")"
+        echo "Loaded HF token from ${_tok}"
+        break
+    fi
+done
+if [[ -n "${HF_TOKEN}" ]]; then
+    export HF_TOKEN HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
+else
+    echo "WARNING: No HF token found — gated models (Llama) will fail 401."
 fi
 
 echo "=== GE LLM Local (vLLM) Benchmark ==="

@@ -140,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     session = requests.Session()
-    session.headers["User-Agent"] = "NegBioDB/1.0 (jak4013@med.cornell.edu)"
+    session.headers["User-Agent"] = "NegBioDB/1.0 (negbiodb@institution.edu)"
 
     updated = 0
     for i in range(0, total, args.batch_size):

@@ -22,8 +22,8 @@
 #SBATCH --time=6:00:00
 
 # ---------- paths -----------------------------------------------------------
-NEGBIODB=/athena/masonlab/scratch/users/jak4013/negbiodb
-CONDA_SH=/home/fs01/jak4013/miniconda3/miniconda3/etc/profile.d/conda.sh
+NEGBIODB=${SCRATCH_DIR:-/path/to/scratch}/negbiodb
+CONDA_SH=${CONDA_PREFIX:-/path/to/conda}/miniconda3/etc/profile.d/conda.sh
 
 # ---------- validate required variables -------------------------------------
 if [[ -z "${MODEL:-}" ]] || [[ -z "${TASK:-}" ]] || [[ -z "${SPLIT:-}" ]]; then

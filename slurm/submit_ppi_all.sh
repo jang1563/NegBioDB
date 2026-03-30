@@ -15,7 +15,7 @@
 set -euo pipefail
 
 SBATCH=${SBATCH_BIN:-/opt/ohpc/pub/software/slurm/24.05.2/bin/sbatch}
-NEGBIODB=/athena/masonlab/scratch/users/jak4013/negbiodb
+NEGBIODB=${SCRATCH_DIR:-/path/to/scratch}/negbiodb
 LOGDIR=$NEGBIODB/logs
 SCRIPT=$NEGBIODB/slurm/train_ppi_baseline.slurm
 SEEDS_STR=${SEEDS:-42}
@@ -123,5 +123,5 @@ fi
 echo ""
 echo "=== Submission complete ==="
 echo "Monitor with:"
-echo "  ${SQUEUE_BIN:-/opt/ohpc/pub/software/slurm/24.05.2/bin/squeue} -u jak4013"
+echo "  ${SQUEUE_BIN:-/opt/ohpc/pub/software/slurm/24.05.2/bin/squeue} -u $USER"
 echo "  tail -f $LOGDIR/ppi_siamese_cnn_balanced_random_negbiodb_seed${SEEDS_STR%% *}_*.err"

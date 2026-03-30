@@ -39,3 +39,7 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Internal planning documents (not for public release)
+research/
+NeurIPS_DB_Track_Research.md

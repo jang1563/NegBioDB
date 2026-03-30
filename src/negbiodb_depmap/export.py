@@ -640,6 +640,137 @@ def build_ge_m2(
 
 
 # ------------------------------------------------------------------
+# Dataset-level split application (for training scripts)
+# ------------------------------------------------------------------
+
+def apply_split_to_dataset(
+    dataset: pd.DataFrame,
+    strategy: str,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Apply a split strategy to a combined (pos+neg) dataset at training time.
+
+    Works on any DataFrame with ``gene_id`` and ``cell_line_id`` columns.
+    Adds a ``split`` column with values ``train`` / ``val`` / ``test``.
+
+    Args:
+        dataset: Combined positives + negatives DataFrame.
+        strategy: One of random, cold_gene, cold_cell_line, cold_both,
+            degree_balanced.
+        seed: Random seed for reproducibility.
+
+    Returns:
+        Copy of *dataset* with a ``split`` column added.
+    """
+    dataset = dataset.copy()
+    rng = np.random.RandomState(seed)
+    n = len(dataset)
+
+    if strategy == "random":
+        perm = rng.permutation(n)
+        n_train = int(n * 0.7)
+        n_val = int(n * 0.1)
+        splits = np.empty(n, dtype="U5")
+        splits[perm[:n_train]] = "train"
+        splits[perm[n_train : n_train + n_val]] = "val"
+        splits[perm[n_train + n_val :]] = "test"
+        dataset["split"] = splits
+        return dataset
+
+    if strategy == "cold_gene":
+        genes = dataset["gene_id"].unique()
+        gene_perm = rng.permutation(len(genes))
+        n_g_train = int(len(genes) * 0.80)
+        n_g_val = int(len(genes) * 0.05)
+        gene_fold: dict[int, str] = {}
+        for i in gene_perm[:n_g_train]:
+            gene_fold[genes[i]] = "train"
+        for i in gene_perm[n_g_train : n_g_train + n_g_val]:
+            gene_fold[genes[i]] = "val"
+        for i in gene_perm[n_g_train + n_g_val :]:
+            gene_fold[genes[i]] = "test"
+        dataset["split"] = dataset["gene_id"].map(gene_fold)
+        return dataset
+
+    if strategy == "cold_cell_line":
+        cls = dataset["cell_line_id"].unique()
+        cl_perm = rng.permutation(len(cls))
+        n_c_train = int(len(cls) * 0.80)
+        n_c_val = int(len(cls) * 0.05)
+        cl_fold: dict[int, str] = {}
+        for i in cl_perm[:n_c_train]:
+            cl_fold[cls[i]] = "train"
+        for i in cl_perm[n_c_train : n_c_train + n_c_val]:
+            cl_fold[cls[i]] = "val"
+        for i in cl_perm[n_c_train + n_c_val :]:
+            cl_fold[cls[i]] = "test"
+        dataset["split"] = dataset["cell_line_id"].map(cl_fold)
+        return dataset
+
+    if strategy == "cold_both":
+        _rank_fold = {0: "train", 1: "val", 2: "test"}
+        genes = dataset["gene_id"].unique()
+        gene_perm = rng.permutation(len(genes))
+        n_g_train = int(len(genes) * 0.80)
+        n_g_val = int(len(genes) * 0.05)
+        gene_rank: dict[int, int] = {}
+        for i in gene_perm[:n_g_train]:
+            gene_rank[genes[i]] = 0
+        for i in gene_perm[n_g_train : n_g_train + n_g_val]:
+            gene_rank[genes[i]] = 1
+        for i in gene_perm[n_g_train + n_g_val :]:
+            gene_rank[genes[i]] = 2
+
+        cls = dataset["cell_line_id"].unique()
+        cl_perm = rng.permutation(len(cls))
+        n_c_train = int(len(cls) * 0.80)
+        n_c_val = int(len(cls) * 0.05)
+        cl_rank: dict[int, int] = {}
+        for i in cl_perm[:n_c_train]:
+            cl_rank[cls[i]] = 0
+        for i in cl_perm[n_c_train : n_c_train + n_c_val]:
+            cl_rank[cls[i]] = 1
+        for i in cl_perm[n_c_train + n_c_val :]:
+            cl_rank[cls[i]] = 2
+
+        dataset["split"] = [
+            _rank_fold[max(gene_rank[g], cl_rank[c])]
+            for g, c in zip(dataset["gene_id"], dataset["cell_line_id"])
+        ]
+        return dataset
+
+    if strategy == "degree_balanced":
+        if "gene_degree" not in dataset.columns:
+            logger.warning("No gene_degree column; falling back to random split")
+            return apply_split_to_dataset(dataset, "random", seed)
+
+        degrees = dataset["gene_degree"].fillna(0).astype(int).values
+        n_bins = min(10, len(np.unique(degrees)))
+        try:
+            bins = pd.qcut(degrees, n_bins, labels=False, duplicates="drop")
+        except ValueError:
+            bins = np.zeros(len(degrees), dtype=int)
+
+        splits = np.empty(n, dtype="U5")
+        for b in np.unique(bins):
+            idx = np.where(bins == b)[0]
+            perm = rng.permutation(len(idx))
+            n_train = int(len(idx) * 0.7)
+            n_val = int(len(idx) * 0.1)
+            for j in perm[:n_train]:
+                splits[idx[j]] = "train"
+            for j in perm[n_train : n_train + n_val]:
+                splits[idx[j]] = "val"
+            for j in perm[n_train + n_val :]:
+                splits[idx[j]] = "test"
+
+        dataset["split"] = splits
+        return dataset
+
+    raise ValueError(f"Unknown split strategy: {strategy}")
+
+
+# ------------------------------------------------------------------
 # Control negatives
 # ------------------------------------------------------------------
 

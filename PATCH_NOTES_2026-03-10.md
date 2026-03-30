@@ -165,7 +165,7 @@ Problem:
 - Reconstructing the exact remote submit/monitor commands by hand is error-prone.
 
 Fix:
-- Added `slurm/remote_submit_cayuga.sh` to call `submit_all.sh` remotely via `ssh cayuga-login1`.
+- Added `slurm/remote_submit_cayuga.sh` to call `submit_all.sh` remotely via `ssh ${HPC_LOGIN:-cayuga-login1}`.
 - Added `slurm/remote_monitor_cayuga.sh` to inspect `squeue` and recent log files remotely.
 - Made SLURM binary paths overridable via `SBATCH_BIN` / `SQUEUE_BIN`.
 
@@ -301,14 +301,14 @@ Operational rule:
 
 1. Sync changed code to Cayuga.
 2. Regenerate DDB parquet on Cayuga:
-   - `source /home/fs01/jak4013/miniconda3/miniconda3/etc/profile.d/conda.sh`
+   - `source ${CONDA_PREFIX:-/path/to/conda}/miniconda3/etc/profile.d/conda.sh`
    - `conda activate negbiodb-ml`
-   - `cd /athena/masonlab/scratch/users/jak4013/negbiodb`
+   - `cd ${SCRATCH_DIR:-/path/to/scratch}/negbiodb`
    - `python scripts/prepare_exp_data.py --skip-exp1`
 3. Submit only DDB jobs:
    - `SEEDS="42" MODELS="deepdta graphdta drugban" SPLITS="ddb" NEGATIVES="negbiodb" DATASETS="balanced" bash slurm/submit_all.sh`
 4. Verify queue state:
-   - `/opt/ohpc/pub/software/slurm/24.05.2/bin/squeue -u jak4013`
+   - `/opt/ohpc/pub/software/slurm/24.05.2/bin/squeue -u ${USER}`
 5. Re-collect tables after those runs finish.
 
 ### Current known-good DDB submission example

@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-22 (v19 — DTI complete, CT COMPLETE, PPI COMPLETE, GE code complete — 4 domains)
+> Last updated: 2026-03-18 (v11 — DTI complete, CT domain pipeline + benchmark design complete)
 
 ---
 
@@ -23,44 +23,9 @@
 15. **Paper format: 9 pages** + unlimited appendix. Croissant is **mandatory** (desk rejection if missing/invalid).
 16. **GPU strategy: Kaggle free tier** (30 hrs/week) is sufficient for 18 ML baseline runs (~36-72 GPU-hours over 4 weeks). Fallback: Colab Pro ($10/month).
 17. **ChEMBL v36** (Sep 2025, 24.3M activities) should be used, not v35. `chembl_downloader` fetches latest by default.
-18. **[UNVERIFIED] Nature MI 2025 validates our premise** — Biologically driven negative subsampling paper independently shows "assumed negatives" distort DTI models. Must cite in Related Work alongside Science 2025 editorial on negative results in AI. **Both citations need verification in Week 1.** If not found, substitute: EviDTI (Nature Comms 2025), DDB paper (BMC Biology 2025), LIT-PCBA audit (2025).
+18. **Nature MI 2025** — Biologically driven negative subsampling paper independently shows "assumed negatives" distort DTI models. Related: EviDTI (Nature Comms 2025), DDB paper (BMC Biology 2025), LIT-PCBA audit (2025).
 
 ---
-
-## Cost Strategy
-
-**Pre-publication cost target: $0.** All data sources are free. LLM pipeline uses free tiers and local models only.
-
-### LLM Pipeline (Zero Cost)
-
-```
-Stage 1: Coarse Filtering ("Does this paper contain negative DTI results?")
-  → Mistral 7B local via ollama (no rate limit, unlimited)
-  → OR Gemini 2.5 Flash-Lite free tier (1,000 RPD)
-
-Stage 2: Fine-grained Extraction (compound, target, conditions, outcome)
-  → Gemini 2.5 Flash free tier (250 RPD, 250K TPM)
-  → OR Llama 3.3 local via ollama (if RAM ≥ 32GB)
-
-Stage 3: Validation
-  → Human review on sampled outputs (no LLM cost)
-```
-
-**Throughput estimate:**
-- 10K papers via Gemini Flash-Lite: ~10 days (free)
-- 100K papers via local Mistral 7B: ~1-2 weeks (free, speed depends on hardware)
-
-### Infrastructure (Free Tier)
-- DB: SQLite local (MVP) → Supabase free (Phase 2)
-- Web: Vercel free tier
-- Storage: GitHub LFS / Zenodo (dataset DOI)
-- CI/CD: GitHub Actions free
-
-### Only Paid Cost: Publication
-- OA APC: ~$2,500-3,000 (J. Cheminformatics or Nature Sci Data)
-- Conference registration: ~$200-400
-- D&B track: No publication fee (if accepted)
-
 ---
 
 ## Positive Data Protocol (P0 — Expert Panel Finding)
@@ -338,163 +303,26 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
   - 4 levels: CT-L1 (5-way MCQ), CT-L2 (extraction), CT-L3 (reasoning), CT-L4 (discrimination)
   - 5 models, anti-contamination analysis
 
-### Step CT-5: ML Export & Splits ✅ COMPLETE
+### Step CT-5: ML Export & Splits (Planned)
 
-- [x] CT export module (`src/negbiodb_ct/ct_export.py`) — 1,100 lines, 3 loaders + 6 splits + M1 builder + leakage report
-- [x] CTO success trials extraction — 5,611 clean pairs (7,835 conflict pairs removed from both sides)
-- [x] 6 split strategies (random, cold_drug, cold_condition, temporal, scaffold, degree_balanced)
-- [x] CT-M1: balanced (11,222), realistic (36,957), smiles_only (3,878)
-- [x] CT-M2: 112,298 results (non-copper, 7-way classification)
-- [x] Leakage report: cold leakage=0, M1 conflict-free verified
-- [x] 52 tests passing (`tests/test_ct_export.py`)
+- [ ] CT export module (`src/negbiodb_ct/ct_export.py`)
+- [ ] CTO success trials extraction (CT-M1 positive class)
+- [ ] Feature engineering (drug FP + mol properties + condition one-hot + trial design)
+- [ ] 6 split strategies implementation
 
-### Step CT-6: ML Baseline Experiments ✅ COMPLETE
+### Step CT-6: ML Baseline Experiments (Planned)
 
-- [x] Feature encoding (`ct_features.py`): drug/condition/trial features, 1044-dim M1, 1066-dim M2
-- [x] Model definitions (`ct_models.py`): CT_MLP, CT_GNN_Tab
-- [x] Training harness (`train_ct_baseline.py`): XGBoost/MLP/GNN, M1 binary + M2 7-way
-- [x] Exp CT-1 negative generation (`prepare_ct_exp_data.py`)
-- [x] Results aggregation (`collect_ct_results.py`) + inflation analysis
-- [x] SLURM infrastructure: 36 jobs × 3 seeds = 108 total
-- [x] 282 CT tests passing, 3-round review (16 bugs found and fixed)
-- [x] 108/108 runs complete (6 M1-temporal = NaN due to single-class val set — expected)
-- [x] Results collected: `ct_table_m1.csv`, `ct_table_m2.csv`, `ct_exp_ct1_inflation.md`
+- [ ] XGBoost baseline (CT-M1 + CT-M2)
+- [ ] MLP baseline
+- [ ] GNN+Tabular baseline
+- [ ] Experiments CT-1, CT-2, CT-3
 
-> **Key CT-6 findings:** NegBioDB negatives trivially solvable (AUROC~1.0); degree-matched hardest (0.76-0.84); Exp CT-1 inflation: -0.156 to -0.242 (XGBoost→GNN). M2: XGBoost best (mF1=0.51), scaffold/temporal splits hardest.
+### Step CT-7: LLM Benchmark Execution (Planned)
 
-### Step CT-7: LLM Benchmark Execution ✅ 80/80 COMPLETE
-
-- [x] CT-L1/L2/L3/L4 dataset construction scripts (`build_ct_l1/l2/l3/l4_dataset.py`)
-- [x] CT prompt templates (`src/negbiodb_ct/llm_prompts.py`) + evaluation functions (`src/negbiodb_ct/llm_eval.py`)
-- [x] SLURM infrastructure: `submit_ct_llm_all.sh`, local + OpenAI + Gemini + Anthropic runners
-- [x] Results aggregation (`collect_ct_llm_results.py`)
-- [x] 5 models × 4 tasks × 4 configs = 80 runs complete
-- [x] L3 LLM-as-Judge: GPT-4o-mini — all 20 runs judged
-- [x] L2 field_f1_micro bug fixed (gold_extraction nesting + list response parsing)
-- [x] L3 ceiling effect identified: GPT-4o-mini judge gives 4.4-5.0/5.0 (too lenient)
-- [x] Gemini rate limit resolved: Tier 1 pay-as-you-go (200 RPM, no RPD cap)
-
-> **Key CT-7 findings (5/5 models):** Gemini best on L1 (0.68) and L4 (MCC 0.56). L1 accuracy 0.63-0.68, L2 field_f1 0.48-0.81, L4 MCC 0.48-0.56 — meaningful discrimination unlike DTI-L4 (near random). L3 judge ceiling: GPT-4o-mini gives 4.4-5.0/5.0.
-
----
-
-## Phase 1-PPI: Protein-Protein Interaction Domain
-
-> Initiated: 2026-03-18 | Phase C (ML benchmark) complete, training pending
-
-### Step PPI-A: Infrastructure ✅ COMPLETE
-
-- [x] PPI schema design (1 migration: 001 initial)
-- [x] 4 ETL modules: etl_intact, etl_huri, etl_humap, etl_string
-- [x] Protein mapper with UniProt validation
-- [x] 176 tests passing
-
-### Step PPI-B: Data Loading ✅ COMPLETE
-
-- [x] IntAct: 779 curated non-interactions (gold 69 / silver 710)
-- [x] HuRI: 500,000 Y2H systematic screen negatives (gold)
-- [x] hu.MAP: 1,228,891 ML-derived negatives from ComplexPortal (silver)
-- [x] STRING: 500,000 zero-score pairs (bronze)
-- [x] Pair aggregation: 2,220,786 pairs (8,800 multi-source overlaps)
-- [x] DB: 849 MB (`data/negbiodb_ppi.db`), 18,412 proteins
-
-### Step PPI-C: ML Export & Benchmark ✅ COMPLETE (2026-03-21)
-
-- [x] UniProt sequence fetch: 18,412 proteins annotated
-- [x] Export module (`src/negbiodb_ppi/export.py`): 4 split strategies + negative export + positive merge
-- [x] 4 splits: random, cold_protein, cold_both (Metis graph partition), degree_balanced
-- [x] Positive collection: 61,728 HuRI positives (578 conflicts removed from both sides)
-- [x] M1 balanced (123,456), realistic (679,008), + 2 Exp 1 controls + DDB
-- [x] 3 models: SiameseCNN, PIPR, MLPFeatures (67-dim hand-crafted)
-- [x] Training harness (`train_baseline.py`): 18 runs/seed (9 baseline + 6 Exp1 + 3 Exp4)
-- [x] Results collection (`collect_results.py`) + inflation analysis
-- [x] SLURM infrastructure: `train_ppi_baseline.slurm`, `submit_ppi_all.sh`
-- [x] 285 PPI tests passing, 3-agent audit (1 cosmetic fix)
-- [x] Data transfer to Cayuga + 54/54 jobs complete (3 seeds × 18 configs)
-- [x] Degree leakage bug found + fixed (recompute degree from merged graph)
-- [x] Results collected: `results/ppi/table1_aggregated.csv`
-
-> **Key PPI-C findings:** PIPR cold_both catastrophic (AUROC 0.409±0.077, below random). MLPFeatures cold_both robust (0.950±0.021). Negative source effect MODEL-DEPENDENT: sequence models +6-9% inflation (same as DTI), MLPFeatures REVERSED -5% to -19% (NegBioDB harder). DDB ≈ random.
-
-### Step PPI-D: LLM Benchmark ✅ 80/80 COMPLETE (2026-03-22)
-
-- [x] PPI schema migration 002 (function descriptions, GO terms, PMID abstracts table)
-- [x] UniProt function descriptions fetch (15,722/18,412 = 85.4% with function)
-- [x] PubMed abstract fetch for IntAct PMIDs (65 unique PMIDs → L2 fallback to constructed evidence)
-- [x] Design document (`research/16_ppi_llm_benchmark_design.md`, 1,005 lines)
-- [x] PPI LLM modules (`llm_prompts.py`, `llm_eval.py`, `llm_dataset.py`) — 101 tests passing
-- [x] 4 dataset builders: PPI-L1 (1,200), PPI-L2 (500), PPI-L3 (200), PPI-L4 (500)
-- [x] Inference runner + L3 judge + results collector + SLURM scripts (4 templates + submit)
-- [x] 80 jobs submitted (SLURM IDs 2708050-2708129)
-- [x] 80/80 complete: all 5 models × 4 levels × 4 configs
-- [x] L3 judge scoring (Gemini 2.5 Flash) — 20/20 runs judged
-- [x] Results collection and analysis — `ppi_llm_summary.csv` + `.md`
-- [x] Contamination vs popularity analysis — all 5 models show true contamination
-- [x] Expert panel review fixes (protein_mapper race condition, STRING file glob, collector regex)
-
-> **Key PPI-D findings (5 models):**
-> - **L1 3-shot trivially solvable** (~1.0 acc for 4/5 models; Qwen ~0.83)
-> - **L2 near-perfect extraction** (entity_f1 ~1.0 for all models)
-> - **L3 NO ceiling effect** (1.0-4.68 range). Haiku zero-shot best (4.68). Structural reasoning hardest dimension.
-> - **L4 moderate discrimination** (MCC 0.33-0.44, between DTI ≤0.18 and CT ~0.5)
-> - **L4 MASSIVE contamination** — gap 0.40-0.59 (threshold 0.15). True contamination confirmed (not popularity confound).
-> - **100% evidence hallucination** — all models cite evidence for untested pairs
-
----
-
-## Phase 1-GE: Gene Essentiality / DepMap Domain
-
-> Initiated: 2026-03-22 | Code complete (172 tests), awaiting HPC data load
-
-### Step GE-1: Infrastructure ✅ COMPLETE
-
-- [x] Design document (`research/19_ge_depmap_domain_design.md`)
-- [x] GE schema design (1 migration: 001 initial, 11 tables)
-- [x] DB layer (`src/negbiodb_depmap/depmap_db.py`): migrations, pair aggregation
-- [x] Package init + build system (`pyproject.toml` updated)
-- [x] 26 DB tests passing
-
-### Step GE-2: ETL Pipeline ✅ COMPLETE
-
-- [x] CRISPR ETL (`etl_depmap.py`): chunked CSV, gene/cell line/reference set loading, tier assignment
-- [x] RNAi ETL (`etl_rnai.py`): DEMETER2, CCLE name mapping, concordance tier upgrade
-- [x] PRISM ETL (`etl_prism.py`): compound metadata, primary/secondary screen bridge tables
-- [x] Download script (`scripts_depmap/download_depmap.py`): DepMap portal + Figshare
-- [x] Load scripts: `load_depmap.py`, `load_rnai.py`, `load_prism.py`
-- [x] 47 ETL tests passing (27 CRISPR + 9 RNAi + 11 PRISM)
-
-### Step GE-3: ML Export & Features ✅ COMPLETE
-
-- [x] Export module (`src/negbiodb_depmap/export.py`): 5 splits, M1/M2, conflict resolution, controls
-- [x] Features module (`src/negbiodb_depmap/ge_features.py`): gene + cell line + omics features (~75 dims)
-- [x] ML models: XGBoost (`xgboost_ge.py`) + MLP (`mlp_features.py`)
-- [x] Training harness (`train_ge_baseline.py`) + SLURM template
-- [x] 34 tests passing (14 export + 20 features)
-
-### Step GE-4: LLM Benchmark ✅ COMPLETE
-
-- [x] Prompt templates (`llm_prompts.py`): GE-L1 through GE-L4
-- [x] Evaluation module (`llm_eval.py`): parsing + metrics for all 4 tasks
-- [x] Dataset builder (`llm_dataset.py`): candidate pool, evidence, splits
-- [x] 4 dataset build scripts (`build_ge_l{1-4}_dataset.py`)
-- [x] Inference runner (`run_ge_llm_benchmark.py`) + results collector
-- [x] SLURM templates: Anthropic/OpenAI/Gemini/Local + submit_all (80 jobs)
-- [x] 65 LLM tests passing (13 prompts + 30 eval + 15 dataset + 7 misc)
-
-### Step GE-5: Data Download & Load (PENDING — HPC)
-
-- [ ] Download DepMap data (~2 GB): CRISPR, Dependency, Model.csv, controls, DEMETER2, PRISM, omics
-- [ ] Load CRISPR ETL: ~28.5M non-essential pairs → `data/negbiodb_depmap.db`
-- [ ] Load RNAi ETL: DEMETER2 concordance upgrade
-- [ ] Load PRISM bridge tables
-- [ ] Export ML datasets (M1 balanced/realistic, M2 3-way)
-
-### Step GE-6: Experiments (PENDING — HPC)
-
-- [ ] ML baselines: XGBoost + MLP × 5 splits × 3 seeds
-- [ ] LLM benchmark: 80 jobs (5 models × 4 tasks × 4 configs)
-- [ ] L3 LLM-as-Judge scoring
-- [ ] Results collection and analysis
+- [ ] CT-L1/L2/L3/L4 dataset construction scripts
+- [ ] CT prompt templates + evaluation functions
+- [ ] Inference runs on Cayuga HPC
+- [ ] Results aggregation
 
 ---
 
@@ -512,10 +340,6 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - [ ] Add flagship LLM evaluations (GPT-4, Claude)
 - [ ] Build public leaderboard (simple GitHub-based, separate ML and LLM tracks)
 
-### Perspective Paper (Parallel Track)
-- [ ] Write "Publication Bias in DTI Prediction" perspective
-- [ ] Target: Briefings in Bioinformatics or Drug Discovery Today
-- [ ] Cite NegBioDB as the solution
 
 ---
 
@@ -535,23 +359,6 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 - [ ] Tutorial at relevant workshop
 - [ ] Researcher incentive design (citation credit, DOI per submission)
 
-### 2.3 Publication Strategy
-
-| Target | Type |
-|--------|------|
-| ArXiv preprint | Establish priority |
-| Datasets & Benchmarks Track | Primary benchmark paper |
-| Perspective paper | Publication bias in DTI |
-| J. Cheminformatics / Nature Sci Data | Database descriptor |
-| NAR Database Issue | Database recognition |
-
-### 2.4 Funding Applications
-
-| Month | Target | Amount |
-|-------|--------|--------|
-| 3-6 | NIH PAR-23-236 (R24) | Up to $350K/yr × 4yr |
-| 6-9 | CZI Open Science | Varies |
-| 12-18 | NSF IDSS / Cyberinfrastructure | Varies |
 
 ---
 
@@ -708,16 +515,6 @@ DTIContext {
 - [ ] Specialized bio-LLM evaluations (LlaSMol, BioMedGPT, DrugChat)
 - [ ] Regular leaderboard updates (both ML and LLM tracks)
 
-### 3.3 Commercialization
-- [ ] Launch tiered API access (free / pro / enterprise)
-- [ ] Approach pharma companies for consortium membership
-- [ ] Develop analytics dashboard
-- [ ] Explore Insight-as-a-Service model
-
-### 3.4 NAR Database Issue Application
-- [ ] Contact NAR Executive Editor by July
-- [ ] Demonstrate community adoption metrics
-- [ ] Publish update paper following January
 
 ---
 
@@ -726,14 +523,11 @@ DTIContext {
 ```
 DTI (Phase 1 — COMPLETE)
   │
-  ├── Clinical Trial Failure (Phase 1-CT — COMPLETE)
-  │     └── 132,925 failure results, 108 ML + 80 LLM runs done
+  ├── Clinical Trial Failure (Phase 1-CT — IN PROGRESS)
+  │     └── 132,925 failure results loaded, benchmarks designed
   │
-  ├── Protein-Protein Interaction (Phase 1-PPI — COMPLETE)
-  │     └── 2.2M negative pairs, 54 ML + 80 LLM runs done
-  │
-  ├── Gene Essentiality / DepMap (Phase 1-GE — CODE COMPLETE)
-  │     └── ~28.5M non-essential pairs, 172 tests, awaiting HPC load
+  ├── Gene Function (CRISPR KO/KD negatives)
+  │     └── Leverage CRISPR screen data, DepMap
   │
   ├── Chemistry Domain Layer
   │     └── Failed reactions, yield = 0 data
@@ -756,84 +550,12 @@ DTI (Phase 1 — COMPLETE)
 | ML baseline experiments | Week 5 (Mar 2026) | 18/18 runs complete, key findings confirmed | ✅ Done |
 | LLM benchmark infrastructure | Week 5 (Mar 2026) | L1–L4 datasets, prompts, eval, SLURM templates | ✅ Done |
 | LLM benchmark execution | Week 5-6 (Mar 2026) | 81/81 runs complete (9 models × 4 tasks + configs) | ✅ Done |
-| **ArXiv preprint** | **Week 9** | **Priority establishment** |
-| **Paper submission** | **Week 11** | **Benchmark paper** |
-| Perspective paper submitted | Month 4-6 | Publication bias in DTI |
 | Python library v0.1 | Month 8 | `pip install negbiodb` |
-| Decision notification | Month 7 | Accept/reject notification |
 | Web platform launch | Month 12 | Public access + leaderboard |
-| Database descriptor paper | Month 8-12 | J. Cheminformatics or Nature Sci Data |
-| NIH R24 funding | Month 12-18 | Multi-year sustainability |
 | 100K+ entries | Month 24 | Scale milestone |
-| NAR Database Issue | Month 24-30 | Gold standard DB recognition |
 
 ---
 
-## Week 6 Go/No-Go Decision Framework
-
-Exp 1 result determines the paper's primary narrative. Check at Week 6:
-
-| Scenario | Exp 1 Result | Action |
-|----------|-------------|--------|
-| **A: Strong** | NegBioDB > Random by ≥10% (p < 0.05) | Narrative holds: "benchmarks are broken." Add should-have experiments |
-| **B: Moderate** | NegBioDB > Random by 3-8% (p < 0.1) | Co-primary with Exp 4 (DDB bias). Reframe: "bias-free evaluation" |
-| **C: Null** | NegBioDB ≈ Random | Major pivot: LLM track (L1, L2, L4) as primary contribution. "Database + novel evaluation tasks" framing |
-
-### Milestone Checkpoints
-
-| Week | Checkpoint | Go Criteria | No-Go Action |
-|------|-----------|-------------|--------------|
-| 2 | Data extraction | ≥10K unique inactive pairs | Add PubChem primary screen (Bronze) for volume |
-| 4 | LLM datasets ready | L1 2K + L2 100 + L4 500 | Reduce L2 to 50 (minimum viable) |
-| 5 | ML baseline first run | DeepDTA successfully trained | Switch to PyTDC example code |
-| **6** | **Exp 1 result** | Significant difference | See scenario table above |
-| 8 | Paper draft complete | All figures + tables | Drop all should-have experiments |
-| 10 | Submission ready | Croissant valid + HuggingFace live | 1-2 day buffer available |
-
 ---
 
-## Risk Assessment (Updated — Expert Panel v6)
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Submission deadline tight (11 weeks) | Medium-High | High | Focus on core experiments; ArXiv as fallback |
-| **Exp 1 results weak or null** | **Medium** | **Critical** | Week 6 Go/No-Go framework; Exp 4 as backup primary; LLM track pivot |
-| **Solo author credibility** | **Medium** | **High** | Dockerfile + full reproducibility scripts + detailed supplement |
-| **GPU unavailability** | **Medium** | **High** | Kaggle free (30h/wk) as primary; Colab Pro ($10) fallback |
-| HCDT 2.0 license blocks integration | **Confirmed** | Medium | Already mitigated: independently extract from underlying sources |
-| **Positive data protocol undefined** | **Resolved** | — | See §Positive Data Protocol (ChEMBL pChEMBL ≥ 6, shared targets) |
-| Insufficient data quality | Medium | High | Strict QC pipeline + confidence tiers |
-| Low community adoption | Medium | High | TDC-style easy access + workshop tutorials |
-| Competitive entry before submission | Low | Medium | First-mover advantage + ArXiv priority |
-| **Croissant validation failure** | Low | **Critical** | `mlcroissant` validation; HuggingFace auto-generation as fallback |
-| **PubChem OOM during processing** | Medium | Medium | Streaming (chunksize=100K or polars lazy); resolved in pipeline design |
-| Funding gap | Medium | High | Multiple funding sources + early commercial track |
-| Schema over-engineering | Medium | Medium | Start minimal (SQLite), iterate based on user feedback |
-| Pharma resistance to sharing | High | Medium | Start with public data; build trust first |
-| ChEMBL CC BY-SA viral clause | Low | Medium | Use CC BY-SA 4.0 for NegBioDB; compatible |
-
 ---
-
-## Document Index
-
-| Document | Content |
-|----------|---------|
-| [research/01_dti_negative_data_landscape.md](research/01_dti_negative_data_landscape.md) | Survey of existing DTI negative data sources |
-| [research/02_benchmark_analysis.md](research/02_benchmark_analysis.md) | Analysis of existing DTI benchmarks and their negative handling |
-| [research/03_data_collection_methodology.md](research/03_data_collection_methodology.md) | Methodologies for collecting and curating negative data |
-| [research/04_publication_commercial_strategy.md](research/04_publication_commercial_strategy.md) | Publication venues, funding, commercialization |
-| [research/05_technical_deep_dive.md](research/05_technical_deep_dive.md) | Data access APIs, license analysis, dedup, ML baselines, metrics |
-| [research/06_paper_narrative.md](research/06_paper_narrative.md) | Paper title/abstract, competitive positioning |
-| [research/07a_llm_benchmark_landscape_survey.md](research/07a_llm_benchmark_landscape_survey.md) | Survey of existing bio/chem LLM benchmarks and evaluation methods |
-| [research/07b_llm_benchmark_design.md](research/07b_llm_benchmark_design.md) | LLM benchmark tasks, evaluation methods, dual-track architecture |
-| [research/08_expert_review_and_feasibility.md](research/08_expert_review_and_feasibility.md) | Expert review responses, feasibility analysis, concrete decisions |
-| [research/09_schema_and_ml_export_design.md](research/09_schema_and_ml_export_design.md) | SQLite schema DDL, ML export patterns, Croissant metadata, Datasheet |
-| [research/10_expert_panel_review.md](research/10_expert_panel_review.md) | 6-expert panel review: reviewer, data eng, ML, domain, SW arch, PM |
-| [research/11_full_plan_review.md](research/11_full_plan_review.md) | Pre-implementation audit: 16 issues found, feasibility ratings, execution adjustments |
-| [research/12_review_findings_summary.md](research/12_review_findings_summary.md) | Schema/pipeline implementation review: 9 issues (3 critical, 3 high, 2 moderate, 1 low) |
-| [research/13_clinical_trial_failure_domain.md](research/13_clinical_trial_failure_domain.md) | CT domain design: failure taxonomy, 3-tier detection, pipeline architecture |
-| [research/14_ct_ml_benchmark_design.md](research/14_ct_ml_benchmark_design.md) | CT ML benchmark: 3 tasks, 6 splits, 3 models, 3 experiments |
-| [research/15_ct_llm_benchmark_design.md](research/15_ct_llm_benchmark_design.md) | CT LLM benchmark: 4 levels, 5 models, contamination analysis |
-| [research/16_ppi_llm_benchmark_design.md](research/16_ppi_llm_benchmark_design.md) | PPI LLM benchmark: 4 levels, 5 models, contamination analysis |
-| [research/17_ct_expert_panel_review.md](research/17_ct_expert_panel_review.md) | CT domain 6-expert panel review |
-| [research/17_ppi_expert_panel_review.md](research/17_ppi_expert_panel_review.md) | PPI domain 6-expert panel review |

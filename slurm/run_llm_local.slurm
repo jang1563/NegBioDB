@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
-#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/llm_local_%j.log
-#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/llm_local_%j.err
+#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/llm_local_%j.log
+#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/llm_local_%j.err
 
 # Run LLM benchmark with local model (vLLM server).
 # Usage:
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Use scratch conda env copy to bypass NFS /home degradation
-SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 MODEL_DIR="${SCRATCH}/models"

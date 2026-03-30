@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=4:00:00
-#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/llm_openai_%j.log
-#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/llm_openai_%j.err
+#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/llm_openai_%j.log
+#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/llm_openai_%j.err
 
 # Run LLM benchmark with OpenAI API (CPU only, fast with high rate limits).
 # Usage:
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # Use scratch conda env copy to bypass NFS /home degradation
-SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 

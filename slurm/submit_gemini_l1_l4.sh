@@ -14,7 +14,7 @@
 set -euo pipefail
 
 SBATCH="/opt/ohpc/pub/software/slurm/24.05.2/bin/sbatch"
-SCRATCH="/athena/masonlab/scratch/users/jak4013"
+SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
 SLURM_DIR="${SCRATCH}/negbiodb/slurm"
 
 CONFIGS="zero-shot 3-shot"
@@ -79,4 +79,4 @@ done
 
 echo ""
 echo "=== All Gemini L1/L4 jobs submitted ==="
-echo "Monitor: /opt/ohpc/pub/software/slurm/24.05.2/bin/squeue -u jak4013"
+echo "Monitor: /opt/ohpc/pub/software/slurm/24.05.2/bin/squeue -u $USER"
