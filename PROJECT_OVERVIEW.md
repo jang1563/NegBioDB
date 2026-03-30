@@ -1,164 +1,187 @@
-# NegBioDB: Negative Results Database for Drug-Target Interactions
+# NegBioDB: Negative Results Database & Dual ML/LLM Benchmark
 
-> Biology-first, Science-extensible negative results database and dual ML+LLM benchmark
+> Biology-first, science-extensible negative results database and dual ML+LLM benchmark
+
+*Last updated: 2026-03-30*
+
+---
 
 ## Project Vision
 
 Approximately 90% of scientific experiments produce null or inconclusive results, yet the vast majority remain unpublished. This systematic gap fundamentally distorts AI/ML model training and evaluation.
 
-**Goal:** Starting with Drug-Target Interactions (DTI), systematically collect and structure experimentally confirmed negative results, and build benchmarks for AI/ML training and evaluation.
+**Goal:** Systematically collect and structure experimentally confirmed negative results across biomedical domains, and build benchmarks that quantify the impact of publication bias on AI/ML models.
 
 ## Why This Matters
 
-1. **Publication Bias**: 85% of published papers report only positive results (as of 2007)
+1. **Publication Bias**: 85% of published papers report only positive results
 2. **AI Model Bias**: Models trained without negative data produce excessive false positives
 3. **Economic Waste**: Duplicated experiments, failed drug discovery pipelines (billions of dollars)
 4. **Proven Impact**: Models trained with negative data are more accurate (Organic Letters 2023, bioRxiv 2024)
 
-## Scope & Strategy
+---
+
+## Architecture
 
 ```
-Biology-first, Science-extensible Architecture
-┌─────────────────────────────────────┐
-│  Common Layer                        │
-│  - Hypothesis structure              │
-│  - Experimental metadata             │
-│  - Outcome classification            │
-│  - Confidence / Statistical power    │
-│  - Author annotation                 │
-└──────────────┬──────────────────────┘
-               │
-    ┌──────────┼──────────────┐
-    ▼          ▼              ▼
-┌────────┐ ┌────────┐  ┌──────────┐
-│Biology │ │Chem    │  │Materials │  ← Phase 2+
-│(DTI)   │ │Domain  │  │Domain    │
-└────────┘ └────────┘  └──────────┘
+Four Biomedical Domains
+┌────────────────────────────────────────────────────────────┐
+│                      NegBioDB                               │
+│  DTI          CT            PPI           GE               │
+│  (30.5M neg)  (133K neg)    (2.2M neg)    (28.8M neg)      │
+│  ChEMBL+      AACT+         IntAct+       DepMap           │
+│  PubChem+     CTO+          HuRI+         CRISPR+RNAi      │
+│  BindingDB+   OpenTargets+  hu.MAP+                        │
+│  DAVIS        Shi&Du        STRING                         │
+└────────────────────────────────────────────────────────────┘
+         │                │
+  ┌──────┴──────┐   ┌─────┴──────┐
+  │ ML Benchmark │   │LLM Benchmark│
+  │ 3 models ×   │   │ 5 models ×  │
+  │ 5 splits ×   │   │ 4 levels ×  │
+  │ 2 neg types  │   │ 4 configs   │
+  └─────────────┘   └────────────┘
 ```
 
-**Expansion Path:** DTI → Clinical Trial Failure → Gene Function → Chemistry → Materials Science
-
-## Key Decisions
+## Key Technical Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Scope | Biology-first | Most severe problem, highest commercial value, largest AI evaluation gap |
-| Starting Domain | Drug-Target Interaction | Data accessibility + existing infrastructure (ChEMBL) + pharma demand |
-| Architecture | Extensible (common + domain layers) | Future expansion to Chemistry, Materials |
-
-## Key Constraints
-
-| Constraint | Detail |
-|------------|--------|
-| **License** | CC BY-SA 4.0 for NegBioDB (compatible with ChEMBL CC BY-SA 3.0) |
-| **HCDT 2.0** | CC BY-NC-ND — cannot integrate directly; independently recreate from underlying sources |
-
-## DTI Domain Implementation Progress (as of 2026-03-13)
-
-| Step | Component | Status |
-|------|-----------|--------|
-| 1 | Schema & scaffolding | ✅ Complete |
-| 2a | Data download (4 sources) | ✅ Complete |
-| 2b | ETL: DAVIS, ChEMBL, PubChem, BindingDB | ✅ Complete |
-| 3 | ML export & splits (6 strategies) | ✅ Complete |
-| 4 | ML baseline models + SLURM harness | ✅ Complete |
-| 5 | ML evaluation metrics (7 metrics, 329 tests) | ✅ Complete |
-| 6a | ML baseline experiments (18/18 runs on Cayuga) | ✅ Complete |
-| 6b | LLM benchmark infrastructure (L1–L4 datasets, prompts, eval, SLURM) | ✅ Complete |
-| 6c | LLM benchmark execution (81/81 complete) | ✅ Complete |
-| 7 | Paper writing & submission | Planned |
-
-**DB:** [Database statistics pending publication]
-
-### Key ML Results (18/18 complete)
-- **Exp 1:** Degree-matched negatives inflate LogAUC — [results pending publication]
-- **Split effect:** Cold-target splits reveal metric discrepancies — [results pending publication]
-- **Exp 4:** DDB vs. random comparison — [results pending publication]
-
-### Key LLM Results (81/81 complete)
-- **L4:** [Results pending publication]
+| License | CC BY-SA 4.0 | Compatible with ChEMBL CC BY-SA 3.0 (viral clause) |
+| Storage | SQLite per domain | Portable, zero-infrastructure, reproducible |
+| Export | Parquet with split columns | Standard ML format; lazy-loading friendly |
+| ML metrics | LogAUC + 6 others | LogAUC[0.001,0.1] measures early enrichment, not just AUROC |
+| LLM evaluation | 4 levels (L1–L4) | Progressive difficulty: MCQ → extraction → reasoning → discrimination |
 
 ---
 
-## Clinical Trial Failure Domain (NegBioDB-CT)
+## Domain Status Summary (as of 2026-03-30)
 
-The second domain extends NegBioDB to clinical trial failures, capturing why drugs fail in human trials.
+| Domain | DB Size | Negatives | ML Runs | LLM Runs | Status |
+|--------|---------|-----------|---------|----------|--------|
+| **DTI** | ~21 GB | 30,459,583 | 24/24 ✅ | 81/81 ✅ | Complete |
+| **CT** | ~500 MB | 132,925 | 108/108 ✅ | 80/80 ✅ | Complete |
+| **PPI** | 849 MB | 2,229,670 | 54/54 ✅ | 80/80 ✅ | Complete |
+| **GE** | ~16 GB | 28,759,256 | Seed 42 ✅ | 4/5 models ✅ | Near complete |
 
-### Architecture
+---
 
-```
-Data Sources                    Pipeline                      Database
-┌──────────┐    ┌────────────────────────────┐    ┌─────────────────────┐
-│ AACT     │───→│ etl_aact.py (13 tables)    │───→│ clinical_trials     │
-│ CTO      │───→│ etl_classify.py (3-tier)   │───→│ trial_failure_results│
-│ Open Tgt │───→│ drug_resolver.py (4-step)  │───→│ interventions       │
-│ Shi & Du │───→│ etl_outcomes.py (enrich)   │───→│ conditions          │
-└──────────┘    └────────────────────────────┘    └─────────────────────┘
-```
+## DTI Domain (Drug-Target Interaction)
 
-**5 modules:** AACT ETL → Failure Classification → Drug Resolution → Outcome Enrichment → DB Layer
+Four sources: ChEMBL v36, PubChem BioAssay, BindingDB, DAVIS
 
-### Database State (as of 2026-03-18)
+### Database
+- **30,459,583** negative results
+- Source tiers: gold 818,611 / silver 198 / bronze 28,845,632
+- 5 split strategies: random / cold_compound / cold_target / scaffold / temporal
 
-| Metric | Value |
-|--------|-------|
-| Clinical trials | 216,987 |
-| Failure results | 132,925 |
-| Interventions | 176,741 |
-| Conditions | 55,915 |
-| Intervention-condition pairs | 102,850 |
+### Key Results
+- **ML:** Degree-matched negatives inflate LogAUC by +0.112 on average. Cold-target splits catastrophic (LogAUC 0.15–0.33) while AUROC stays deceptively high (0.76–0.89).
+- **LLM L4:** All models near-random (MCC ≤ 0.18). DTI binding decisions are too nuanced for LLMs without domain context.
+- **LLM L1:** Gemini achieves perfect accuracy (1.000) on 3-shot MCQ — artifact of format recognition.
 
-**Tier distribution:** [Results pending publication]
+---
 
-**Category distribution:** [Results pending publication]
+## CT Domain (Clinical Trial Failure)
 
-**Drug resolution:** [Results pending publication]
+Four sources: AACT (ClinicalTrials.gov), CTO, Open Targets, Shi & Du 2024
 
-### Data Sources
-
-| Source | License | Records | Purpose |
-|--------|---------|---------|---------|
-| AACT (ClinicalTrials.gov) | Public domain | 216,987 trials | Trial metadata, outcomes |
-| CTO (Clinical Trial Outcome) | MIT | 20,627 records | Binary success/failure labels |
-| Open Targets | Apache 2.0 | 32,782 targets | Drug-target mappings |
-| Shi & Du 2024 | CC BY 4.0 | 119K efficacy + 803K safety rows | P-values, SAE data |
-
-### Key Design Decisions
-
-- **Failure taxonomy:** 8 categories (safety > efficacy > PK > enrollment > strategic > regulatory > design > other)
-- **3-tier detection:** Tier 1 NLP on `why_stopped` (bronze) → Tier 2 p-value analysis (silver/gold) → Tier 3 CTO labels (copper)
-- **Drug resolution:** ChEMBL exact → PubChem API → fuzzy (JaroWinkler > 0.90) → manual CSV overrides
-- **Tier upgrades:** Bronze + p-value → Silver, Silver + Phase III + PubMed → Gold
+### Database
+- **132,925** failure results from 216,987 trials
+- Tiers: gold 23,570 / silver 28,505 / bronze 60,223 / copper 20,627
+- 8 failure categories: safety > efficacy > enrollment > strategic > regulatory > design > other
+- Drug resolution: 4-step pipeline (ChEMBL exact → PubChem API → fuzzy JaroWinkler → manual CSV)
 
 ### Benchmark Design
+- **ML:** CT-M1 binary failure prediction; CT-M2 7-way failure category (most challenging)
+- **LLM:** L1 5-way MCQ (1,500 items), L2 failure report extraction (500), L3 reasoning (200), L4 discrimination (500)
 
-**ML Benchmark** (3 tasks × 3 models × 6 splits): See [research/14](research/14_ct_ml_benchmark_design.md)
-- CT-M1: Drug-condition failure prediction (binary)
-- CT-M2: Failure category classification (7-way)
-- CT-M3: Phase transition prediction (deferred)
-
-**LLM Benchmark** (4 levels × 5 models): See [research/15](research/15_ct_llm_benchmark_design.md)
-- CT-L1: Failure category MCQ (5-way, 1,500 records)
-- CT-L2: Failure report extraction (500 records)
-- CT-L3: Failure reasoning (200 records)
-- CT-L4: Trial existence discrimination (500 records)
-
-### Implementation Progress (as of 2026-03-18)
-
-| Step | Component | Status |
-|------|-----------|--------|
-| CT-1 | Schema & scaffolding (2 migrations) | ✅ Complete |
-| CT-2 | Data loading (4 sources) | ✅ Complete |
-| CT-3 | Enrichment & resolution | ✅ Complete |
-| CT-4 | Analysis & benchmark design | ✅ Complete |
-| CT-5 | ML export & splits | Planned |
-| CT-6 | ML baseline experiments | Planned |
-| CT-7 | LLM benchmark execution | Planned |
+### Key Results
+- **CT-M1:** NegBioDB negatives trivially separable (AUROC=1.0). Control negatives reveal real difficulty (0.76–0.84).
+- **CT-M2:** XGBoost best (macro-F1=0.51). Scaffold/temporal splits hardest (0.19).
+- **LLM L4:** Gemini MCC=0.56 — highest across all domains. Meaningful discrimination possible for trial failure.
+- **LLM L3:** Ceiling effect — GPT-4o-mini judge too lenient (4.4–5.0/5.0).
 
 ---
 
+## PPI Domain (Protein-Protein Interaction)
+
+Four sources: IntAct, HuRI, hu.MAP 3.0, STRING v12.0
+
+### Database
+- **2,229,670** negative results; 61,728 positive pairs (HuRI Y2H)
+- 18,412 proteins; 4 split strategies: random / cold_protein / cold_both / degree_balanced
+
+### Key Results
+- **ML:** MLPFeatures (hand-crafted) dominates cold splits (AUROC 0.95 cold_both); PIPR collapses to 0.41 (below random).
+- **LLM L1:** 3-shot near-perfect (0.997–1.000) is an artifact of example format leakage.
+- **LLM L3:** zero-shot >> 3-shot (4.3–4.7 vs 3.1–3.7); gold reasoning examples degrade structural reasoning.
+- **LLM L4:** MCC 0.33–0.44 with confirmed temporal contamination (pre-2015 acc ~0.6–0.8, post-2020 acc ~0.07–0.25).
+
+---
+
+## GE Domain (Gene Essentiality / DepMap)
+
+Two sources: DepMap CRISPR (Chronos scores) and RNAi (DEMETER2)
+
+### Database
+- **28,759,256** negative results (genes with no essentiality signal)
+- Final tiers: Gold 753,878 / Silver 18,608,686 / Bronze 9,396,692
+- 19,554 genes × 2,132 cell lines; 22,549,910 aggregated pairs
+- 5 split strategies: random / cold_gene / cold_cell_line / cold_both / degree_balanced
+
+### Benchmark Design
+- **ML:** XGBoost and MLPFeatures on gene expression + lineage features (gene-cell pair prediction)
+- **LLM:** L1 4-way essentiality MCQ (1,200 items), L2 essentiality data extraction (500), L3 reasoning (200), L4 discrimination (475)
+
+### Key Results (partial — Llama pending)
+- **LLM L3:** zero-shot >> 3-shot (overall mean 4.5 vs 2.5) — same pattern as PPI.
+- **LLM L4:** Expected intermediate MCC (DepMap is widely studied; likely contamination present).
+- **ML:** Seed 42 complete; final aggregated results pending seeds 43/44.
+
+---
+
+## Dual Benchmark Framework
+
+### LLM Benchmark Levels
+
+| Level | Task | Difficulty | Automation |
+|-------|------|-----------|------------|
+| L1 | Multiple-choice classification | Easy | Fully automated (exact match) |
+| L2 | Structured field extraction | Medium | Automated (JSON schema check + field F1) |
+| L3 | Free-text reasoning quality | Hard | LLM-as-judge (Gemini 2.5-Flash, 4 rubric dimensions) |
+| L4 | Real vs synthetic discrimination | Hard | Automated (MCC on binary decision) |
+
+### LLM Models Evaluated
+
+| Model | Provider | Type |
+|-------|----------|------|
+| Claude Haiku 4.5 | Anthropic API | Small API model |
+| Gemini 2.5-Flash | Google API | Small API model |
+| GPT-4o-mini | OpenAI API | Small API model |
+| Qwen2.5-7B-Instruct | HuggingFace / vLLM | Open-weight local |
+| Llama-3.1-8B-Instruct | HuggingFace / vLLM | Open-weight local |
+
+### Cross-Domain LLM L4 Summary
+
+```
+DTI (≤0.18) < PPI (0.33–0.44) < CT (0.48–0.56)
+                     ↑
+         Increasing task complexity
+         and LLM accessible signal
+```
+
+---
 
 ## Timeline
-- Project initiated: 2026-03-02
-- CT domain initiated: 2026-03-17
-- Last updated: 2026-03-18
+
+| Milestone | Date |
+|-----------|------|
+| Project initiated | 2026-03-02 |
+| DTI domain complete (ML + LLM) | 2026-03-13 |
+| CT domain initiated | 2026-03-17 |
+| CT domain complete (ML + LLM) | 2026-03-20 |
+| PPI domain complete (ML + LLM) | 2026-03-23 |
+| GE domain ETL + ML export | 2026-03-23 |
+| GE LLM (4/5 models) | 2026-03-24 |
+| Public release (GitHub + HuggingFace) | 2026-03-30 |

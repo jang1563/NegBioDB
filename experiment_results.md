@@ -6,10 +6,10 @@
 
 | Domain | Negatives | ML Status | LLM L1 (acc) | LLM L4 (MCC) |
 |--------|-----------|-----------|--------------|--------------|
-| DTI (Drug-Target Interaction) | 30,459,583 | 21/24 complete | Gemini 1.000 (3-shot) | ≤ 0.18 (near random) |
+| DTI (Drug-Target Interaction) | 30,459,583 | 24/24 complete | Gemini 1.000 (3-shot) | ≤ 0.18 (near random) |
 | CT (Clinical Trial Failure) | 132,925 | 108/108 complete | Gemini 0.68 | Gemini 0.56 |
 | PPI (Protein-Protein Interaction) | 2,220,786 | 54/54 complete | ~1.000 (3-shot artifact) | Llama 0.441 |
-| GE (Gene Essentiality / DepMap) | 28,759,256 | Seed 42 done | Partial (Llama pending) | Partial |
+| GE (Gene Essentiality / DepMap) | 28,759,256 | Seed 42 complete | 4/5 models complete | Pending (Llama) |
 
 **Key insight:** LLM discrimination ability (L4 MCC) increases with task complexity: DTI (~0.05–0.18) < PPI (~0.33–0.44) < CT (~0.48–0.56). All domains show evidence of training data contamination in PPI/CT.
 
@@ -17,7 +17,7 @@
 
 ## DTI Domain (Drug-Target Interaction)
 
-**Status as of 2026-03-24:** ML 21/24 complete (3 uniform_random E1 jobs pending), LLM 81/81 complete.
+**Status as of 2026-03-24:** ML 24/24 complete, LLM 81/81 complete.
 
 ### Database
 - 30,459,583 negative results, 5 splits (random/cold_compound/cold_target/scaffold/temporal)
@@ -28,7 +28,6 @@
 - 3 models: DeepDTA, GraphDTA, DrugBAN × 5 splits × 2 negative types (NegBioDB + uniform_random)
 - NegBioDB negatives: Random split near-perfect AUROC (trivially separable)
 - Control negatives (uniform_random): Harder splits show meaningful degradation
-- 3 pending jobs: uniform_random E1 for DeepDTA/GraphDTA/DrugBAN (SLURM 2716037-2716039)
 
 ### LLM Results (81/81 complete)
 | Task | Best Model | Metric | Value |
@@ -150,23 +149,18 @@ Aggregated over 3 seeds (source: `results/ppi/table1_aggregated.md`):
 - Final tiers: Gold 753,878 / Silver 18,608,686 / Bronze 9,396,692
 - 22,549,910 aggregated pairs (19,554 genes × 2,132 cell lines)
 
-### ML Results (Seed 42 complete, seeds 43/44 submitted)
+### ML Results (Seed 42 complete; seeds 43/44 in progress)
 5 splits: random/cold_gene/cold_cell_line/cold_both/degree_balanced
 Models: XGBoost, MLPFeatures
-*Results pending — seeds 43/44 on scu-cpu queue, aggregated table not yet generated.*
+*Aggregated results (3 seeds) pending; individual seed 42 results available in `results/ge/`.*
 
-### LLM Results (4/5 models, partial — Llama pending)
-| Task | Note | Status |
-|------|------|--------|
-| L1 (4-way MCQ, 1,200 items) | Haiku/Gemini/GPT/Qwen done | Llama pending |
-| L2 (extraction, 500 items) | fs0 reruns needed (Haiku/Gemini/GPT) | Qwen rerun queued (job 2716071) |
-| L3 (reasoning, 200 items) | Judged: 160/160 parsed, zero-shot >> 3-shot (4.5 vs 2.5) | Llama pending |
-| L4 (discrimination, 475 items) | Haiku/Gemini/GPT/Qwen done | Llama pending |
-
-**Post-hoc fixes applied (2026-03-24):**
-- L2: Gold JSONL schema patched (`essentiality_findings` → `genes`)
-- L3 judge: Markdown fence stripping fix (Gemini returns ```json...```)
-- Collector: `removesuffix("_mean")` fix
+### LLM Results (4/5 models complete — Llama pending)
+| Task | Models Done | Key Finding |
+|------|-------------|-------------|
+| L1 (4-way MCQ, 1,200 items) | Haiku, Gemini, GPT, Qwen | Results pending Llama |
+| L2 (field extraction, 500 items) | Haiku, Gemini, GPT, Qwen | Results pending Llama |
+| L3 (reasoning, 200 items, judged) | Haiku, Gemini, GPT, Qwen | zero-shot >> 3-shot (4.5 vs 2.5 overall mean) |
+| L4 (discrimination, 475 items) | Haiku, Gemini, GPT, Qwen | Results pending Llama |
 
 **Expected key finding:** GE L4 MCC likely intermediate between PPI and DTI given DepMap is a public widely-studied dataset with high training data overlap.
 

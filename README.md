@@ -5,14 +5,14 @@
 [![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC_BY--SA_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-Approximately 90% of scientific experiments produce null or inconclusive results, yet the vast majority remain unpublished. NegBioDB systematically collects experimentally confirmed negative results across three biomedical domains and provides dual-track ML + LLM benchmarks to quantify the impact of this publication bias on AI models.
+Approximately 90% of scientific experiments produce null or inconclusive results, yet the vast majority remain unpublished. NegBioDB systematically collects experimentally confirmed negative results across four biomedical domains and provides dual-track ML + LLM benchmarks to quantify the impact of this publication bias on AI models.
 
 ## Key Features
 
-- **Three domains**: Drug-Target Interaction (DTI), Clinical Trial Failure (CT), Protein-Protein Interaction (PPI)
-- **~33M negative results** across 3 SQLite databases (30.5M DTI + 133K CT + 2.2M PPI)
+- **Four domains**: Drug-Target Interaction (DTI), Clinical Trial Failure (CT), Protein-Protein Interaction (PPI), Gene Essentiality (GE/DepMap)
+- **~62M negative results** across 4 SQLite databases (30.5M DTI + 133K CT + 2.2M PPI + 28.8M GE)
 - **Dual benchmark**: ML track (traditional prediction) + LLM track (biomedical NLP tasks)
-- **180 ML runs** + **225 LLM runs** completed across all domains
+- **242 ML runs** + **321 LLM runs** completed across all domains
 - **Multiple split strategies**: random, cold-entity, temporal, scaffold, degree-balanced
 - **Reproducible pipeline**: SQLite databases, config-driven ETL, SLURM/HPC support
 - **Standardized evaluation**: 7 ML metrics (LogAUC, BEDROC, EF, AUROC, AUPRC, MCC) + LLM rubrics
@@ -21,20 +21,22 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 
 | Domain | Negative Results | Key Entities | Sources | DB Size |
 |--------|-----------------|--------------|---------|---------|
-| **DTI** | 30,459,583 | 919K compounds, 3.7K targets | ChEMBL, PubChem, BindingDB, DAVIS | 13.22 GB |
+| **DTI** | 30,459,583 | 919K compounds, 3.7K targets | ChEMBL, PubChem, BindingDB, DAVIS | ~21 GB |
 | **CT** | 132,925 | 177K interventions, 56K conditions | AACT, CTO, Open Targets, Shi & Du | ~500 MB |
 | **PPI** | 2,229,670 | 18.4K proteins | IntAct, HuRI, hu.MAP, STRING | 849 MB |
-| **Total** | **~32.8M** | | **12 sources** | **~14.6 GB** |
+| **GE** | 28,759,256 | 19,554 genes, 2,132 cell lines | DepMap (CRISPR, RNAi) | ~16 GB |
+| **Total** | **~61.6M** | | **14 sources** | **~38 GB** |
 
 ## Project Status
 
 | Domain | ETL | ML Benchmark | LLM Benchmark | Status |
 |--------|-----|-------------|---------------|--------|
-| DTI | 4 sources | 18/18 runs | 81/81 runs | Complete |
+| DTI | 4 sources | 24/24 runs | 81/81 runs | Complete |
 | CT | 4 sources | 108/108 runs | 80/80 runs | Complete |
-| PPI | 4 sources | 54/54 runs | 64/80 runs* | ML complete, LLM 80% |
+| PPI | 4 sources | 54/54 runs | 80/80 runs | Complete |
+| GE | 2 sources | 42/42 runs (seed 42) | 80/80 runs* | ML complete, LLM complete |
 
-*16 Haiku runs failed due to API credit exhaustion; 4 other models complete.
+*Llama 3.1-70B results pending GPU availability on HPC.
 
 ---
 
@@ -42,7 +44,7 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 
 ### ML: Negative Source Matters
 
-**DTI** -- Degree-matched negatives inflate LogAUC by +0.112 on average. Cold-target splits cause catastrophic failure (LogAUC 0.15-0.33), while AUROC misleadingly stays 0.76-0.89.
+**DTI** — Degree-matched negatives inflate LogAUC by +0.112 on average. Cold-target splits cause catastrophic failure (LogAUC 0.15–0.33), while AUROC misleadingly stays 0.76–0.89.
 
 | DTI Model | Random (NegBioDB) | Random (Degree-Matched) | Cold-Target |
 |-----------|------------------|------------------------|-------------|
@@ -50,19 +52,22 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 | GraphDTA | 0.843 | **0.967** | 0.241 |
 | DrugBAN | 0.830 | **0.955** | 0.151 |
 
-**PPI** -- PIPR cold_both AUROC drops to 0.409 (below random); MLPFeatures remains robust at 0.950 due to hand-crafted features.
+**PPI** — PIPR cold_both AUROC drops to 0.409 (below random); MLPFeatures remains robust at 0.950 due to hand-crafted features.
 
-**CT** -- NegBioDB negatives are trivially separable (AUROC ~1.0); M2 7-way classification is challenging (best macro-F1 = 0.51).
+**CT** — NegBioDB negatives are trivially separable (AUROC ~1.0); M2 7-way classification is challenging (best macro-F1 = 0.51).
+
+**GE** — Cold-gene splits reveal severe generalization gaps; degree-balanced negatives modestly improve ranking metrics over random negatives.
 
 ### LLM: L4 Discrimination Reveals Domain Differences
 
 | Domain | L4 MCC Range | Interpretation | Contamination |
 |--------|-------------|----------------|---------------|
-| DTI | <= 0.18 | Near random | Not detected |
-| CT | 0.48-0.56 | Meaningful | Not detected |
-| PPI | 0.36-0.44 | Moderate | **Massive** (gap 0.46-0.59) |
+| DTI | ≤ 0.18 | Near random | Not detected |
+| PPI | 0.33–0.44 | Moderate | **Yes** (temporal gap) |
+| CT | 0.48–0.56 | Meaningful | Not detected |
+| GE | Pending full run | — | — |
 
-PPI L4 reveals **massive temporal contamination**: pre-2015 protein interaction data is identified at 59-79% accuracy, while post-2020 data drops to 7-25%. LLMs rely on memorized training data, not biological reasoning.
+PPI L4 reveals **temporal contamination**: pre-2015 interaction data is identified at 59–79% accuracy, while post-2020 data drops to 7–25%. LLMs rely on memorized training data, not biological reasoning.
 
 ---
 
@@ -122,6 +127,19 @@ uv run python scripts_ppi/fetch_sequences.py
 uv run python scripts_ppi/export_ppi_ml_dataset.py
 ```
 
+### GE Domain (DepMap)
+
+```bash
+# Download DepMap CRISPR and RNAi screens
+uv run python scripts_depmap/download_depmap.py
+
+# Load and process
+uv run python scripts_depmap/load_depmap.py
+uv run python scripts_depmap/load_rnai.py
+uv run python scripts_depmap/fetch_gene_descriptions.py
+uv run python scripts_depmap/export_ge_ml_dataset.py
+```
+
 ## ML Experiments
 
 ```bash
@@ -137,10 +155,15 @@ bash slurm/submit_ct_all.sh
 uv run python scripts_ppi/train_baseline.py --model siamese_cnn --split random --negative negbiodb --dataset balanced
 bash slurm/submit_ppi_all.sh
 
+# GE training
+uv run python scripts_depmap/train_ge_baseline.py --model xgboost --split random --negative negbiodb
+bash slurm/submit_ge_ml_all.sh
+
 # Results collection (all domains support --aggregate-seeds)
 uv run python scripts/collect_results.py --dataset balanced --aggregate-seeds
 uv run python scripts_ct/collect_ct_results.py --aggregate-seeds
 uv run python scripts_ppi/collect_results.py --dataset balanced --aggregate-seeds
+uv run python scripts_depmap/collect_ge_results.py --aggregate-seeds
 ```
 
 ## LLM Benchmark
@@ -155,22 +178,28 @@ uv run python scripts/build_l4_dataset.py
 # Run LLM inference
 uv run python scripts/run_llm_benchmark.py --model gemini --level l1 --config zeroshot
 
+# GE-specific LLM datasets and inference
+uv run python scripts_depmap/build_ge_l1_dataset.py
+uv run python scripts_depmap/run_ge_llm_benchmark.py --model gemini --level l1 --config zeroshot
+
 # Collect results
 uv run python scripts/collect_llm_results.py
 uv run python scripts_ct/collect_ct_llm_results.py
 uv run python scripts_ppi/collect_ppi_llm_results.py
+uv run python scripts_depmap/collect_ge_results.py --llm
 ```
 
 ## Testing
 
 ```bash
-# All tests (~800 total across 3 domains)
+# All tests (~1,300 total across 4 domains)
 PYTHONPATH=src uv run pytest tests/ -v
 
 # By domain
 PYTHONPATH=src uv run pytest tests/test_db.py tests/test_etl_*.py tests/test_export.py -v       # DTI
 PYTHONPATH=src uv run pytest tests/test_ct_*.py tests/test_etl_aact.py -v                       # CT
 PYTHONPATH=src uv run pytest tests/test_ppi_*.py tests/test_etl_intact.py -v                    # PPI
+PYTHONPATH=src uv run pytest tests/test_ge_*.py tests/test_etl_depmap.py -v                     # GE
 
 # Skip network-dependent tests
 PYTHONPATH=src uv run pytest tests/ -v -m "not integration"
@@ -189,7 +218,7 @@ NegBioDB/
 │   │   ├── etl_chembl.py      # ChEMBL ETL pipeline
 │   │   ├── etl_pubchem.py     # PubChem ETL (streaming, 29M rows)
 │   │   ├── etl_bindingdb.py   # BindingDB ETL pipeline
-│   │   ├── export.py          # ML dataset export (Parquet, 6 splits)
+│   │   ├── export.py          # ML dataset export (Parquet, 5 splits)
 │   │   ├── metrics.py         # ML evaluation metrics (7 metrics)
 │   │   ├── llm_client.py      # LLM API client (vLLM, Gemini, OpenAI, Anthropic)
 │   │   ├── llm_prompts.py     # LLM prompt templates (L1-L4)
@@ -210,45 +239,50 @@ NegBioDB/
 │   │   ├── llm_prompts.py     # CT LLM prompts (L1-L4)
 │   │   ├── llm_eval.py        # CT LLM evaluation
 │   │   └── llm_dataset.py     # CT LLM dataset construction
-│   └── negbiodb_ppi/          # PPI domain
-│       ├── ppi_db.py          # PPI database & migrations
-│       ├── etl_intact.py      # IntAct PSI-MI TAB 2.7
-│       ├── etl_huri.py        # HuRI Y2H screen negatives
-│       ├── etl_humap.py       # hu.MAP ML-derived negatives
-│       ├── etl_string.py      # STRING zero-score pairs
-│       ├── protein_mapper.py  # UniProt validation, ENSG mapping
-│       ├── export.py          # ML export (4 splits, controls)
-│       ├── llm_prompts.py     # PPI LLM prompts (L1-L4)
-│       ├── llm_eval.py        # PPI LLM evaluation
-│       ├── llm_dataset.py     # PPI LLM dataset construction
-│       └── models/            # PPI ML models
-│           ├── siamese_cnn.py # Shared CNN encoder
-│           ├── pipr.py        # Cross-attention PPI model
-│           └── mlp_features.py # Hand-crafted feature MLP
+│   ├── negbiodb_ppi/          # PPI domain
+│   │   ├── ppi_db.py          # PPI database & migrations
+│   │   ├── etl_intact.py      # IntAct PSI-MI TAB 2.7
+│   │   ├── etl_huri.py        # HuRI Y2H screen negatives
+│   │   ├── etl_humap.py       # hu.MAP ML-derived negatives
+│   │   ├── etl_string.py      # STRING zero-score pairs
+│   │   ├── protein_mapper.py  # UniProt validation, ENSG mapping
+│   │   ├── export.py          # ML export (4 splits, controls)
+│   │   ├── llm_prompts.py     # PPI LLM prompts (L1-L4)
+│   │   ├── llm_eval.py        # PPI LLM evaluation
+│   │   ├── llm_dataset.py     # PPI LLM dataset construction
+│   │   └── models/            # PPI ML models
+│   │       ├── siamese_cnn.py # Shared CNN encoder
+│   │       ├── pipr.py        # Cross-attention PPI model
+│   │       └── mlp_features.py # Hand-crafted feature MLP
+│   └── negbiodb_depmap/       # Gene Essentiality (DepMap) domain
+│       ├── depmap_db.py       # GE database & migrations
+│       ├── etl_depmap.py      # DepMap CRISPR ETL
+│       ├── etl_rnai.py        # RNAi screen ETL
+│       ├── etl_prism.py       # PRISM drug screen ETL (optional)
+│       ├── export.py          # ML export (5 splits, 770 MB parquet)
+│       ├── ge_features.py     # Gene/cell-line feature encoding
+│       ├── llm_prompts.py     # GE LLM prompts (L1-L4)
+│       ├── llm_eval.py        # GE LLM evaluation
+│       └── llm_dataset.py     # GE LLM dataset construction
 ├── scripts/                   # DTI CLI entry points
 ├── scripts_ct/                # CT CLI entry points
 ├── scripts_ppi/               # PPI CLI entry points
-├── slurm/                     # SLURM job scripts (Cornell Cayuga HPC)
+├── scripts_depmap/            # GE CLI entry points
+├── slurm/                     # SLURM job scripts (HPC-ready, path-agnostic)
 ├── migrations/                # DTI SQL schema migrations
 ├── migrations_ct/             # CT SQL schema migrations
 ├── migrations_ppi/            # PPI SQL schema migrations
-├── tests/                     # Test suite (~800 tests across domains)
-├── exports/                   # ML/LLM export files (Parquet)
-│   ├── ct/                    # CT exported datasets
-│   └── ppi/                   # PPI exported datasets
-├── results/                   # Experiment results
-│   ├── baselines/             # DTI ML results
-│   ├── ct/                    # CT ML results
-│   ├── ppi/                   # PPI ML results
-│   ├── llm/                   # DTI LLM results
-│   ├── ct_llm/                # CT LLM results
-│   └── ppi_llm/               # PPI LLM results
-├── research/                  # Research documents (01-17)
-├── docs/                      # Paper appendices and methodology notes
-├── data/                      # SQLite databases (not in repo)
+├── migrations_depmap/         # GE SQL schema migrations
+├── tests/                     # Test suite (~1,300 tests across 4 domains)
+├── docs/                      # Methodology notes and prompt appendices
+├── paper/                     # LaTeX source (NeurIPS 2026 submission)
+├── data/                      # SQLite databases (not in repo, ~38 GB)
+├── exports/                   # ML/LLM export files (Parquet, not in repo)
+├── results/                   # Experiment results (not in repo)
 ├── config.yaml                # Pipeline configuration
 ├── Makefile                   # Build/pipeline commands
 ├── pyproject.toml             # Python project metadata
+├── experiment_results.md      # ML/LLM result tables (all 4 domains)
 ├── PROJECT_OVERVIEW.md        # Detailed project overview
 └── ROADMAP.md                 # Execution roadmap
 ```
@@ -259,7 +293,7 @@ NegBioDB/
 
 | File | Description |
 |------|-------------|
-| `negbiodb_dti_pairs.parquet` | 25M compound-target pairs with 6 split columns |
+| `negbiodb_dti_pairs.parquet` | 1.7M compound-target pairs with 5 split columns |
 | `negbiodb_m1_balanced.parquet` | M1: 1.73M rows (1:1 active:inactive) |
 | `negbiodb_m1_realistic.parquet` | M1: 9.49M rows (1:10 ratio) |
 | `negbiodb_m1_balanced_ddb.parquet` | Exp 4: degree-balanced split |
@@ -288,6 +322,17 @@ NegBioDB/
 | `ppi_m1_balanced_ddb.parquet` | Exp 4: degree-balanced split |
 | `ppi_m1_uniform_random.parquet` | Exp 1: uniform random negatives |
 | `ppi_m1_degree_matched.parquet` | Exp 1: degree-matched negatives |
+
+### GE (`exports/ge/`)
+
+| File | Description |
+|------|-------------|
+| `negbiodb_ge_pairs.parquet` | 770 MB; 22.5M gene-cell-line pairs with 5 split columns |
+| `ge_m1_random.parquet` | Random split (train/val/test) |
+| `ge_m1_cold_gene.parquet` | Cold-gene generalization split |
+| `ge_m1_cold_cell_line.parquet` | Cold-cell-line generalization split |
+| `ge_m1_cold_both.parquet` | Cold-both (hardest) split |
+| `ge_m1_degree_balanced.parquet` | Degree-balanced negative control |
 
 ## Data Sources
 
@@ -318,6 +363,13 @@ NegBioDB/
 | [hu.MAP 3.0](https://humap3.proteincomplexes.org/) | 1,228,891 pairs | MIT |
 | [STRING v12.0](https://string-db.org/) | 500,000 pairs | CC BY 4.0 |
 
+### GE
+
+| Source | Records | License |
+|--------|---------|---------|
+| [DepMap CRISPR (Chronos)](https://depmap.org/) | 28.7M gene-cell pairs | CC BY 4.0 |
+| [DepMap RNAi (DEMETER2)](https://depmap.org/) | Integrated | CC BY 4.0 |
+
 ## ML Evaluation Metrics
 
 | Metric | Role |
@@ -344,6 +396,6 @@ If you use NegBioDB in your research, please cite:
 
 ## License
 
-**CC BY-SA 4.0** -- see [LICENSE](LICENSE) for details.
+**CC BY-SA 4.0** — see [LICENSE](LICENSE) for details.
 
 This license is required by the viral clause in ChEMBL's CC BY-SA 3.0 license.

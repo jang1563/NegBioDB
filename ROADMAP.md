@@ -1,6 +1,6 @@
 # NegBioDB — Execution Roadmap
 
-> Last updated: 2026-03-18 (v11 — DTI complete, CT domain pipeline + benchmark design complete)
+> Last updated: 2026-03-30 (v19 — All 4 domains complete: DTI ✅ CT ✅ PPI ✅ GE ✅)
 
 ---
 
@@ -247,7 +247,7 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 ### Week 8-10: Paper Writing
 
 - [ ] Write benchmark paper (**9 pages** + unlimited appendix)
-- [ ] Create key figures (see research/06_paper_narrative.md for figure plan)
+- [ ] Create key figures (see `paper/scripts/generate_figures.py`)
 - [ ] **Paper structure (9 pages)**: Intro (1.5) → DB Design (1.5) → Benchmark (1.5) → Experiments (3) → Discussion (1.5)
 - [ ] **Appendix contents**: Full schema DDL, all metric tables, L2 annotation details, few-shot examples, Datasheet
 - [ ] Python download script: `pip install negbiodb` or simple wget script
@@ -295,34 +295,34 @@ Experiment 1 compares NegBioDB's experimentally confirmed negatives against **ra
 
 - [x] Data quality analysis script (`scripts_ct/analyze_ct_data.py`) — 16 queries, JSON+MD output
 - [x] Data quality report (`results/ct/ct_data_quality.md`)
-- [x] ML benchmark design (`research/14_ct_ml_benchmark_design.md`)
+- [x] ML benchmark design
   - 3 tasks: CT-M1 (binary), CT-M2 (7-way category), CT-M3 (phase transition, deferred)
   - 6 split strategies, 3 models (XGBoost, MLP, GNN+Tabular)
   - 3 experiments: negative source, generalization, temporal
-- [x] LLM benchmark design (`research/15_ct_llm_benchmark_design.md`)
+- [x] LLM benchmark design
   - 4 levels: CT-L1 (5-way MCQ), CT-L2 (extraction), CT-L3 (reasoning), CT-L4 (discrimination)
   - 5 models, anti-contamination analysis
 
-### Step CT-5: ML Export & Splits (Planned)
+### Step CT-5: ML Export & Splits ✅ COMPLETE
 
-- [ ] CT export module (`src/negbiodb_ct/ct_export.py`)
-- [ ] CTO success trials extraction (CT-M1 positive class)
-- [ ] Feature engineering (drug FP + mol properties + condition one-hot + trial design)
-- [ ] 6 split strategies implementation
+- [x] CT export module (`src/negbiodb_ct/ct_export.py`)
+- [x] CTO success trials extraction (CT-M1 positive class)
+- [x] Feature engineering (drug FP + mol properties + condition one-hot + trial design)
+- [x] 6 split strategies implementation
 
-### Step CT-6: ML Baseline Experiments (Planned)
+### Step CT-6: ML Baseline Experiments ✅ COMPLETE (108/108 runs)
 
-- [ ] XGBoost baseline (CT-M1 + CT-M2)
-- [ ] MLP baseline
-- [ ] GNN+Tabular baseline
-- [ ] Experiments CT-1, CT-2, CT-3
+- [x] XGBoost baseline (CT-M1 + CT-M2)
+- [x] MLP baseline
+- [x] GNN+Tabular baseline
+- [x] Key finding: CT-M1 trivially separable on NegBioDB negatives (AUROC=1.0); M2 XGBoost macro-F1=0.51
 
-### Step CT-7: LLM Benchmark Execution (Planned)
+### Step CT-7: LLM Benchmark Execution ✅ COMPLETE (80/80 runs)
 
-- [ ] CT-L1/L2/L3/L4 dataset construction scripts
-- [ ] CT prompt templates + evaluation functions
-- [ ] Inference runs on Cayuga HPC
-- [ ] Results aggregation
+- [x] CT-L1/L2/L3/L4 dataset construction
+- [x] CT prompt templates + evaluation functions
+- [x] Inference runs on Cayuga HPC (5 models × 4 levels × 4 configs)
+- [x] Key finding: CT L4 MCC 0.48–0.56 — highest discrimination across domains
 
 ---
 
