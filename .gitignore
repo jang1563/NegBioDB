@@ -43,3 +43,13 @@ htmlcov/
 # Internal planning documents (not for public release)
 research/
 NeurIPS_DB_Track_Research.md
+
+# Binary files (PDFs) — not suitable for git/HuggingFace datasets
+paper/main.pdf
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/missfont.log
+paper/figures/*.pdf
