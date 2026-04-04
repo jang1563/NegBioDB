@@ -50,33 +50,41 @@ def main():
     conn = get_connection(db_path)
 
     try:
+        # Load positives first — needed to size control negatives appropriately
+        if args.gene_effect_file and args.dependency_file:
+            pos_df = load_essential_positives(
+                conn,
+                Path(args.gene_effect_file),
+                Path(args.dependency_file),
+            )
+        else:
+            logger.warning("No gene-effect/dependency files provided. Using synthetic positives.")
+            pos_df = pd.DataFrame()
+
+        if len(pos_df) == 0:
+            logger.error("No positives loaded. Provide --gene-effect-file and --dependency-file.")
+            sys.exit(1)
+
         # Load negatives based on source type
-        if args.neg_source == "negbiodb":
-            neg_query = """
+        _neg_q = """
             SELECT p.gene_id, p.cell_line_id, g.entrez_id, g.gene_symbol,
                    c.model_id, p.gene_degree, p.cell_line_degree,
                    p.mean_gene_effect, p.best_confidence
             FROM gene_cell_pairs p
             JOIN genes g ON p.gene_id = g.gene_id
             JOIN cell_lines c ON p.cell_line_id = c.cell_line_id
-            """
-            neg_df = pd.read_sql_query(neg_query, conn)
+        """
+        if args.neg_source == "negbiodb":
+            neg_df = pd.read_sql_query(_neg_q, conn)
         elif args.neg_source == "uniform_random":
-            # Load DB negatives first to determine sample size
-            n_db_neg = conn.execute("SELECT COUNT(*) FROM gene_cell_pairs").fetchone()[0]
-            neg_df = generate_uniform_random_negatives(conn, n_samples=n_db_neg, seed=args.seed)
+            # Size control negatives to match positive count (avoids OOM from 22.5M pairs)
+            neg_df = generate_uniform_random_negatives(conn, n_samples=len(pos_df), seed=args.seed)
             logger.info("Generated %d uniform random control negatives", len(neg_df))
         elif args.neg_source == "degree_matched":
-            # Load DB negatives to match their degree distribution
-            neg_query = """
-            SELECT p.gene_id, p.cell_line_id, g.entrez_id, g.gene_symbol,
-                   c.model_id, p.gene_degree, p.cell_line_degree,
-                   p.mean_gene_effect, p.best_confidence
-            FROM gene_cell_pairs p
-            JOIN genes g ON p.gene_id = g.gene_id
-            JOIN cell_lines c ON p.cell_line_id = c.cell_line_id
-            """
-            db_neg_df = pd.read_sql_query(neg_query, conn)
+            # Sample DB negatives to match positive count for degree distribution reference
+            db_neg_df = pd.read_sql_query(_neg_q, conn)
+            if len(db_neg_df) > len(pos_df):
+                db_neg_df = db_neg_df.sample(n=len(pos_df), random_state=args.seed)
             neg_df = generate_degree_matched_negatives(conn, db_neg_df, seed=args.seed)
             logger.info("Generated %d degree-matched control negatives", len(neg_df))
 
@@ -91,21 +99,6 @@ def main():
                 raise RuntimeError(
                     f"Control negative generation returned 0 rows for {args.neg_source}"
                 )
-
-        # Load positives
-        if args.gene_effect_file and args.dependency_file:
-            pos_df = load_essential_positives(
-                conn,
-                Path(args.gene_effect_file),
-                Path(args.dependency_file),
-            )
-        else:
-            logger.warning("No gene-effect/dependency files provided. Using synthetic positives.")
-            pos_df = pd.DataFrame(columns=neg_df.columns)
-
-        if len(pos_df) == 0:
-            logger.error("No positives loaded. Provide --gene-effect-file and --dependency-file.")
-            sys.exit(1)
 
         # Build dataset
         if args.task == "m1":
