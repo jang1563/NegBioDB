@@ -9,8 +9,8 @@ set -euo pipefail
 
 # ---- Config ----
 ENV_NAME="negbiodb-llm"
-CONDA_BASE="${CONDA_PREFIX:-/path/to/conda}/miniconda3"
-SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
+CONDA_BASE="${CONDA_PREFIX:-/athena/masonlab/scratch/users/jak4013}/miniconda3"
+SCRATCH="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}"
 MODEL_DIR="${SCRATCH}/models"
 
 # ---- Init conda ----

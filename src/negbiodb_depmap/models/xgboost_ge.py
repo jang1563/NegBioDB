@@ -72,11 +72,14 @@ def train_xgboost_ge(
     if X_val is not None and y_val is not None:
         eval_set = [(X_val, y_val)]
 
-    model.fit(
-        X_train, y_train,
-        eval_set=eval_set if eval_set else None,
-        verbose=False,
-    )
+    fit_kwargs = {
+        "eval_set": eval_set if eval_set else None,
+        "verbose": False,
+    }
+    if eval_set and early_stopping_rounds:
+        fit_kwargs["early_stopping_rounds"] = early_stopping_rounds
+
+    model.fit(X_train, y_train, **fit_kwargs)
 
     logger.info(
         "XGBoost trained: %d estimators, best_iteration=%s",

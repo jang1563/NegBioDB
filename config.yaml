@@ -211,3 +211,52 @@ ppi_domain:
   # === Benchmark Split ===
   split_ratios: {train: 0.7, val: 0.1, test: 0.2}
   random_seed: 42
+
+# ============================================================
+# Variant Pathogenicity (VP) Domain
+# ============================================================
+
+vp_domain:
+  # === Paths ===
+  paths:
+    database: data/negbiodb_vp.db
+    migrations_dir: migrations_vp
+    data_dir: data/vp
+
+  # === Downloads ===
+  downloads:
+    clinvar:
+      variant_summary_url: "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"
+      submission_summary_url: "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/submission_summary.txt.gz"
+      gene_condition_url: "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/gene_condition_source_id"
+      dest_dir: data/vp/clinvar
+    gnomad:
+      constraint_url: "https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv"
+      # Sites VCF: cloud-only (AWS/GCS). Download via gsutil on HPC.
+      sites_vcf_base: "gs://gcp-public-data--gnomad/release/4.1/vcf/exomes/"
+      dest_dir: data/vp/gnomad
+    cadd:
+      url: "https://kircherlab.bihealth.org/download/CADD/v1.7/GRCh38/whole_genome_SNVs.tsv.gz"
+      dest_dir: data/vp/cadd
+    revel:
+      url: "https://zenodo.org/records/7072866/files/revel-v1.3_all_chromosomes.zip"
+      dest_dir: data/vp/revel
+    alphamissense:
+      url: "https://zenodo.org/records/10813168/files/AlphaMissense_hg38.tsv.gz"
+      dest_dir: data/vp/alphamissense
+    clingen:
+      gene_disease_url: "https://search.clinicalgenome.org/kb/gene-validity/download"
+      dest_dir: data/vp/clingen
+
+  # === Confidence Tiers (ACMG-aligned) ===
+  confidence_tiers:
+    copper_gnomad_af_threshold: 0.01  # global AF > 1% = BA1 standalone benign
+
+  # === Temporal Split Cutoffs ===
+  temporal_split:
+    train_cutoff: "2020-01-01"
+    test_start: "2023-01-01"
+
+  # === Benchmark Split ===
+  split_ratios: {train: 0.7, val: 0.1, test: 0.2}
+  random_seed: 42

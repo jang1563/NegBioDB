@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SBATCH=${SBATCH_BIN:-/opt/ohpc/pub/software/slurm/24.05.2/bin/sbatch}
-NEGBIODB=${SCRATCH_DIR:-/path/to/scratch}/negbiodb
+NEGBIODB=${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}/negbiodb
 LOGDIR=$NEGBIODB/logs
 mkdir -p "$LOGDIR"
 
@@ -25,7 +25,7 @@ JOB_ID=$(
         --output="$LOGDIR/precompute_graphs_%j.out" \
         --error="$LOGDIR/precompute_graphs_%j.err" \
         --wrap="
-            source ${CONDA_PREFIX:-/path/to/conda}/miniconda3/etc/profile.d/conda.sh && \
+            source ${CONDA_PREFIX:-/athena/masonlab/scratch/users/jak4013}/miniconda3/etc/profile.d/conda.sh && \
             conda activate negbiodb-ml && \
             cd $NEGBIODB && \
             python -c \"

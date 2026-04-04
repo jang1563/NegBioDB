@@ -1,0 +1,25 @@
+# NegBioRL Domain Configuration
+# Overrides / supplements the Python registry for HPC scripts
+
+train_domains:
+  - dti
+  - ct
+  - ppi
+  - ge
+
+transfer_test_domain: vp
+
+# Task levels used for GRPO training
+grpo_tasks:
+  - l1   # Verifiable MCQ → binary reward
+  - l4   # Verifiable tested/untested → binary reward
+
+# Task levels used for SFT
+sft_tasks:
+  - l1
+  - l4
+
+# DPO ablation uses L3 (judge-based preference) + L4 (correctness-based)
+dpo_tasks:
+  - l3
+  - l4

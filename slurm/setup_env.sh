@@ -13,8 +13,8 @@
 
 set -euo pipefail
 
-NEGBIODB=${SCRATCH_DIR:-/path/to/scratch}/negbiodb
-CONDA_SH=${CONDA_PREFIX:-/path/to/conda}/miniconda3/etc/profile.d/conda.sh
+NEGBIODB=${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}/negbiodb
+CONDA_SH=${CONDA_PREFIX:-/athena/masonlab/scratch/users/jak4013}/miniconda3/etc/profile.d/conda.sh
 ENV_NAME=negbiodb-ml
 
 source "$CONDA_SH"

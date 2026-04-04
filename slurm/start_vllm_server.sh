@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=24:00:00
-#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/vllm_%j.log
-#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/vllm_%j.err
+#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/vllm_%j.log
+#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/vllm_%j.err
 
 # Start vLLM OpenAI-compatible API server on Cayuga.
 # Usage:
@@ -19,8 +19,8 @@
 set -euo pipefail
 
 # ---- Config ----
-CONDA_BASE="${CONDA_PREFIX:-/path/to/conda}/miniconda3"
-MODEL_DIR="${SCRATCH_DIR:-/path/to/scratch}/models"
+CONDA_BASE="${CONDA_PREFIX:-/athena/masonlab/scratch/users/jak4013}/miniconda3"
+MODEL_DIR="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}/models"
 PORT=8000
 
 MODEL="${MODEL:-llama70b}"  # default model

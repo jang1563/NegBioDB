@@ -1,0 +1,119 @@
+# NegBioRL Experiment Matrix
+# All training runs ordered by priority
+
+experiments:
+  # === Primary experiments (P1-P3): Multi-domain SFT+GRPO ===
+  P1_qwen3_multi:
+    model: Qwen/Qwen3-8B
+    strategy: sft_grpo
+    domains: [dti, ct, ppi, ge]
+    group_size: 8
+    priority: 1
+    gpu_hours_est: 15
+    role: primary_target
+
+  P2_qwen25_multi:
+    model: Qwen/Qwen2.5-7B-Instruct
+    strategy: sft_grpo
+    domains: [dti, ct, ppi, ge]
+    group_size: 8
+    priority: 2
+    gpu_hours_est: 15
+    role: historical_baseline
+
+  P3_llama31_multi:
+    model: meta-llama/Llama-3.1-8B-Instruct
+    strategy: sft_grpo
+    domains: [dti, ct, ppi, ge]
+    group_size: 8
+    priority: 3
+    gpu_hours_est: 15
+    role: historical_baseline
+
+  # === Group size ablation (P4-P5) ===
+  P4_qwen3_G2:
+    model: Qwen/Qwen3-8B
+    strategy: sft_grpo
+    domains: [dti, ct, ppi, ge]
+    group_size: 2
+    priority: 4
+    gpu_hours_est: 6
+    role: ablation_grpo_is_dpo
+
+  P5_qwen3_G16:
+    model: Qwen/Qwen3-8B
+    strategy: sft_grpo
+    domains: [dti, ct, ppi, ge]
+    group_size: 16
+    priority: 5
+    gpu_hours_est: 24
+    role: ablation_grpo_is_dpo
+
+  # === Method ablations (P6-P7) ===
+  P6_qwen3_dpo:
+    model: Qwen/Qwen3-8B
+    strategy: dpo
+    domains: [dti, ct, ppi, ge]
+    priority: 6
+    gpu_hours_est: 3
+    role: ablation_dpo_comparison
+
+  P7_qwen3_sft_only:
+    model: Qwen/Qwen3-8B
+    strategy: sft_only
+    domains: [dti, ct, ppi, ge]
+    priority: 7
+    gpu_hours_est: 3
+    role: ablation_sft_vs_grpo
+
+  # === Single-domain for transfer matrix (P8-P11) ===
+  P8_qwen3_dti:
+    model: Qwen/Qwen3-8B
+    strategy: sft_grpo
+    domains: [dti]
+    group_size: 8
+    priority: 8
+    gpu_hours_est: 8
+    role: transfer_matrix
+
+  P9_qwen3_ct:
+    model: Qwen/Qwen3-8B
+    strategy: sft_grpo
+    domains: [ct]
+    group_size: 8
+    priority: 9
+    gpu_hours_est: 8
+    role: transfer_matrix
+
+  P10_qwen3_ppi:
+    model: Qwen/Qwen3-8B
+    strategy: sft_grpo
+    domains: [ppi]
+    group_size: 8
+    priority: 10
+    gpu_hours_est: 8
+    role: transfer_matrix
+
+  P11_qwen3_ge:
+    model: Qwen/Qwen3-8B
+    strategy: sft_grpo
+    domains: [ge]
+    group_size: 8
+    priority: 11
+    gpu_hours_est: 8
+    role: transfer_matrix
+
+# Total estimated: ~125 GPU-hours
+
+# Success criteria
+success_criteria:
+  minimum_publishable:
+    l4_mcc_improvement: 0.10  # ≥ +0.10 on 2+ domains
+    pbs_reduction: true
+  strong_top_venue:
+    l3_reasoning_improvement: true
+    positive_transfers: 3  # 3+ positive off-diagonal cells
+    grpo_g2_matches_g16: true
+  exceptional:
+    beats_gpt4o_mini_l4: true
+    vp_zero_shot_improves: true

@@ -80,6 +80,18 @@ def main():
             neg_df = generate_degree_matched_negatives(conn, db_neg_df, seed=args.seed)
             logger.info("Generated %d degree-matched control negatives", len(neg_df))
 
+        # Sanity check: control negatives must have neg_source column
+        if args.neg_source != "negbiodb":
+            if "neg_source" not in neg_df.columns:
+                raise RuntimeError(
+                    f"Control negative generation failed: neg_df missing 'neg_source' column. "
+                    f"Expected neg_source='{args.neg_source}' but got DB negatives instead."
+                )
+            if len(neg_df) == 0:
+                raise RuntimeError(
+                    f"Control negative generation returned 0 rows for {args.neg_source}"
+                )
+
         # Load positives
         if args.gene_effect_file and args.dependency_file:
             pos_df = load_essential_positives(

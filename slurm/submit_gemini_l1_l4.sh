@@ -14,7 +14,7 @@
 set -euo pipefail
 
 SBATCH="/opt/ohpc/pub/software/slurm/24.05.2/bin/sbatch"
-SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
+SCRATCH="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}"
 SLURM_DIR="${SCRATCH}/negbiodb/slurm"
 
 CONFIGS="zero-shot 3-shot"

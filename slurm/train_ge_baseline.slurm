@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --time=8:00:00
-#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_baseline_%j.log
-#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_baseline_%j.err
+#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_baseline_%j.log
+#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_baseline_%j.err
 
 # Train GE ML baseline model.
 # Usage:
@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
+SCRATCH="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 
@@ -28,10 +28,13 @@ export PATH="${SCRATCH_ENV}/bin:${PATH}"
 export CONDA_PREFIX="${SCRATCH_ENV}"
 export PYTHONPATH="${PROJECT_DIR}/src"
 # Provide CUDA libs (cudnn, cublas) for PyTorch on CPU-only nodes
-_NVIDIA_LIBS="${CONDA_PREFIX:-/path/to/conda}/miniconda3/envs/negbiodb-llm/lib/python3.11/site-packages/nvidia"
-for _d in "${_NVIDIA_LIBS}"/*/lib; do
-    [ -d "${_d}" ] && export LD_LIBRARY_PATH="${_d}:${LD_LIBRARY_PATH:-}"
-done
+_NVIDIA_LIBS="$(python -c 'import nvidia, os; print(os.path.dirname(nvidia.__file__))' 2>/dev/null || echo "")"
+if [[ -n "${_NVIDIA_LIBS}" ]]; then
+    for _d in "${_NVIDIA_LIBS}"/*/lib; do
+        [ -d "${_d}" ] && export LD_LIBRARY_PATH="${_d}:${LD_LIBRARY_PATH:-}"
+    done
+    echo "Added nvidia libs from ${_NVIDIA_LIBS}"
+fi
 
 echo "=== GE Baseline Training ==="
 echo "Task: ${TASK}, Model: ${MODEL}, Split: ${SPLIT}, Neg: ${NEG}, Seed: ${SEED}"

@@ -4,12 +4,12 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=6:00:00
-#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_llm_gemini_%j.log
-#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_llm_gemini_%j.err
+#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_llm_gemini_%j.log
+#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_llm_gemini_%j.err
 
 set -euo pipefail
 
-SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
+SCRATCH="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 

@@ -15,7 +15,7 @@
 set -euo pipefail
 
 SBATCH=${SBATCH_BIN:-/opt/ohpc/pub/software/slurm/24.05.2/bin/sbatch}
-NEGBIODB=${SCRATCH_DIR:-/path/to/scratch}/negbiodb
+NEGBIODB=${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}/negbiodb
 LOGDIR=$NEGBIODB/logs/ct
 SCRIPT=$NEGBIODB/slurm/train_ct_baseline.slurm
 SEEDS_STR=${SEEDS:-"42 43 44"}

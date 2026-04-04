@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REMOTE_HOST=${REMOTE_HOST:-cayuga-login1}
-REMOTE_PROJECT_DIR=${REMOTE_PROJECT_DIR:-${SCRATCH_DIR:-/path/to/scratch}/negbiodb}
+REMOTE_PROJECT_DIR=${REMOTE_PROJECT_DIR:-${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}/negbiodb}
 SSH_BIN=${SSH_BIN:-ssh}
 CONNECT_TIMEOUT=${CONNECT_TIMEOUT:-10}
 

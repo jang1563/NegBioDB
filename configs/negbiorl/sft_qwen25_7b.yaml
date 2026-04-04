@@ -1,0 +1,18 @@
+# SFT training config for Qwen2.5-7B-Instruct (historical baseline)
+
+model: Qwen/Qwen2.5-7B-Instruct
+
+learning_rate: 2.0e-5
+epochs: 3
+batch_size: 4
+
+# LoRA
+lora_r: 64
+lora_alpha: 128
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+
+report_to: wandb

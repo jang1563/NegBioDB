@@ -137,7 +137,7 @@ def generate_cold_gene_split(
         gene_ratios = {"train": 0.80, "val": 0.05, "test": 0.15}
 
     split_id = _register_ge_split(
-        conn, "cold_gene_v1", "cold_gene", seed, _DEFAULT_RATIOS
+        conn, "cold_gene_v1", "cold_gene", seed, gene_ratios
     )
 
     genes = [r[0] for r in conn.execute(
@@ -187,7 +187,7 @@ def generate_cold_cell_line_split(
         cl_ratios = {"train": 0.80, "val": 0.05, "test": 0.15}
 
     split_id = _register_ge_split(
-        conn, "cold_cell_line_v1", "cold_cell_line", seed, _DEFAULT_RATIOS
+        conn, "cold_cell_line_v1", "cold_cell_line", seed, cl_ratios
     )
 
     cls = [r[0] for r in conn.execute(
@@ -236,8 +236,9 @@ def generate_cold_both_split(
       - Assign genes to folds, assign cell lines to folds
       - Pair fold = max(gene_fold, cl_fold) where test > val > train
     """
+    cold_both_ratios = {"train": 0.80, "val": 0.05, "test": 0.15}
     split_id = _register_ge_split(
-        conn, "cold_both_v1", "cold_both", seed, _DEFAULT_RATIOS
+        conn, "cold_both_v1", "cold_both", seed, cold_both_ratios
     )
     _fold_rank = {"train": 0, "val": 1, "test": 2}
     _rank_fold = {0: "train", 1: "val", 2: "test"}
@@ -778,11 +779,10 @@ def generate_uniform_random_negatives(
     conn: sqlite3.Connection,
     n_samples: int,
     seed: int = 42,
-    exclude_essential: bool = True,
 ) -> pd.DataFrame:
     """Generate uniform random gene-cell_line pairs as control negatives.
 
-    Samples pairs NOT in any essential set (dep_prob < 0.5 or unknown).
+    Samples random (gene, cell_line) pairs that are NOT already in gene_cell_pairs.
     These are random pairs, not from the curated negative DB.
     """
     genes = conn.execute(
@@ -887,23 +887,28 @@ def generate_degree_matched_negatives(
         b = min(b, n_bins - 1)
         gene_by_bin[b].append(g)
 
+    max_retries = 10
     for b, count in bin_counts.items():
         candidates = gene_by_bin.get(b, [])
         if not candidates:
             continue
+        generated = 0
         for _ in range(count):
-            g = candidates[rng.randint(0, len(candidates))]
-            c = cell_lines[rng.randint(0, len(cell_lines))]
-            if (g[0], c[0]) not in existing:
-                records.append({
-                    "gene_id": g[0],
-                    "cell_line_id": c[0],
-                    "entrez_id": g[1],
-                    "gene_symbol": g[2],
-                    "model_id": c[1],
-                    "neg_source": "degree_matched",
-                })
-                existing.add((g[0], c[0]))
+            for _retry in range(max_retries):
+                g = candidates[rng.randint(0, len(candidates))]
+                c = cell_lines[rng.randint(0, len(cell_lines))]
+                if (g[0], c[0]) not in existing:
+                    records.append({
+                        "gene_id": g[0],
+                        "cell_line_id": c[0],
+                        "entrez_id": g[1],
+                        "gene_symbol": g[2],
+                        "model_id": c[1],
+                        "neg_source": "degree_matched",
+                    })
+                    existing.add((g[0], c[0]))
+                    generated += 1
+                    break
 
     df = pd.DataFrame(records)
     logger.info("Generated %d degree-matched control negatives", len(df))

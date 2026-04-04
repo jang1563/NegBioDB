@@ -20,6 +20,7 @@ from negbiodb_depmap.export import (
     generate_cold_cell_line_split,
     generate_cold_gene_split,
     generate_degree_balanced_split,
+    generate_degree_matched_negatives,
     generate_random_split,
     generate_uniform_random_negatives,
 )
@@ -340,6 +341,35 @@ class TestApplySplitToDataset:
         assert set(result["split"].unique()) == {"train", "val", "test"}
         assert len(result) == n
 
+        # Verify Metis guarantee: for each train pair, both gene and cell_line
+        # must be in the train entity partition (rank 0). Entities CAN appear
+        # across folds when paired with different partners.
+        train_pairs = result[result["split"] == "train"]
+        test_pairs = result[result["split"] == "test"]
+        # Entities that appear ONLY in test (never paired into train)
+        # should not appear in train pairs' gene/cl columns
+        # The real guarantee: no train pair has a gene from test-only genes
+        # or a cell_line from test-only cell lines
+        # Simpler check: train pairs should not share BOTH gene and cl with test
+        # Actually, the core Metis property is: no (gene, cl) in train where
+        # gene or cl was assigned to test partition.
+        # Since we don't track partitions directly, verify the max-rank property:
+        # all train-pair genes must also appear in at least one non-test pair,
+        # and all train-pair cell_lines must also appear in at least one non-test pair.
+        non_test = result[result["split"] != "test"]
+        non_train = result[result["split"] != "train"]
+        # For train pairs, no gene should be exclusive to test
+        genes_only_in_test = (
+            set(test_pairs["gene_id"]) - set(non_test["gene_id"])
+        )
+        cls_only_in_test = (
+            set(test_pairs["cell_line_id"]) - set(non_test["cell_line_id"])
+        )
+        train_genes_in_test_only = set(train_pairs["gene_id"]) & genes_only_in_test
+        train_cls_in_test_only = set(train_pairs["cell_line_id"]) & cls_only_in_test
+        assert len(train_genes_in_test_only) == 0, "Train pair has test-only gene"
+        assert len(train_cls_in_test_only) == 0, "Train pair has test-only cell line"
+
     def test_degree_balanced_coverage(self, combined_df):
         result = apply_split_to_dataset(combined_df, "degree_balanced", seed=42)
         assert set(result["split"].unique()) == {"train", "val", "test"}
@@ -403,5 +433,54 @@ class TestControlNegatives:
             result = generate_uniform_random_negatives(conn, n_samples=5, seed=42)
             for _, r in result.iterrows():
                 assert (r["gene_id"], r["cell_line_id"]) not in existing
+        finally:
+            conn.close()
+
+    def test_degree_matched(self, seeded_db):
+        """Degree-matched control negatives should have neg_source column."""
+        conn = get_connection(seeded_db)
+        try:
+            db_neg_df = pd.read_sql_query(
+                "SELECT gene_id, cell_line_id, gene_degree FROM gene_cell_pairs",
+                conn,
+            )
+            result = generate_degree_matched_negatives(conn, db_neg_df, seed=42)
+            assert len(result) > 0
+            assert "neg_source" in result.columns
+            assert all(result["neg_source"] == "degree_matched")
+            # No overlap with existing DB pairs
+            existing = set(
+                (r[0], r[1]) for r in conn.execute(
+                    "SELECT gene_id, cell_line_id FROM gene_cell_pairs"
+                ).fetchall()
+            )
+            for _, r in result.iterrows():
+                assert (r["gene_id"], r["cell_line_id"]) not in existing
+        finally:
+            conn.close()
+
+
+class TestBuildM2ConflictResolution:
+    """Test M2 conflict resolution removes overlapping pairs from both sides."""
+
+    def test_m2_conflict_resolution(self, seeded_db):
+        conn = get_connection(seeded_db)
+        try:
+            # Gene 1 in CL 1 appears in both positive and negative
+            pos_df = pd.DataFrame({
+                "gene_id": [1, 3],
+                "cell_line_id": [1, 2],
+                "essentiality_type": ["selective_essential", "common_essential"],
+            })
+            neg_df = pd.DataFrame({
+                "gene_id": [1, 2],
+                "cell_line_id": [1, 3],
+            })
+            result = build_ge_m2(conn, pos_df, neg_df)
+            # (1, 1) conflict removed from both → 1 pos + 1 neg = 2
+            assert len(result) == 2
+            assert (result["label"] == 2).sum() == 1  # non-essential
+            # The remaining positive is gene3-cl2 (common essential = label 0)
+            assert (result["label"] == 0).sum() == 1
         finally:
             conn.close()

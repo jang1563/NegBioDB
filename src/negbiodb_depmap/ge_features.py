@@ -1,10 +1,10 @@
 """Omics feature computation for GE domain ML models.
 
-Features per gene-cell_line pair (~75 dimensions):
-  Gene-level (8 dims): essentiality profile stats, fraction essential,
-    common essential flag, reference nonessential flag, RNAi concordance
-  Cell line (variable): lineage one-hot, disease one-hot, mutation burden
-  Gene × Cell line omics (3 dims): expression TPM, copy number, mutation indicator
+Features per gene-cell_line pair:
+  Gene-level (8 dims): mean/std/min/max gene effect, is_common_essential,
+    is_reference_nonessential, rnai_concordance_fraction, gene_degree
+  Cell line (variable): lineage one-hot, disease one-hot, cell_line_degree
+  Gene × Cell line omics (3 dims, optional): expression TPM, copy number, mutation indicator
 
 Omics files (OmicsExpression, OmicsCN, OmicsSomatic) are NOT stored in SQLite
 (too large). They are loaded directly from CSV during feature computation.
@@ -26,8 +26,8 @@ def compute_gene_features(conn) -> pd.DataFrame:
 
     Returns DataFrame indexed by gene_id with columns:
         mean_effect, std_effect, min_effect, max_effect,
-        fraction_essential, is_common_essential, is_reference_nonessential,
-        rnai_concordance_fraction
+        is_common_essential, is_reference_nonessential,
+        gene_degree, rnai_concordance_fraction
     """
     # Essentiality profile across cell lines
     query = """

@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=2:00:00
-#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/l2_preannotate_%j.log
-#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/l2_preannotate_%j.err
+#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/l2_preannotate_%j.log
+#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/l2_preannotate_%j.err
 
 # Pre-annotate L2 candidates with GPT-4o-mini for human correction.
 # 116 candidates, ~2 min total with OpenAI API.
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
+SCRATCH="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 

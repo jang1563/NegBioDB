@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=6:00:00
-#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_l3_judge_%j.log
-#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_l3_judge_%j.err
+#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_l3_judge_%j.log
+#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_l3_judge_%j.err
 
 # Run GE L3 LLM-as-Judge evaluation with Gemini API.
 # Judges all completed ge-l3_* runs in results/ge_llm/.
@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
+SCRATCH="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 

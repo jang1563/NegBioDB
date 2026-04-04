@@ -5,12 +5,12 @@
 [![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC_BY--SA_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-Approximately 90% of scientific experiments produce null or inconclusive results, yet the vast majority remain unpublished. NegBioDB systematically collects experimentally confirmed negative results across four biomedical domains and provides dual-track ML + LLM benchmarks to quantify the impact of this publication bias on AI models.
+Approximately 90% of scientific experiments produce null or inconclusive results, yet the vast majority remain unpublished. NegBioDB systematically collects experimentally confirmed negative results across five biomedical domains and provides dual-track ML + LLM benchmarks to quantify the impact of this publication bias on AI models.
 
 ## Key Features
 
-- **Four domains**: Drug-Target Interaction (DTI), Clinical Trial Failure (CT), Protein-Protein Interaction (PPI), Gene Essentiality (GE/DepMap)
-- **~61.6M negative results** across 4 SQLite databases (30.5M DTI + 133K CT + 2.2M PPI + 28.8M GE)
+- **Five domains**: Drug-Target Interaction (DTI), Clinical Trial Failure (CT), Protein-Protein Interaction (PPI), Gene Essentiality (GE/DepMap), Variant Pathogenicity (VP)
+- **~63.3M negative results** across 5 SQLite databases (30.5M DTI + 133K CT + 2.2M PPI + 28.8M GE + 1.68M VP core)
 - **Dual benchmark**: ML track (traditional prediction) + LLM track (biomedical NLP tasks)
 - **242 ML runs** + **321 LLM runs** completed across all domains
 - **Multiple split strategies**: random, cold-entity, temporal, scaffold, degree-balanced
@@ -25,7 +25,8 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 | **CT** | 132,925 | 177K interventions, 56K conditions | AACT, CTO, Open Targets, Shi & Du | ~500 MB |
 | **PPI** | 2,229,670 | 18.4K proteins | IntAct, HuRI, hu.MAP, STRING | 849 MB |
 | **GE** | 28,759,256 | 19,554 genes, 2,132 cell lines | DepMap (CRISPR, RNAi) | ~16 GB |
-| **Total** | **~61.6M** | | **14 sources** | **~38 GB** |
+| **VP** | 1,677,904 | 1.49M variants, 18.4K genes, 10K diseases | ClinVar, gnomAD, ClinGen | ~1.5 GB |
+| **Total** | **~63.3M** | | **17 sources** | **~39.5 GB** |
 
 *PPI DB total: 2,229,670; export rows after split filtering: 2,220,786.*
 
@@ -37,6 +38,7 @@ Approximately 90% of scientific experiments produce null or inconclusive results
 | CT | 4 sources | 108/108 runs | 80/80 runs | Complete |
 | PPI | 4 sources | 54/54 runs | 80/80 runs | Complete |
 | GE | 2 sources | 14/14 runs (seed 42) | 64/80 runs* | Seed 42 ML complete, LLM 4/5 models |
+| VP | 3 local sources loaded; HPC extras pending | Code complete, runs pending | Code complete, runs pending | Core ETL complete; gnomAD sites + scores + HPC model runs pending |
 
 *Llama 3.1-8B results pending HPC GPU availability; seeds 43/44 in progress.
 
@@ -142,6 +144,23 @@ uv run python scripts_depmap/fetch_gene_descriptions.py
 uv run python scripts_depmap/export_ge_ml_dataset.py
 ```
 
+### VP Domain (Variant Pathogenicity)
+
+```bash
+# Local sources
+PYTHONPATH=src uv run python scripts_vp/download_clinvar.py
+PYTHONPATH=src uv run python scripts_vp/download_gnomad.py
+PYTHONPATH=src uv run python scripts_vp/download_clingen.py
+
+# Local ETL
+PYTHONPATH=src uv run python scripts_vp/load_clinvar.py
+PYTHONPATH=src uv run python scripts_vp/load_gnomad.py --constraint data/vp/gnomad/gnomad.v4.1.constraint_metrics.tsv
+PYTHONPATH=src uv run python scripts_vp/load_clingen.py --csv data/vp/clingen_gene_disease_validity.csv
+
+# HPC-backed follow-up
+# See research/21_vp_hpc_runbook.md for gnomAD sites extraction and score extraction
+```
+
 ## ML Experiments
 
 ```bash
@@ -194,7 +213,7 @@ uv run python scripts_depmap/collect_ge_results.py --llm
 ## Testing
 
 ```bash
-# All tests (~1,000 total across 4 domains)
+# All tests across the codebase
 PYTHONPATH=src uv run pytest tests/ -v
 
 # By domain
@@ -275,7 +294,7 @@ NegBioDB/
 ├── migrations_ct/             # CT SQL schema migrations
 ├── migrations_ppi/            # PPI SQL schema migrations
 ├── migrations_depmap/         # GE SQL schema migrations
-├── tests/                     # Test suite (~1,000 tests across 4 domains)
+├── tests/                     # Test suite across 5 domains
 ├── docs/                      # Methodology notes and prompt appendices
 ├── paper/                     # LaTeX source (NeurIPS 2026 submission)
 ├── data/                      # SQLite databases (not in repo, ~38 GB)
@@ -284,7 +303,7 @@ NegBioDB/
 ├── config.yaml                # Pipeline configuration
 ├── Makefile                   # Build/pipeline commands
 ├── pyproject.toml             # Python project metadata
-├── experiment_results.md      # ML/LLM result tables (all 4 domains)
+├── experiment_results.md      # ML/LLM result tables
 ├── PROJECT_OVERVIEW.md        # Detailed project overview
 └── ROADMAP.md                 # Execution roadmap
 ```
@@ -390,7 +409,7 @@ If you use NegBioDB in your research, please cite:
 ```bibtex
 @misc{negbiodb2026,
   title={NegBioDB: A Negative Results Database and Dual ML/LLM Benchmark for Biomedical Sciences},
-  author={Jang, James},
+  author={Kim, JangKeun},
   year={2026},
   url={https://github.com/jang1563/NegBioDB}
 }

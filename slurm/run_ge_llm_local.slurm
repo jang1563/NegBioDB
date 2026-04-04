@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
-#SBATCH --output=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_llm_local_%j.log
-#SBATCH --error=${SCRATCH_DIR:-/path/to/scratch}/negbiodb/logs/ge_llm_local_%j.err
+#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_llm_local_%j.log
+#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/ge_llm_local_%j.err
 
 # Run GE LLM benchmark with local model (vLLM server).
 # Usage:
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
+SCRATCH="/athena/masonlab/scratch/users/jak4013"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 MODEL_DIR="${SCRATCH}/models"
@@ -30,20 +30,20 @@ FEWSHOT_SET="${FEWSHOT_SET:-0}"
 case "${MODEL}" in
     Qwen/Qwen2.5-7B-Instruct)
         MODEL_PATH="${MODEL}"
-        MAX_MODEL_LEN=16384
+        MAX_MODEL_LEN="${MAX_MODEL_LEN:-16384}"
         ;;
     meta-llama/Llama-3.1-8B-Instruct)
         MODEL_PATH="${MODEL}"
-        MAX_MODEL_LEN=4096
+        MAX_MODEL_LEN="${MAX_MODEL_LEN:-4096}"
         ;;
     Qwen/Qwen2.5-32B-Instruct-AWQ|qwen32b)
         MODEL_PATH="${MODEL_DIR}/Qwen2.5-32B-Instruct-AWQ"
-        MAX_MODEL_LEN=8192
+        MAX_MODEL_LEN="${MAX_MODEL_LEN:-8192}"
         ;;
     *)
         # Pass through as HuggingFace ID
         MODEL_PATH="${MODEL}"
-        MAX_MODEL_LEN=4096
+        MAX_MODEL_LEN="${MAX_MODEL_LEN:-4096}"
         ;;
 esac
 
@@ -52,10 +52,13 @@ export CONDA_PREFIX="${SCRATCH_ENV}"
 export PYTHONPATH="${PROJECT_DIR}/src"
 export HF_HOME="${SCRATCH}/hf_cache"
 # Provide CUDA libs (cudnn, cublas) for PyTorch/vLLM
-_NVIDIA_LIBS="${CONDA_PREFIX:-/path/to/conda}/miniconda3/envs/negbiodb-llm/lib/python3.11/site-packages/nvidia"
-for _d in "${_NVIDIA_LIBS}"/*/lib; do
-    [ -d "${_d}" ] && export LD_LIBRARY_PATH="${_d}:${LD_LIBRARY_PATH:-}"
-done
+_NVIDIA_LIBS="$(python -c 'import nvidia, os; print(os.path.dirname(nvidia.__file__))' 2>/dev/null || echo "")"
+if [[ -n "${_NVIDIA_LIBS}" ]]; then
+    for _d in "${_NVIDIA_LIBS}"/*/lib; do
+        [ -d "${_d}" ] && export LD_LIBRARY_PATH="${_d}:${LD_LIBRARY_PATH:-}"
+    done
+    echo "Added nvidia libs from ${_NVIDIA_LIBS}"
+fi
 # Load HuggingFace token for gated models (e.g., Llama).
 # Check standard cache, HF_HOME, and scratch root (in priority order).
 HF_TOKEN=""

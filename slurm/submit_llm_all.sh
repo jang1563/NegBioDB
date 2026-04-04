@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SBATCH="/opt/ohpc/pub/software/slurm/24.05.2/bin/sbatch"
-SCRATCH="${SCRATCH_DIR:-/path/to/scratch}"
+SCRATCH="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}"
 SLURM_DIR="${SCRATCH}/negbiodb/slurm"
 
 TASKS="l1 l4 l3"  # L2 deferred (needs gold annotations)
