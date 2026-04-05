@@ -259,11 +259,16 @@ def main(argv: list[str] | None = None) -> int:
         X_test_c = np.nan_to_num(X_test, nan=0.0)
         scaler = StandardScaler()
         X_train_c = scaler.fit_transform(X_train_c)
-        X_val_c = scaler.transform(X_val_c)
-        X_test_c = scaler.transform(X_test_c)
+        if len(X_val_c) > 0:
+            X_val_c = scaler.transform(X_val_c)
+        if len(X_test_c) > 0:
+            X_test_c = scaler.transform(X_test_c)
 
+        # Pass None for empty val sets (no early stopping for cold splits with empty val)
+        _X_val = X_val_c if len(X_val_c) > 0 else None
+        _y_val = y_val if len(y_val) > 0 else None
         model, history = train_mlp_vp(
-            X_train_c, y_train, X_val_c, y_val,
+            X_train_c, y_train, _X_val, _y_val,
             n_classes=n_classes, epochs=args.epochs, device=args.device,
         )
         import torch
