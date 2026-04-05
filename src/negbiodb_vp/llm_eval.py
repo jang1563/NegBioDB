@@ -24,6 +24,13 @@ from sklearn.metrics import accuracy_score, f1_score, matthews_corrcoef
 _VP_L1_LETTERS = {"A", "B", "C", "D"}
 
 
+def _s(val: object) -> str:
+    """Safely coerce a JSON field value to str; returns '' for None/float/NaN."""
+    if isinstance(val, str):
+        return val
+    return ""
+
+
 def parse_vp_l1_answer(response: str) -> str | None:
     """Extract single letter answer (A/B/C/D) from LLM response."""
     response = response.strip()
@@ -235,8 +242,8 @@ def evaluate_vp_l2(
         # Build gold variant map by (gene, hgvs) for matching
         gold_map: dict[tuple[str, str], dict] = {}
         for gv in gold_variants:
-            gene = (gv.get("gene") or "").strip().upper()
-            hgvs = (gv.get("hgvs") or "").strip()
+            gene = _s(gv.get("gene")).strip().upper()
+            hgvs = _s(gv.get("hgvs")).strip()
             if gene and hgvs:
                 gold_map[(gene, hgvs)] = gv
 
@@ -244,8 +251,8 @@ def evaluate_vp_l2(
         matched_pred = set()
         matched_gold = set()
         for pv in pred_variants:
-            pgene = (pv.get("gene") or "").strip().upper()
-            phgvs = (pv.get("hgvs") or "").strip()
+            pgene = _s(pv.get("gene")).strip().upper()
+            phgvs = _s(pv.get("hgvs")).strip()
             if not pgene or not phgvs:
                 continue
             key = (pgene, phgvs)
