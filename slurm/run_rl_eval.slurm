@@ -26,7 +26,8 @@ echo "Job ID: ${SLURM_JOB_ID}"
 echo "Adapter: ${ADAPTER}"
 echo "Domains: ${EVAL_DOMAINS}"
 
-source activate "${CONDA_ENV}"
+source /home/fs01/jak4013/miniconda3/miniconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV}"
 export PYTHONPATH=src:${PYTHONPATH:-}
 
 # === Step 1: Generate predictions using vLLM ===

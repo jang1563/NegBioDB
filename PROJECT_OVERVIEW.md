@@ -55,14 +55,16 @@ Four Biomedical Domains
 
 ---
 
-## Domain Status Summary (as of 2026-03-30)
+## Domain Status Summary (as of 2026-04-04)
 
 | Domain | DB Size | Negatives | ML Runs | LLM Runs | Status |
 |--------|---------|-----------|---------|----------|--------|
 | **DTI** | ~21 GB | 30,459,583 | 24/24 ✅ | 81/81 ✅ | Complete |
 | **CT** | ~500 MB | 132,925 | 108/108 ✅ | 80/80 ✅ | Complete |
 | **PPI** | 849 MB | 2,229,670 | 54/54 ✅ | 80/80 ✅ | Complete |
-| **GE** | ~16 GB | 28,759,256 | Seed 42 ✅ | 4/5 models ✅ | Near complete |
+| **GE** | ~16 GB | 28,759,256 | 42/42 ✅ | 80/80 ✅ | Complete |
+| **VP** | TBD | TBD | 0/54 | 0/80 | Code complete |
+| **DC** | TBD | TBD | 0/48 | 0/80 | Code complete |
 
 ---
 
@@ -137,7 +139,31 @@ Two sources: DepMap CRISPR (Chronos scores) and RNAi (DEMETER2)
 ### Key Results (partial — Llama pending)
 - **LLM L3:** zero-shot >> 3-shot (overall mean 4.5 vs 2.5) — same pattern as PPI.
 - **LLM L4:** Expected intermediate MCC (DepMap is widely studied; likely contamination present).
-- **ML:** Seed 42 complete; final aggregated results pending seeds 43/44.
+- **ML:** 42/42 complete (seeds 42/43/44); XGBoost random MCC≈0.998.
+
+---
+
+## DC Domain (Drug Combination Synergy)
+
+Three sources: DrugComb (Zenodo), NCI-ALMANAC (NCI), AZ-DREAM (Synapse)
+
+### Database
+- Entity pair: Drug A × Drug B × Cell Line (tripartite — first in NegBioDB)
+- Symmetric pair ordering: compound_a_id < compound_b_id (CHECK constraint)
+- Tiers: gold/silver/bronze/copper based on cell line count and source concordance
+
+### Benchmark Design
+- **ML models (4):** XGBoost-DC, MLP-DC, DeepSynergy-DC, DrugCombGNN
+- **ML splits (6):** random, cold_compound, cold_cell_line, cold_both, scaffold, leave_one_tissue_out
+- **LLM L1:** 4-way MCQ (1,200) — synergy class from ZIP thresholds
+- **LLM L2:** Mechanism extraction (500) — novel metric: mechanism_f1
+- **LLM L3:** Antagonism reasoning (200) — 4 judge dimensions
+- **LLM L4:** Tested/untested (475) — temporal groups with contamination detection
+
+### Status
+- **Code complete:** 304 tests passing (6 skipped for torch_geometric)
+- **Awaiting:** Data download (DrugComb, ALMANAC, DREAM) → ETL → HPC execution
+- **Design doc:** research/21_dc_drug_combination_design.md
 
 ---
 
@@ -165,10 +191,10 @@ Two sources: DepMap CRISPR (Chronos scores) and RNAi (DEMETER2)
 ### Cross-Domain LLM L4 Summary
 
 ```
-DTI (≤0.18) < PPI (0.33–0.44) < CT (0.48–0.56)
-                     ↑
-         Increasing task complexity
-         and LLM accessible signal
+DTI (≤0.18) < GE (≤0.22) < PPI (0.33–0.44) < CT (0.48–0.56) < DC (???)
+                                    ↑
+                      Increasing task complexity
+                      and LLM accessible signal
 ```
 
 ---
@@ -184,4 +210,7 @@ DTI (≤0.18) < PPI (0.33–0.44) < CT (0.48–0.56)
 | PPI domain complete (ML + LLM) | 2026-03-23 |
 | GE domain ETL + ML export | 2026-03-23 |
 | GE LLM (4/5 models) | 2026-03-24 |
+| GE domain complete (ML + LLM) | 2026-04-04 |
+| VP domain code complete | 2026-04-01 |
+| DC domain code complete | 2026-04-04 |
 | Public release (GitHub + HuggingFace) | 2026-03-30 |

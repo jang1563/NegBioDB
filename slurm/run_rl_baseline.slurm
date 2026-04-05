@@ -24,7 +24,8 @@ echo "=== NegBioRL Baseline Evaluation ==="
 echo "Model: ${BASE_MODEL}"
 echo "Domains: ${EVAL_DOMAINS}"
 
-source activate "${CONDA_ENV}"
+source /home/fs01/jak4013/miniconda3/miniconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV}"
 export PYTHONPATH=src:${PYTHONPATH:-}
 
 # Use vLLM for fast inference (no adapter)

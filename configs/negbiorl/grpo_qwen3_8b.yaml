@@ -7,7 +7,6 @@ num_generations: 8         # G=8 (ablate: 2, 4, 16)
 learning_rate: 1.0e-6
 epochs: 2
 batch_size: 2
-max_prompt_length: 2048
 max_completion_length: 512
 
 # LoRA
@@ -20,7 +19,7 @@ target_modules:
   - o_proj
 
 # vLLM
-use_vllm: true
+use_vllm: false
 
 # Rewards
 reward_weights: [1.0, 1.0, 0.2, 0.1]  # l1, l4, evidence, format

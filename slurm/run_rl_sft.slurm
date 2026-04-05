@@ -27,7 +27,8 @@ echo "Model: ${BASE_MODEL}"
 echo "Config: ${CONFIG}"
 echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader)"
 
-source activate "${CONDA_ENV}"
+source /home/fs01/jak4013/miniconda3/miniconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV}"
 export PYTHONPATH=src:${PYTHONPATH:-}
 
 # === Run ===

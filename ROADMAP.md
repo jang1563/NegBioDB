@@ -521,18 +521,30 @@ DTIContext {
 ## Phase 4: Domain Expansion (Months 36+)
 
 ```
-DTI (Phase 1 — COMPLETE)
+Central Dogma Pipeline:
+  VP (DNA) → GE (gene) → PPI (protein) → DTI (drug-target) → DC (drug combo) → CT (trial)
+
+DTI (Phase 1 — COMPLETE ✅)
   │
-  ├── Clinical Trial Failure (Phase 1-CT — COMPLETE ✅)
-  │     └── 132,925 failure results loaded, benchmarks designed
+  ├── CT: Clinical Trial Failure (COMPLETE ✅)
+  │     └── 132,925 failure results, 108 ML + 80 LLM runs
   │
-  ├── Gene Function (CRISPR KO/KD negatives)
-  │     └── Leverage CRISPR screen data, DepMap
+  ├── PPI: Protein-Protein Interaction (COMPLETE ✅)
+  │     └── 2.23M negative results, 54 ML + 80 LLM runs
   │
-  ├── Chemistry Domain Layer
+  ├── GE: Gene Essentiality / DepMap (COMPLETE ✅)
+  │     └── 28.8M negative results, 42 ML + 80 LLM runs
+  │
+  ├── VP: Variant Pathogenicity (CODE COMPLETE — awaiting data)
+  │     └── ClinVar/gnomAD sources, 277 tests passing
+  │
+  ├── DC: Drug Combination Synergy (CODE COMPLETE — awaiting data)
+  │     └── DrugComb/ALMANAC/DREAM, 304 tests passing, tripartite pairs
+  │
+  ├── Chemistry Domain Layer (future)
   │     └── Failed reactions, yield = 0 data
   │
-  └── Materials Science Domain Layer
+  └── Materials Science Domain Layer (future)
         └── HTEM DB integration, failed synthesis conditions
 ```
 
@@ -550,6 +562,10 @@ DTI (Phase 1 — COMPLETE)
 | ML baseline experiments | Week 5 (Mar 2026) | 18/18 runs complete, key findings confirmed | ✅ Done |
 | LLM benchmark infrastructure | Week 5 (Mar 2026) | L1–L4 datasets, prompts, eval, SLURM templates | ✅ Done |
 | LLM benchmark execution | Week 5-6 (Mar 2026) | 81/81 runs complete (9 models × 4 tasks + configs) | ✅ Done |
+| PPI domain complete | Week 6 (Mar 2026) | 2.23M negatives, 54 ML + 80 LLM | ✅ Done |
+| GE domain complete | Week 7 (Apr 2026) | 28.8M negatives, 42 ML + 80 LLM | ✅ Done |
+| VP domain code complete | Week 7 (Apr 2026) | 277 tests, awaiting data download | ✅ Done |
+| DC domain code complete | Week 7 (Apr 2026) | 304 tests, awaiting data download | ✅ Done |
 | Python library v0.1 | Month 8 | `pip install negbiodb` |
 | Web platform launch | Month 12 | Public access + leaderboard |
 | 100K+ entries | Month 24 | Scale milestone |

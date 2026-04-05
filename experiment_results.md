@@ -1,17 +1,19 @@
 # NegBioDB Experiment Results
 
-*Last updated: 2026-03-24*
+*Last updated: 2026-04-04*
 
 ## Cross-Domain Summary
 
-| Domain | Negatives | ML Status | LLM L1 (acc) | LLM L4 (MCC) |
-|--------|-----------|-----------|--------------|--------------|
-| DTI (Drug-Target Interaction) | 30,459,583 | 24/24 complete | Gemini 1.000 (3-shot) | ≤ 0.18 (near random) |
-| CT (Clinical Trial Failure) | 132,925 | 108/108 complete | Gemini 0.68 | Gemini 0.56 |
-| PPI (Protein-Protein Interaction) | 2,229,670 | 54/54 complete | ~1.000 (3-shot artifact) | Llama 0.441 |
-| GE (Gene Essentiality / DepMap) | 28,759,256 | Seed 42 complete | 4/5 models complete | Pending (Llama) |
+| Domain | Negatives | ML Best AUROC | LLM L1 (MCC 3-shot) | LLM L4 (MCC 3-shot) |
+|--------|-----------|---------------|----------------------|----------------------|
+| DTI (Drug-Target Interaction) | 30,459,583 | ~1.000 (trivially separable) | Gemini 1.000 (contamination) | ≤ 0.18 (near random) |
+| CT (Clinical Trial Failure) | 132,925 | ~1.000 (trivially separable) | Gemini 0.43 | Gemini 0.56 |
+| PPI (Protein-Protein Interaction) | 2,229,670 | ~0.96 random | ~1.000 (in-context artifact) | Llama 0.441 |
+| GE (Gene Essentiality / DepMap) | 28,759,256 | ~1.000 trivial / ~0.95 cold | Gemini/GPT 0.397 | Gemini 0.221 |
+| VP (Variant Pathogenicity) | TBD | TBD | TBD | TBD |
+| DC (Drug Combination Synergy) | TBD | TBD | TBD | TBD |
 
-**Key insight:** LLM discrimination ability (L4 MCC) increases with task complexity: DTI (~0.05–0.18) < PPI (~0.33–0.44) < CT (~0.48–0.56). All domains show evidence of training data contamination in PPI/CT.
+**Key insight:** LLM discrimination ability (L4 MCC) increases with task complexity: DTI (~0.05–0.18) < GE (~0.05–0.22) < PPI (~0.33–0.44) < CT (~0.48–0.56). DC expected in PPI–CT range. All domains show evidence of training data contamination.
 
 ---
 
@@ -142,27 +144,69 @@ Aggregated over 3 seeds (source: `results/ppi/table1_aggregated.md`):
 
 ## GE Domain (Gene Essentiality / DepMap)
 
-**Status as of 2026-03-24:** ETL+ML complete, LLM 4/5 models done (Llama pending), L3 judged.
+**Status as of 2026-04-04:** COMPLETE — ML 42/42 (seeds 42/43/44), LLM 80/80 (all 5 models), L3 judged.
 
 ### Database
 - 28,759,256 negative results (CRISPR 19.7M + RNAi 9.1M)
 - Final tiers: Gold 753,878 / Silver 18,608,686 / Bronze 9,396,692
 - 22,549,910 aggregated pairs (19,554 genes × 2,132 cell lines)
 
-### ML Results (Seed 42 complete; seeds 43/44 in progress)
-5 splits: random/cold_gene/cold_cell_line/cold_both/degree_balanced
-Models: XGBoost, MLPFeatures
-*Aggregated results (3 seeds) pending; individual seed 42 results available in `results/ge/`.*
+### ML Results (42/42 complete — seeds 42/43/44)
+5 splits: random/cold_gene/cold_cell_line/cold_both/degree_balanced; 2 models: XGBoost, MLP
+| Model | Split | NegBioDB MCC | Uniform Random MCC |
+|-------|-------|--------------|-------------------|
+| XGBoost | random | ~0.998 | ~0.998 |
+| XGBoost | cold_both | ~0.945 | — |
+| MLP | random | ~0.919 | ~0.893 |
+| MLP | cold_both | ~0.893 | — |
 
-### LLM Results (4/5 models complete — Llama pending)
-| Task | Models Done | Key Finding |
-|------|-------------|-------------|
-| L1 (4-way MCQ, 1,200 items) | Haiku, Gemini, GPT, Qwen | Results pending Llama |
-| L2 (field extraction, 500 items) | Haiku, Gemini, GPT, Qwen | Results pending Llama |
-| L3 (reasoning, 200 items, judged) | Haiku, Gemini, GPT, Qwen | zero-shot >> 3-shot (4.5 vs 2.5 overall mean) |
-| L4 (discrimination, 475 items) | Haiku, Gemini, GPT, Qwen | Results pending Llama |
+**Key finding:** XGBoost random MCC≈0.998 (trivially separable, same as DTI/CT). Cold splits show meaningful generalization degradation.
 
-**Expected key finding:** GE L4 MCC likely intermediate between PPI and DTI given DepMap is a public widely-studied dataset with high training data overlap.
+### LLM Results (80/80 complete)
+| Task | Haiku | Gemini | GPT | Llama | Qwen |
+|------|-------|--------|-----|-------|------|
+| L1 MCC (3-shot) | 0.374 | **0.397** | **0.397** | 0.355 | 0.141 |
+| L1 MCC (zero-shot) | 0.380 | 0.295 | 0.275 | 0.222 | 0.149 |
+| L2 field_f1 (3-shot) | 0.905 | 0.903 | 0.905 | 0.905 | 0.905 |
+| L3 overall (zero-shot /5.0) | 4.561 | **4.491** | 3.614 | 3.494 | 3.744 |
+| L3 overall (3-shot /5.0) | 3.127 | 2.526 | 2.508 | 2.126 | 2.361 |
+| L4 MCC (3-shot) | 0.194 | **0.221** | 0.141 | 0.181 | 0.049 |
+| L4 MCC (zero-shot) | -0.121 | 0.138 | -0.034 | 0.000 | -0.027 |
+
+**Key findings:**
+- L1: all models near random even 3-shot (MCC 0.14–0.40); Qwen worst (0.141)
+- L2: field_f1 ~0.90 uniformly after schema fix (old fewshot examples caused schema_compliance=0)
+- L3: zero-shot >> 3-shot (4.5 vs 2.1–3.1); same pattern as PPI (in-context examples hurt reasoning)
+- L4: near random (MCC ≤ 0.22); all models worse than PPI/CT — GE is the hardest discrimination task
+
+---
+
+## DC Domain (Drug Combination Synergy)
+
+**Status as of 2026-04-04:** Code complete (304 tests, 6 skipped). Awaiting data download + HPC execution.
+
+### Database Design
+- **Entity pair:** Drug A × Drug B × Cell Line (tripartite — first in NegBioDB)
+- **Sources:** DrugComb (739K combos), NCI-ALMANAC (312K combos), AZ-DREAM (11.6K combos)
+- **Tiers:** gold/silver/bronze/copper (based on cell line count + source concordance)
+- **Symmetric ordering:** compound_a_id < compound_b_id (CHECK constraint)
+
+### ML Benchmark (48 runs planned)
+- **Models (4):** XGBoost-DC, MLP-DC, DeepSynergy-DC, DrugCombGNN
+- **Splits (6):** random, cold_compound, cold_cell_line, cold_both, scaffold, leave_one_tissue_out
+- **Tasks:** DC-M1 (binary), DC-M2 (3-class)
+
+### LLM Benchmark (80 runs planned)
+- **L1:** 4-way MCQ (1,200) — classify synergy class from drug pair context
+- **L2:** Mechanism extraction (500) — **novel metric: mechanism_f1** (mechanism_accuracy + pathway_f1)
+- **L3:** Antagonism reasoning (200) — 4 judge dimensions (mechanistic_reasoning, pathway_analysis, pharmacological_context, therapeutic_relevance)
+- **L4:** Tested/untested discrimination (475) — 4 temporal groups with contamination detection
+
+### Novel Contributions
+- **mechanism_f1:** First metric combining mechanism of interaction accuracy with pathway matching F1
+- **leave_one_tissue_out split:** Novel split strategy holding out entire tissue types
+- **Tripartite entity pairs:** Drug A × Drug B × Cell Line — most complex entity structure in NegBioDB
+- **Antagonism benchmark:** First benchmark focused on predicting drug combination failure
 
 ---
 
@@ -170,7 +214,7 @@ Models: XGBoost, MLPFeatures
 
 ### ML Evaluation Protocol
 - **Metrics:** AUROC (primary), LogAUC (early enrichment), AUPRC, MCC, BEDROC
-- **Seeds:** 3 seeds (42, 43, 44) for statistical robustness (except GE seed 42 only so far)
+- **Seeds:** 3 seeds (42, 43, 44) for statistical robustness (all domains complete)
 - **Negative types:** NegBioDB (structured negatives) vs control negatives (uniform_random, degree_matched)
 - **Splits:** Random → Cold (one entity unseen) → Cold-Both (both entities unseen, hardest)
 

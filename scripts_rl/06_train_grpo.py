@@ -34,7 +34,6 @@ def main():
     parser.add_argument("--learning-rate", type=float, default=1e-6)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--max-prompt-length", type=int, default=2048)
     parser.add_argument("--max-completion-length", type=int, default=512)
     parser.add_argument("--lora-r", type=int, default=64)
     parser.add_argument("--lora-alpha", type=int, default=128)
@@ -70,9 +69,36 @@ def main():
     # Model — either base or SFT-adapted
     model_id = args.base_model
     if args.sft_adapter:
-        print(f"Loading SFT adapter from {args.sft_adapter}")
-        # When using SFT adapter, pass it as the model and GRPOTrainer handles merging
-        model_id = str(args.sft_adapter)
+        adapter_path = args.sft_adapter
+        # Check for /final subdirectory (SFT saves adapter there)
+        if (adapter_path / "final" / "adapter_config.json").exists():
+            adapter_path = adapter_path / "final"
+        print(f"Merging SFT adapter from {adapter_path}")
+
+        # GRPOTrainer calls AutoModelForCausalLM.from_pretrained(model_id),
+        # which requires a full model directory (not a LoRA-only adapter).
+        # Merge the LoRA adapter into the base model and save for GRPO use.
+        merged_dir = adapter_path.parent.parent / f"merged_{adapter_path.parent.name}"
+        if not (merged_dir / "config.json").exists():
+            import torch
+            from peft import PeftModel
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            with open(adapter_path / "adapter_config.json") as _f:
+                _base = json.load(_f)["base_model_name_or_path"]
+            print(f"  Loading base model {_base} for merge...")
+            _base_model = AutoModelForCausalLM.from_pretrained(
+                _base, torch_dtype=torch.bfloat16, device_map="cpu"
+            )
+            _peft = PeftModel.from_pretrained(_base_model, str(adapter_path))
+            _merged = _peft.merge_and_unload()
+            _merged.save_pretrained(str(merged_dir))
+            AutoTokenizer.from_pretrained(str(adapter_path)).save_pretrained(str(merged_dir))
+            del _merged, _peft, _base_model
+            torch.cuda.empty_cache()
+            print(f"  Merged model saved to {merged_dir}")
+        else:
+            print(f"  Using cached merged model at {merged_dir}")
+        model_id = str(merged_dir)
 
     # LoRA
     lora_config = LoraConfig(
@@ -95,7 +121,7 @@ def main():
         learning_rate=config.get("learning_rate", args.learning_rate),
         num_train_epochs=config.get("epochs", args.epochs),
         per_device_train_batch_size=config.get("batch_size", args.batch_size),
-        max_prompt_length=config.get("max_prompt_length", args.max_prompt_length),
+        generation_batch_size=config.get("generation_batch_size", num_gen),
         max_completion_length=config.get("max_completion_length", args.max_completion_length),
         bf16=True,
         gradient_checkpointing=True,
@@ -105,17 +131,17 @@ def main():
     )
 
     # Reward functions — use trl multi-reward API
-    reward_funcs = config.get("reward_funcs", DEFAULT_REWARD_FUNCS)
+    # Note: reward_weights belongs in GRPOConfig, not GRPOTrainer
     reward_weights = config.get("reward_weights", DEFAULT_REWARD_WEIGHTS)
+    grpo_config.reward_weights = reward_weights
 
     print(f"GRPO config: G={num_gen}, lr={grpo_config.learning_rate}, "
           f"epochs={grpo_config.num_train_epochs}, vLLM={grpo_config.use_vllm}")
-    print(f"Rewards: {len(reward_funcs)} functions, weights={reward_weights}")
+    print(f"Rewards: {len(DEFAULT_REWARD_FUNCS)} functions, weights={reward_weights}")
 
     trainer = GRPOTrainer(
         model=model_id,
-        reward_funcs=reward_funcs,
-        reward_weights=reward_weights,
+        reward_funcs=DEFAULT_REWARD_FUNCS,
         args=grpo_config,
         train_dataset=dataset,
         peft_config=lora_config,

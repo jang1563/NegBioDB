@@ -289,12 +289,22 @@ def _open_table_reader(path: Path):
 
 
 def _make_reader(fh):
-    header = fh.readline()
-    if not header:
-        raise ValueError("Empty score table")
+    # Skip ## comment/metadata lines (e.g. CADD starts with ##CADD GRCh38-v1.7...)
+    header = ""
+    while True:
+        line = fh.readline()
+        if not line:
+            raise ValueError("Empty score table")
+        if line.startswith("##"):
+            continue
+        header = line
+        break
+    # Strip leading # from header line (e.g. CADD uses '#Chrom\tPos\t...')
+    if header.startswith("#"):
+        header = header[1:]
     delimiter = "\t" if header.count("\t") >= header.count(",") else ","
-    fh.seek(0)
-    return csv.DictReader(fh, delimiter=delimiter)
+    fieldnames = [f.strip() for f in header.split(delimiter)]
+    return csv.DictReader(fh, fieldnames=fieldnames, delimiter=delimiter)
 
 
 def _score_key(
