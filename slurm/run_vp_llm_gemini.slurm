@@ -19,7 +19,7 @@ SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 
 TASK="${TASK:-vp-l1}"
-MODEL="${MODEL:-gemini-2.0-flash}"
+MODEL="${MODEL:-gemini-2.5-flash}"
 CONFIG="${CONFIG:-zero-shot}"
 FEWSHOT_SET="${FEWSHOT_SET:-0}"
 
