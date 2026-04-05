@@ -37,6 +37,8 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--max-tokens", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.80,
+                        help="vLLM GPU memory utilization (default 0.80; reduce if OOM)")
     args = parser.parse_args()
 
     # Lazy imports for HPC
@@ -49,6 +51,7 @@ def main():
         enable_lora=True,
         max_lora_rank=64,
         trust_remote_code=True,
+        gpu_memory_utilization=args.gpu_memory_utilization,
     )
     lora_request = LoRARequest("negbiorl", 1, str(args.adapter))
     sampling_params = SamplingParams(

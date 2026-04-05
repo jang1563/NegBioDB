@@ -12,6 +12,7 @@
 ADAPTER="${ADAPTER:?Must set ADAPTER path}"
 BASE_MODEL="${BASE_MODEL:-Qwen/Qwen3-8B}"
 EVAL_DOMAINS="${EVAL_DOMAINS:-dti ct ppi ge vp}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.80}"
 
 SCRATCH="/athena/masonlab/scratch/users/jak4013"
 CONDA_ENV="${SCRATCH}/conda_env/negbiorl-train"
@@ -36,6 +37,7 @@ python scripts_rl/10_generate_predictions.py \
     --adapter "${ADAPTER}" \
     --base-model "${BASE_MODEL}" \
     --domains ${EVAL_DOMAINS} \
+    --gpu-memory-utilization "${GPU_MEM_UTIL}" \
     --output-dir "${OUTPUT_DIR}"
 
 # === Step 2: Evaluate ===
