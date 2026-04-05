@@ -289,19 +289,30 @@ def _open_table_reader(path: Path):
 
 
 def _make_reader(fh):
-    # Skip ## comment/metadata lines (e.g. CADD starts with ##CADD GRCh38-v1.7...)
-    header = ""
+    # Skip comment/metadata lines and find the actual header row.
+    # Handles:
+    #   CADD:          ##CADD GRCh38-v1.7\n  (double-#) then  #Chrom\tPos\t...
+    #   AlphaMissense: # Copyright ...\n      (single-#) then  #CHROM\tPOS\t...
+    #   REVEL (zip):   no comment lines at all
+    # Strategy: a line starting with '#' is a header iff it has ≥3 delimiter-
+    # separated fields after stripping the '#'; otherwise it is a comment.
     while True:
         line = fh.readline()
         if not line:
             raise ValueError("Empty score table")
-        if line.startswith("##"):
-            continue
-        header = line
-        break
-    # Strip leading # from header line (e.g. CADD uses '#Chrom\tPos\t...')
-    if header.startswith("#"):
-        header = header[1:]
+        if not line.startswith("#"):
+            # Plain data/header line (no # prefix)
+            header = line
+            break
+        # Strip all leading '#' and surrounding whitespace to inspect contents
+        stripped = line.lstrip("#").strip()
+        tab_count = stripped.count("\t")
+        comma_count = stripped.count(",")
+        if max(tab_count, comma_count) >= 2:
+            # Looks like a tabular header (≥3 fields)
+            header = stripped
+            break
+        # Otherwise it's a prose comment — skip it
     delimiter = "\t" if header.count("\t") >= header.count(",") else ","
     fieldnames = [f.strip() for f in header.split(delimiter)]
     return csv.DictReader(fh, fieldnames=fieldnames, delimiter=delimiter)
