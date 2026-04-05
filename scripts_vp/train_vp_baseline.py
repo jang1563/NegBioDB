@@ -251,11 +251,16 @@ def main(argv: list[str] | None = None) -> int:
 
     elif args.model == "mlp":
         from negbiodb_vp.models.mlp_features import train_mlp_vp
+        from sklearn.preprocessing import StandardScaler
 
-        # Replace NaN with sentinel for MLP
-        X_train_c = np.nan_to_num(X_train, nan=-1.0)
-        X_val_c = np.nan_to_num(X_val, nan=-1.0)
-        X_test_c = np.nan_to_num(X_test, nan=-1.0)
+        # Replace NaN with 0 then standardize (required: position ranges to 2.5e8)
+        X_train_c = np.nan_to_num(X_train, nan=0.0)
+        X_val_c = np.nan_to_num(X_val, nan=0.0)
+        X_test_c = np.nan_to_num(X_test, nan=0.0)
+        scaler = StandardScaler()
+        X_train_c = scaler.fit_transform(X_train_c)
+        X_val_c = scaler.transform(X_val_c)
+        X_test_c = scaler.transform(X_test_c)
 
         model, history = train_mlp_vp(
             X_train_c, y_train, X_val_c, y_val,
