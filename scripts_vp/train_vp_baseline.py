@@ -41,9 +41,20 @@ _trapezoid = getattr(np, "trapezoid", getattr(np, "trapz", None))
 
 
 META_COLS = {
-    "pair_id", "variant_id", "disease_id", "gene_symbol", "hgvs_protein",
-    "consequence_type", "disease_name", "medgen_cui", "Y",
-    "confidence_tier", "num_submissions", "num_submitters", "has_conflict",
+    # Identifiers
+    "pair_id", "variant_id", "disease_id", "clinvar_variation_id", "rs_id", "entrez_id",
+    # Variant descriptors (strings, not numeric features)
+    "chromosome", "ref_allele", "alt_allele", "variant_type",
+    "hgvs_coding", "hgvs_protein", "consequence_type",
+    "alphamissense_class",
+    # Gene/disease descriptors
+    "gene_symbol", "disease_name", "medgen_cui", "hgnc_id",
+    "clingen_validity", "gene_moi",
+    # Submission metadata
+    "confidence_tier", "best_evidence_type", "best_classification",
+    "num_submissions", "num_submitters", "has_conflict",
+    # Label
+    "Y",
 }
 
 
@@ -202,7 +213,23 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Dataset not found: %s", parquet_path)
         return 1
 
+    # Split columns in the parquet use seed-suffixed names (e.g., split_random_s42, split_temporal).
+    # Try exact match first, then look for a matching prefix using schema metadata only.
     split_col = f"split_{args.split}"
+    import pyarrow.parquet as pq
+    all_cols = pq.read_schema(parquet_path).names
+    if split_col not in all_cols:
+        candidates = [c for c in all_cols if c.startswith(f"split_{args.split}")]
+        if len(candidates) == 1:
+            split_col = candidates[0]
+            logger.info("Resolved split column: %s -> %s", f"split_{args.split}", split_col)
+        elif len(candidates) > 1:
+            logger.error("Ambiguous split columns for '%s': %s", args.split, candidates)
+            return 1
+        else:
+            logger.error("Split column 'split_%s' not found. Available: %s",
+                         args.split, [c for c in all_cols if c.startswith("split_")])
+            return 1
     run_name = f"{args.model}_{args.dataset}_{args.split}_seed{args.seed}"
     run_dir = args.output_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
