@@ -47,15 +47,14 @@ def main(argv: list[str] | None = None) -> int:
 
     rng = np.random.RandomState(args.seed)
 
-    # Load candidates with ACMG criteria
+    # Load candidates (acmg_criteria not available in vp_negative_results; gold labels use empty list)
     df = load_vp_candidate_pool(
         args.db,
         tier_filter="IN ('gold', 'silver', 'bronze')",
         require_scores=True,
-        extra_where="nr.acmg_criteria IS NOT NULL AND nr.acmg_criteria != '[]'",
         limit=N_TOTAL * 3,
     )
-    logger.info("Candidates with ACMG criteria: %d", len(df))
+    logger.info("Candidates loaded: %d", len(df))
 
     # If not enough with criteria, also include without
     if len(df) < N_TOTAL:

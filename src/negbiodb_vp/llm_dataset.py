@@ -127,7 +127,7 @@ def load_vp_candidate_pool(
         nr.result_id, nr.source_db, nr.confidence_tier,
         nr.classification, nr.evidence_type,
         nr.submission_year, nr.has_conflict,
-        nr.num_benign_criteria, nr.acmg_criteria,
+        nr.num_benign_criteria,
         v.variant_id, v.chromosome, v.position,
         v.ref_allele, v.alt_allele,
         v.variant_type, v.consequence_type,
