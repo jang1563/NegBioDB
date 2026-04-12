@@ -19,6 +19,7 @@ PROJECT_DIR="${SCRATCH}/negbiodb"
 SCRATCH_ENV_PYTHON="${SCRATCH}/conda_env/negbiodb-ml/bin/python"
 HOME_ENV_PYTHON="/home/fs01/jak4013/miniconda3/miniconda3/envs/negbiodb-ml/bin/python"
 PYTHON_BIN="${PYTHON_BIN:-}"
+SKIP_HMDB="${SKIP_HMDB:-0}"
 
 if [[ -z "${PYTHON_BIN}" ]]; then
     if [[ -x "${SCRATCH_ENV_PYTHON}" ]]; then
@@ -38,12 +39,17 @@ echo "=== MD Domain Ingest Pipeline ==="
 echo "Job ID: ${SLURM_JOB_ID}"
 echo "Start: $(date)"
 echo "Python: ${PYTHON_BIN}"
+echo "Skip HMDB: ${SKIP_HMDB}"
 
 cd "${PROJECT_DIR}"
 
 # Step 1: Download HMDB (internal cache only — CC BY-NC 4.0, not redistributed)
-echo "--- Step 1: HMDB internal cache ---"
-"${PYTHON_BIN}" scripts_md/01_download_hmdb.py
+if [[ "${SKIP_HMDB}" == "1" ]]; then
+    echo "--- Step 1: HMDB internal cache (skipped) ---"
+else
+    echo "--- Step 1: HMDB internal cache ---"
+    "${PYTHON_BIN}" scripts_md/01_download_hmdb.py
+fi
 
 # Step 2: MetaboLights ingest
 echo "--- Step 2: MetaboLights ---"

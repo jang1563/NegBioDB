@@ -25,8 +25,14 @@ HMDB_ZIP_PATH = _PROJECT_ROOT / "data" / "hmdb_metabolites.zip"
 
 def download_hmdb_xml(dest_path: Path) -> None:
     """Download HMDB full metabolite XML (zipped)."""
-    import urllib.request
     import zipfile
+    import requests
+
+    try:
+        import certifi
+        verify = certifi.where()
+    except ImportError:
+        verify = True
 
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     zip_path = dest_path.parent / "hmdb_metabolites.zip"
@@ -35,7 +41,22 @@ def download_hmdb_xml(dest_path: Path) -> None:
         logger.info("HMDB zip already downloaded: %s", zip_path)
     else:
         logger.info("Downloading HMDB metabolites from %s ...", HMDB_XML_URL)
-        urllib.request.urlretrieve(HMDB_XML_URL, zip_path)
+        try:
+            with requests.get(
+                HMDB_XML_URL,
+                stream=True,
+                timeout=600,
+                verify=verify,
+            ) as resp:
+                resp.raise_for_status()
+                with open(zip_path, "wb") as fh:
+                    for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            fh.write(chunk)
+        except Exception:
+            if zip_path.exists():
+                zip_path.unlink()
+            raise
         logger.info("Downloaded: %s (%.1f MB)", zip_path, zip_path.stat().st_size / 1e6)
 
     # Extract XML
