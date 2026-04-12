@@ -14,6 +14,7 @@ set -euo pipefail
 
 SCRATCH="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-ml"
+HOME_ENV="/home/fs01/jak4013/miniconda3/miniconda3/envs/negbiodb-ml"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 
 TASK="${TASK:-m1}"
@@ -21,17 +22,33 @@ SPLIT="${SPLIT:-random}"
 SEED="${SEED:-42}"
 MODEL_TYPE="${MODEL_TYPE:-xgboost}"
 
-export PATH="${SCRATCH_ENV}/bin:${PATH}"
-export CONDA_PREFIX="${SCRATCH_ENV}"
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [[ -z "${PYTHON_BIN}" ]]; then
+    if [[ -x "${SCRATCH_ENV}/bin/python" ]]; then
+        PYTHON_BIN="${SCRATCH_ENV}/bin/python"
+    elif [[ -x "${HOME_ENV}/bin/python" ]]; then
+        PYTHON_BIN="${HOME_ENV}/bin/python"
+    else
+        echo "ERROR: Could not find negbiodb-ml python interpreter."
+        echo "Checked ${SCRATCH_ENV}/bin/python and ${HOME_ENV}/bin/python"
+        exit 1
+    fi
+fi
+
+ENV_ROOT="$(cd "$(dirname "${PYTHON_BIN}")/.." && pwd)"
+
+export PATH="${ENV_ROOT}/bin:${PATH}"
+export CONDA_PREFIX="${ENV_ROOT}"
 export PYTHONPATH="${PROJECT_DIR}/src"
 
 echo "=== MD ML Baseline Training ==="
 echo "Task: ${TASK}, Split: ${SPLIT}, Seed: ${SEED}, Model: ${MODEL_TYPE}"
 echo "Start: $(date)"
+echo "Python: ${PYTHON_BIN}"
 
 cd "${PROJECT_DIR}"
 
-python - <<'PYEOF'
+"${PYTHON_BIN}" - <<'PYEOF'
 import sys
 import json
 import numpy as np
