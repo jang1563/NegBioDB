@@ -10,6 +10,17 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+*.db-shm
+*.db-wal
+*.zst
+
+# HMDB internal cache (CC BY-NC 4.0 — never redistribute)
+data/hmdb_metabolites.zip
+data/hmdb_metabolites.xml.gz
+data/hmdb_cache.db
+
+# uv caches
+.uv-cache-*/
 
 # Python
 __pycache__/
@@ -46,6 +57,17 @@ htmlcov/
 # Internal planning documents (not for public release)
 research/
 NeurIPS_DB_Track_Research.md
+
+# Handoff / internal session notes (ephemeral, not for public release)
+*_HANDOFF_*.md
+
+# Spinout project (separate commercial venture — not part of the benchmark)
+scripts/spinout/
+slurm/run_spinout_phase1.slurm
+tests/test_spinout_analyses.py
+
+# Auto-generated reference manifest
+reference-manifest.json
 
 # Binary files (PDFs) — not suitable for git/HuggingFace datasets
 paper/main.pdf
