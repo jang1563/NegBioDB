@@ -213,8 +213,12 @@ def test_detect_biofluid(details, expected):
 
 # ── fetch_results (mocked) ────────────────────────────────────────────────────
 
-def test_fetch_results_returns_rows_with_stats(monkeypatch):
-    """fetch_results should return rows that have p-value or FDR."""
+def test_fetch_results_returns_all_named_rows(monkeypatch):
+    """fetch_results retains rows even when per-row stats are missing.
+
+    NMDR's /metabolites endpoint rarely includes p-values — no-stats rows
+    are kept so downstream ingest can mark them as copper tier.
+    """
     import negbiodb_md.etl_nmdr as nmdr_mod
 
     def mock_get(endpoint):
@@ -222,22 +226,22 @@ def test_fetch_results_returns_rows_with_stats(monkeypatch):
             "metabolites": [
                 {"metabolite_name": "glucose", "p_value": "0.003", "fdr": "0.01"},
                 {"metabolite_name": "alanine", "p_value": "0.35", "fdr": "0.55"},
-                {"metabolite_name": "leucine", "p_value": None, "fdr": None},  # no stats
+                {"metabolite_name": "leucine", "p_value": None, "fdr": None},
             ]
         }
 
     monkeypatch.setattr(nmdr_mod, "_get", mock_get)
     rows = fetch_results("ST000001")
-    # Only rows WITH statistics (p_value or fdr) should be returned
-    assert len(rows) == 2
+    assert len(rows) == 3
     names = [r["metabolite_name"] for r in rows]
-    assert "glucose" in names
-    assert "alanine" in names
-    assert "leucine" not in names
+    assert set(names) == {"glucose", "alanine", "leucine"}
+    leucine = next(r for r in rows if r["metabolite_name"] == "leucine")
+    assert leucine["p_value"] is None
+    assert leucine["fdr"] is None
 
 
-def test_fetch_results_empty_on_no_stats(monkeypatch):
-    """fetch_results should return [] if no rows have statistics."""
+def test_fetch_results_keeps_rows_without_stats(monkeypatch):
+    """Named rows without stats are preserved for copper-tier assignment."""
     import negbiodb_md.etl_nmdr as nmdr_mod
 
     def mock_get(endpoint):
@@ -250,7 +254,8 @@ def test_fetch_results_empty_on_no_stats(monkeypatch):
 
     monkeypatch.setattr(nmdr_mod, "_get", mock_get)
     rows = fetch_results("ST000001")
-    assert rows == []
+    assert len(rows) == 2
+    assert all(r["p_value"] is None and r["fdr"] is None for r in rows)
 
 
 def test_fetch_results_parses_p_values(monkeypatch):

@@ -43,10 +43,14 @@ _HUMAN_TAXA = {"homo sapiens", "human", "9606"}
 
 
 def _get(url: str, params: dict | None = None) -> dict | list | None:
-    """HTTP GET with retry."""
+    """HTTP GET with retry. 401 (permission denied) is treated as a silent skip."""
     for attempt in range(_MAX_RETRIES):
         try:
             resp = requests.get(url, params=params, timeout=_REQUEST_TIMEOUT)
+            # MetaboLights lists all study IDs via /studies but restricts many via 401.
+            # Treat 401 as "skip this study", not a retryable failure.
+            if resp.status_code == 401:
+                return None
             resp.raise_for_status()
             return resp.json()
         except requests.RequestException as exc:
@@ -62,7 +66,7 @@ def _get(url: str, params: dict | None = None) -> dict | list | None:
 
 def list_public_studies() -> list[str]:
     """Return list of all public MetaboLights study IDs (e.g. ['MTBLS1', ...])."""
-    data = _get(f"{_BASE_URL}/studies/public")
+    data = _get(f"{_BASE_URL}/studies", params={"studyStatus": "Public"})
     if data is None:
         return []
     # Response is {"content": ["MTBLS1", "MTBLS2", ...], ...}
@@ -78,46 +82,57 @@ def list_public_studies() -> list[str]:
 def fetch_study_details(study_id: str) -> dict | None:
     """Fetch high-level details for one MetaboLights study.
 
+    Parses the current (2026) MetaboLights API response structure:
+        data["isaInvestigation"]["studies"][0] contains title/description/designs/factors/people
+        data["isaInvestigation"]["studies"][0]["studyDesignDescriptors"] lists organism/disease terms
+
     Returns dict with keys:
-        study_id, title, description, organism, factors, assay_count
+        study_id, title, description, organisms, factors, pmid
     or None on failure.
     """
     data = _get(f"{_BASE_URL}/studies/{study_id}")
-    if data is None:
+    if data is None or not isinstance(data, dict):
         return None
 
-    # Navigate MetaboLights JSON structure
-    study = data.get("content", data) if isinstance(data, dict) else data
+    # Current API nests study metadata under isaInvestigation.studies[0]
+    isa = data.get("isaInvestigation") or {}
+    studies = isa.get("studies") or []
+    study = studies[0] if studies else {}
     if not isinstance(study, dict):
         return None
 
-    title = study.get("title") or ""
+    title = study.get("title") or isa.get("title") or ""
     desc = (study.get("description") or "").strip()
 
-    # Organism
-    organisms = []
-    for org_block in study.get("organism", []):
-        if isinstance(org_block, dict):
-            name = org_block.get("Organism", "") or org_block.get("organism", "")
-            if name:
-                organisms.append(name.lower().strip())
+    # Extract organism and disease terms from studyDesignDescriptors
+    organisms: list[str] = []
+    disease_terms: list[str] = []
+    for desc_item in study.get("studyDesignDescriptors", []):
+        if isinstance(desc_item, dict):
+            val = (desc_item.get("annotationValue") or "").lower().strip()
+            if not val:
+                continue
+            # Human-related terms go to organisms
+            if any(h in val for h in _HUMAN_TAXA):
+                organisms.append(val)
+            # Disease/condition terms go to factors
+            disease_terms.append(val)
 
-    # Factors (disease terms, etc.)
-    factors: list[str] = []
+    # Extract factors (factor names like "Disease", "Treatment" etc)
     for factor in study.get("factors", []):
         if isinstance(factor, dict):
-            fname = factor.get("name", "") or factor.get("factorName", "")
-            if fname:
-                factors.append(fname.strip())
+            fname = (factor.get("factorName", "") or factor.get("name", "")).strip()
+            if fname and fname.lower() not in {"gender", "age", "sex"}:
+                disease_terms.append(fname)
 
     # Publication / PMID
     pmid = None
     for pub in study.get("publications", []):
         if isinstance(pub, dict):
-            raw_pmid = pub.get("pubmedId") or pub.get("pmid")
+            raw_pmid = pub.get("pubMedID") or pub.get("pubmedId") or pub.get("pmid")
             if raw_pmid:
                 try:
-                    pmid = int(raw_pmid)
+                    pmid = int(str(raw_pmid).strip())
                     break
                 except (ValueError, TypeError):
                     pass
@@ -127,21 +142,40 @@ def fetch_study_details(study_id: str) -> dict | None:
         "title": title,
         "description": desc,
         "organisms": organisms,
-        "factors": factors,
+        "factors": disease_terms,
         "pmid": pmid,
     }
 
 
+_HUMAN_TEXT_INDICATORS = {
+    "human", "homo sapiens", "patients", "clinical",
+    "serum metabolom", "plasma metabolom", "urine metabolom",
+    "healthy controls", "case-control", "case control",
+}
+
+
 def is_human_disease_study(details: dict) -> bool:
-    """Return True if study is a human disease comparison study."""
+    """Return True if study is a human disease comparison study.
+
+    The `organisms` list (from studyDesignDescriptors) is often empty because
+    MetaboLights puts organism info in sample characteristics rather than
+    design descriptors. Fall back to scanning title/description/factors for
+    human indicators when the structured field is missing.
+    """
     if not details:
         return False
     organisms = details.get("organisms", [])
-    if not any(o in _HUMAN_TAXA for o in organisms):
-        return False
-    # Heuristic: study has disease-related factors or title keywords
     title_lower = (details.get("title") or "").lower()
     desc_lower = (details.get("description") or "").lower()
+    factors_lower = " ".join(details.get("factors", [])).lower()
+    combined = title_lower + " " + desc_lower + " " + factors_lower
+
+    has_human = any(any(h in o for h in _HUMAN_TAXA) for o in organisms)
+    if not has_human:
+        has_human = any(ind in combined for ind in _HUMAN_TEXT_INDICATORS)
+    if not has_human:
+        return False
+
     disease_keywords = {
         "disease", "disorder", "syndrome", "cancer", "tumor", "tumour",
         "diabetes", "obesity", "hypertension", "cardiovascular", "neurological",
@@ -149,7 +183,6 @@ def is_human_disease_study(details: dict) -> bool:
         "arthritis", "asthma", "fibrosis", "hepatitis", "cirrhosis",
         "patients", "case-control", "case control", "healthy controls",
     }
-    combined = title_lower + " " + desc_lower
     return any(kw in combined for kw in disease_keywords)
 
 
@@ -161,24 +194,20 @@ def fetch_maf(study_id: str, assay_name: str | None = None) -> list[dict] | None
     Returns list of dicts with raw MAF columns, or None on failure.
     Only returns rows from MAF files that contain p-value/FDR columns.
     """
-    # List assays for study
-    data = _get(f"{_BASE_URL}/studies/{study_id}/assays")
-    if data is None:
+    # Current API: list files, filter to MAF files (type=metadata_maf)
+    data = _get(f"{_BASE_URL}/studies/{study_id}/files")
+    if data is None or not isinstance(data, dict):
         return None
 
-    assay_list = []
-    if isinstance(data, dict):
-        assay_list = data.get("content", data.get("assays", []))
-    elif isinstance(data, list):
-        assay_list = data
+    file_list = data.get("study", [])
+    maf_files = [
+        f["file"] for f in file_list
+        if isinstance(f, dict) and f.get("type") == "metadata_maf" and f.get("file")
+        and f.get("status") == "active"
+    ]
 
     all_rows: list[dict] = []
-    for assay in assay_list:
-        if not isinstance(assay, dict):
-            continue
-        maf_name = assay.get("metaboliteAssignment", {}).get("metaboliteAssignmentFileName", "")
-        if not maf_name:
-            continue
+    for maf_name in maf_files:
         maf_url = f"{_BASE_URL}/studies/{study_id}/download?file={maf_name}"
         rows = _fetch_maf_file(maf_url, study_id, maf_name)
         if rows:
@@ -209,11 +238,9 @@ def _fetch_maf_file(url: str, study_id: str, filename: str) -> list[dict]:
     delimiter = "\t" if "\t" in header_line else ","
     headers = [h.strip().lower() for h in header_line.split(delimiter)]
 
-    # Check for p-value columns (required)
+    # MetaboLights MAFs rarely contain pre-computed p-values. Accept rows
+    # without stats and let the tier assignment downgrade them to copper.
     has_pval = any(h in _PVAL_COLS for h in headers)
-    if not has_pval:
-        logger.debug("MAF %s/%s: no p-value columns, skipping", study_id, filename)
-        return []
 
     # Detect FC columns
     fc_col = next((h for h in headers if h in _FC_COLS), None)
@@ -383,7 +410,10 @@ def ingest_metabolights(
     processed = 0
     inserted = 0
 
-    for sid in study_ids:
+    for idx, sid in enumerate(study_ids, 1):
+        if idx % 100 == 0:
+            logger.info("MetaboLights progress: %d/%d scanned, %d processed, %d results inserted",
+                        idx, len(study_ids), processed, inserted)
         if skip_existing and sid in existing_ids:
             continue
 

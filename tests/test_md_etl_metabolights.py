@@ -108,7 +108,7 @@ def test_extract_disease_terms_title():
 # ── _fetch_maf_file (unit test with mock response) ────────────────────────────
 
 def test_fetch_maf_file_no_pval_cols(monkeypatch):
-    """MAF without p-value columns should return empty list."""
+    """MAFs without p-value columns still yield rows (copper tier downstream)."""
     import requests
 
     class MockResponse:
@@ -120,7 +120,10 @@ def test_fetch_maf_file_no_pval_cols(monkeypatch):
 
     monkeypatch.setattr(requests, "get", lambda *a, **kw: MockResponse())
     rows = _fetch_maf_file("http://mock.url/maf.tsv", "MTBLS1", "test.tsv")
-    assert rows == []
+    assert len(rows) == 2
+    assert all(r["p_value"] is None and r["fdr"] is None for r in rows)
+    names = {r["metabolite_name"] for r in rows}
+    assert names == {"glucose", "leucine"}
 
 
 def test_fetch_maf_file_with_pval(monkeypatch):

@@ -83,19 +83,24 @@ def list_public_studies() -> list[dict]:
     Returns list of dicts with keys: study_id, study_title, subject_species,
     institute, analysis_type, study_summary.
     """
-    data = _get("study/studyid/all/summary")
+    data = _get("study/study_title/all/summary")
     if data is None:
         return []
-    # NMDR returns {"study": {"ST000001": {...}, "ST000002": {...}, ...}}
-    # or a list
+    # NMDR returns {"1": {"study_id": "ST...", ...}, "2": {...}, ...} (numeric keys)
+    # or {"study": {...}} or a list
+    if isinstance(data, list):
+        return data
     if isinstance(data, dict):
+        # Numeric-key format (current API): {"1": {...}, "2": {...}}
+        first_key = next(iter(data), None)
+        if first_key is not None and first_key.isdigit():
+            return list(data.values())
+        # Legacy format: {"study": {"ST000001": {...}, ...}}
         studies_raw = data.get("study", data)
         if isinstance(studies_raw, dict):
             return [{"study_id": k, **v} for k, v in studies_raw.items()]
         elif isinstance(studies_raw, list):
             return studies_raw
-    elif isinstance(data, list):
-        return data
     return []
 
 
@@ -120,7 +125,7 @@ def fetch_study_details(study_id: str) -> dict | None:
         "study_id": study_id,
         "title": study.get("study_title") or study.get("title") or "",
         "description": study.get("study_summary") or study.get("description") or "",
-        "organism": (study.get("subject_species") or study.get("organism") or "").lower(),
+        "organism": (study.get("subject_species") or study.get("species") or study.get("organism") or "").lower(),
         "analysis_type": (study.get("analysis_type") or "").lower(),
         "sample_source": (study.get("sample_source") or study.get("subject_type") or "").lower(),
         "pmid": _parse_pmid(study.get("pubmed_id") or study.get("pmid")),
@@ -223,9 +228,10 @@ def fetch_results(study_id: str) -> list[dict]:
         fc_raw = raw.get("fold_change") or raw.get("fc") or raw.get("log2fc")
         fc = _to_float(fc_raw)
 
-        # Skip rows with no statistics
-        if p_val is None and fdr is None:
-            continue
+        # NMDR's /metabolites endpoint rarely includes per-metabolite
+        # statistics — keep the row so downstream tier assignment can mark
+        # it as copper (no-stats). Studies that happen to include p-values
+        # flow through to higher tiers naturally.
 
         import math
         log2_fc = None
@@ -301,6 +307,12 @@ def ingest_nmdr(
             continue
 
         details = fetch_study_details(sid)
+        # Merge summary fields as fallback (species/analysis_type already present)
+        if details is not None:
+            if not details.get("organism") and study_summary.get("species"):
+                details["organism"] = study_summary["species"].lower()
+            if not details.get("title") and study_summary.get("study_title"):
+                details["title"] = study_summary["study_title"]
         if details is None or not is_human_disease_study(details):
             continue
 
