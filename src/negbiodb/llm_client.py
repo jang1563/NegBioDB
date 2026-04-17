@@ -5,6 +5,8 @@ and Anthropic Messages API.
 Includes rate limiter for Gemini Tier 1 pay-as-you-go (1500 RPD Flash, 200 RPM).
 """
 
+from __future__ import annotations
+
 import fcntl
 import json
 import os

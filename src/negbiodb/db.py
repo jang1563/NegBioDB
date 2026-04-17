@@ -1,12 +1,22 @@
 """Database connection and migration runner for NegBioDB."""
 
+from __future__ import annotations
+
 import glob
 import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+def _resolve_project_root() -> Path:
+    package_dir = Path(__file__).resolve().parent
+    if package_dir.parent.name == "src":
+        return package_dir.parent.parent
+    return package_dir.parent
+
+
+_PROJECT_ROOT = _resolve_project_root()
 DEFAULT_DB_PATH = _PROJECT_ROOT / "data" / "negbiodb.db"
 DEFAULT_MIGRATIONS_DIR = _PROJECT_ROOT / "migrations"
 

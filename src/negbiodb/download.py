@@ -8,7 +8,15 @@ import requests
 import yaml
 from tqdm import tqdm
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+def _resolve_project_root() -> Path:
+    package_dir = Path(__file__).resolve().parent
+    if package_dir.parent.name == "src":
+        return package_dir.parent.parent
+    return package_dir.parent
+
+
+_PROJECT_ROOT = _resolve_project_root()
 DEFAULT_CONFIG_PATH = _PROJECT_ROOT / "config.yaml"
 
 
