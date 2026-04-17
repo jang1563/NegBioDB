@@ -40,8 +40,11 @@ CLASS_LABELS = {
 
 
 def classify_by_zip(median_zip: float) -> str | None:
-    """Map median ZIP score to L1 class letter."""
-    if median_zip is None:
+    """Map median ZIP (or Bliss fallback) score to L1 class letter."""
+    if median_zip is None or pd.isna(median_zip):
+        return None
+    median_zip = float(median_zip)
+    if not np.isfinite(median_zip):
         return None
     if median_zip > 10:
         return "A"
@@ -79,8 +82,9 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         conn.close()
 
-    # Classify by ZIP threshold
-    df["gold_answer"] = df["median_zip"].apply(classify_by_zip)
+    # Classify by ZIP threshold (fall back to Bliss when ZIP is NULL)
+    score_col = df["median_zip"].where(df["median_zip"].notna(), df["median_bliss"])
+    df["gold_answer"] = score_col.apply(classify_by_zip)
     df = df.dropna(subset=["gold_answer"])
     df["gold_category"] = df["gold_answer"].map(CLASS_LABELS)
 
@@ -120,7 +124,8 @@ def main(argv: list[str] | None = None) -> int:
                 "pair_id": int(row["pair_id"]),
                 "drug_a": row["drug_a_name"],
                 "drug_b": row["drug_b_name"],
-                "median_zip": float(row["median_zip"]),
+                "median_zip": float(row["median_zip"]) if pd.notna(row["median_zip"]) else None,
+                "median_bliss": float(row["median_bliss"]) if pd.notna(row["median_bliss"]) else None,
             },
         }
         records.append(rec)

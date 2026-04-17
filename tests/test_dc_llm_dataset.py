@@ -305,6 +305,17 @@ class TestIO:
             parsed = json.loads(line)
             assert parsed == original
 
+    def test_write_jsonl_sanitizes_non_finite_numbers(self, tmp_path):
+        import json
+
+        records = [{"score": float("nan"), "nested": {"x": np.float64("inf")}}]
+        out = tmp_path / "nonfinite.jsonl"
+        write_jsonl(records, out)
+
+        loaded = json.loads(out.read_text().strip())
+        assert loaded["score"] is None
+        assert loaded["nested"]["x"] is None
+
     def test_write_dataset_metadata(self, tmp_path):
         import json
         out = tmp_path / "meta.json"

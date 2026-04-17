@@ -143,22 +143,29 @@ def refresh_all_drug_pairs(conn) -> int:
             COUNT(*) AS num_measurements,
             AVG(zip_score) AS median_zip,
             AVG(bliss_score) AS median_bliss,
-            -- antagonism_fraction: fraction of results that are antagonistic
+            -- antagonism_fraction: fraction of SCORED results that are antagonistic
             CAST(SUM(CASE WHEN synergy_class IN ('antagonistic', 'strongly_antagonistic')
-                          THEN 1 ELSE 0 END) AS REAL) / COUNT(*),
-            -- synergy_fraction: fraction of results that are synergistic
+                          THEN 1 ELSE 0 END) AS REAL)
+              / NULLIF(COUNT(synergy_class), 0),
+            -- synergy_fraction: fraction of SCORED results that are synergistic
             CAST(SUM(CASE WHEN synergy_class IN ('synergistic', 'strongly_synergistic')
-                          THEN 1 ELSE 0 END) AS REAL) / COUNT(*),
-            -- consensus_class: majority vote, context_dependent if mixed
+                          THEN 1 ELSE 0 END) AS REAL)
+              / NULLIF(COUNT(synergy_class), 0),
+            -- consensus_class: majority vote over scored results only;
+            --   context_dependent if no scored results or no majority
             CASE
+                WHEN COUNT(synergy_class) = 0 THEN 'context_dependent'
                 WHEN CAST(SUM(CASE WHEN synergy_class IN ('antagonistic', 'strongly_antagonistic')
-                                   THEN 1 ELSE 0 END) AS REAL) / COUNT(*) > 0.5
+                                   THEN 1 ELSE 0 END) AS REAL)
+                     / COUNT(synergy_class) > 0.5
                      THEN 'antagonistic'
                 WHEN CAST(SUM(CASE WHEN synergy_class IN ('synergistic', 'strongly_synergistic')
-                                   THEN 1 ELSE 0 END) AS REAL) / COUNT(*) > 0.5
+                                   THEN 1 ELSE 0 END) AS REAL)
+                     / COUNT(synergy_class) > 0.5
                      THEN 'synergistic'
                 WHEN CAST(SUM(CASE WHEN synergy_class = 'additive'
-                                   THEN 1 ELSE 0 END) AS REAL) / COUNT(*) > 0.5
+                                   THEN 1 ELSE 0 END) AS REAL)
+                     / COUNT(synergy_class) > 0.5
                      THEN 'additive'
                 ELSE 'context_dependent'
             END,
@@ -214,13 +221,13 @@ def refresh_all_drug_pairs(conn) -> int:
             AVG(sr.zip_score),
             AVG(sr.bliss_score),
             COUNT(*),
-            -- synergy_class: based on avg ZIP for this triple
+            -- synergy_class: based on avg ZIP (fallback to avg Bliss) for this triple
             CASE
-                WHEN AVG(sr.zip_score) > 10 THEN 'strongly_synergistic'
-                WHEN AVG(sr.zip_score) > 5 THEN 'synergistic'
-                WHEN AVG(sr.zip_score) >= -5 THEN 'additive'
-                WHEN AVG(sr.zip_score) >= -10 THEN 'antagonistic'
-                WHEN AVG(sr.zip_score) < -10 THEN 'strongly_antagonistic'
+                WHEN COALESCE(AVG(sr.zip_score), AVG(sr.bliss_score)) > 10 THEN 'strongly_synergistic'
+                WHEN COALESCE(AVG(sr.zip_score), AVG(sr.bliss_score)) > 5 THEN 'synergistic'
+                WHEN COALESCE(AVG(sr.zip_score), AVG(sr.bliss_score)) >= -5 THEN 'additive'
+                WHEN COALESCE(AVG(sr.zip_score), AVG(sr.bliss_score)) >= -10 THEN 'antagonistic'
+                WHEN COALESCE(AVG(sr.zip_score), AVG(sr.bliss_score)) < -10 THEN 'strongly_antagonistic'
                 ELSE NULL
             END,
             -- best confidence for this triple

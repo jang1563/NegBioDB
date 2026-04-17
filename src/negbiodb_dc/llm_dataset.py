@@ -56,6 +56,19 @@ FEWSHOT_SEEDS = [42, 43, 44]
 MAX_PER_DRUG = 15  # Cap records per individual drug to prevent dominance
 
 
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, (np.floating, float)):
+        value = float(value)
+        return value if np.isfinite(value) else None
+    if isinstance(value, np.integer):
+        return int(value)
+    return value
+
+
 # ── Candidate pool loading ──────────────────────────────────────────
 
 
@@ -300,7 +313,7 @@ def write_jsonl(records: list[dict], path: Path) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         for rec in records:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            f.write(json.dumps(_json_safe(rec), ensure_ascii=False, allow_nan=False) + "\n")
     logger.info("Wrote %d records to %s", len(records), path)
     return len(records)
 
@@ -316,9 +329,9 @@ def write_dataset_metadata(
     meta = {
         "task": task,
         "domain": "dc",
-        "n_records": n_records,
-        "split_counts": split_counts,
-        **kwargs,
+        "n_records": int(n_records),
+        "split_counts": {k: int(v) for k, v in split_counts.items()},
+        **{k: (int(v) if hasattr(v, "item") else v) for k, v in kwargs.items()},
     }
     with open(path, "w") as f:
-        json.dump(meta, f, indent=2)
+        json.dump(_json_safe(meta), f, indent=2, allow_nan=False)

@@ -48,6 +48,19 @@ META_COLS = {
 SPLIT_PREFIX = "split_"
 
 
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, (np.floating, float)):
+        value = float(value)
+        return value if np.isfinite(value) else None
+    if isinstance(value, np.integer):
+        return int(value)
+    return value
+
+
 def load_dataset(parquet_path: Path) -> tuple[pd.DataFrame, list[str]]:
     """Load DC parquet export and return DataFrame plus feature column names."""
     df = pd.read_parquet(parquet_path)
@@ -121,15 +134,17 @@ def main(argv: list[str] | None = None) -> int:
                         help="Use first 200 rows for quick validation")
     args = parser.parse_args(argv)
 
-    parquet_path = args.data_dir / f"negbiodb_dc_{args.task}.parquet"
+    parquet_path = args.data_dir / "negbiodb_dc_pairs.parquet"
     if not parquet_path.exists():
         logger.error("Dataset not found: %s", parquet_path)
         return 1
 
-    # Find split column by partial match
+    # Find split column by partial match (leave_one_tissue_out → loto alias)
+    _SPLIT_ALIASES = {"leave_one_tissue_out": "loto"}
+    split_key = _SPLIT_ALIASES.get(args.split, args.split)
     df, feature_cols = load_dataset(parquet_path)
     split_candidates = [c for c in df.columns if c.startswith(SPLIT_PREFIX)
-                        and args.split in c]
+                        and split_key in c]
     if not split_candidates:
         logger.error("No split column matching '%s' found. Available: %s",
                      args.split, [c for c in df.columns if c.startswith(SPLIT_PREFIX)])
@@ -271,24 +286,59 @@ def main(argv: list[str] | None = None) -> int:
 
         y_test = y_valid[test_m]
 
-    metrics = compute_metrics(y_test, y_pred, y_prob)
-    metrics.update({
-        "task": f"dc_{args.task}",
+    test_metrics = compute_metrics(y_test, y_pred, y_prob)
+
+    # M2: rename to expected names and add weighted_f1
+    if args.task == "m2":
+        if "auroc" in test_metrics:
+            test_metrics["macro_auroc"] = test_metrics.pop("auroc")
+        if "auprc" in test_metrics:
+            test_metrics["macro_auprc"] = test_metrics.pop("auprc")
+        if "f1" in test_metrics:
+            test_metrics["macro_f1"] = test_metrics.pop("f1")
+        try:
+            test_metrics["weighted_f1"] = float(
+                f1_score(y_test, y_pred, average="weighted", zero_division=0.0)
+            )
+        except Exception:
+            test_metrics["weighted_f1"] = float("nan")
+        # Per-class accuracy for synergy/neutral/antagonism
+        from sklearn.metrics import confusion_matrix
+        try:
+            cm = confusion_matrix(y_test, y_pred, labels=[0, 1, 2])
+            labels = ["antagonism", "neutral", "synergy"]
+            per_class = {
+                labels[i]: float(cm[i, i] / cm[i].sum()) if cm[i].sum() > 0 else float("nan")
+                for i in range(3)
+            }
+            test_metrics["per_class_accuracy"] = per_class
+        except Exception:
+            pass
+
+    n_test = int(len(y_test)) if args.model != "gnn" else int(sum(test_m))
+    test_metrics["n_test"] = n_test
+
+    results = {
+        "task": args.task,
         "model": args.model,
         "split": args.split,
         "seed": args.seed,
         "n_train": int(len(y_train)) if args.model != "gnn" else int(sum(train_m)),
         "n_val": int(len(y_val)) if args.model != "gnn" else int(sum(val_m)),
-    })
+        "n_test": n_test,
+        "test_metrics": test_metrics,
+    }
     if args.model in {"mlp", "deepsynergy", "gnn"}:
-        metrics["epochs_ran"] = len(history.get("train_loss", []))
+        results["epochs_ran"] = len(history.get("train_loss", []))
 
     results_path = run_dir / "results.json"
     with open(results_path, "w") as f:
-        json.dump(metrics, f, indent=2)
+        json.dump(_json_safe(results), f, indent=2, allow_nan=False)
 
     logger.info("Results: AUROC=%.4f, MCC=%.4f, F1=%.4f",
-                metrics.get("auroc") or 0, metrics.get("mcc") or 0, metrics.get("f1") or 0)
+                test_metrics.get("auroc") or test_metrics.get("macro_auroc") or 0,
+                test_metrics.get("mcc") or 0,
+                test_metrics.get("f1") or test_metrics.get("macro_f1") or 0)
     logger.info("Saved to %s", results_path)
     return 0
 

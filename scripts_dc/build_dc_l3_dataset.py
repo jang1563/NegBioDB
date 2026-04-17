@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     from negbiodb_dc.dc_db import get_connection
     conn = get_connection(args.db)
     try:
-        df = load_dc_candidate_pool(conn, min_confidence="silver", consensus_class="antagonistic")
+        df = load_dc_candidate_pool(conn, min_confidence="bronze", consensus_class="antagonistic")
     finally:
         conn.close()
 

@@ -147,8 +147,10 @@ _L3_MAX_EXAMPLE_CHARS = 1200
 _L3_MAX_REASONING_CHARS = 600
 
 
-def _truncate_text(text: str, max_chars: int) -> str:
+def _truncate_text(text: str | None, max_chars: int) -> str:
     """Truncate text at word boundary, appending '[...]' if truncated."""
+    if not text:
+        return "N/A"
     if len(text) <= max_chars:
         return text
     truncated = text[:max_chars].rsplit(" ", 1)[0]

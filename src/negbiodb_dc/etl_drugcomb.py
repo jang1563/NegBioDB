@@ -357,7 +357,7 @@ def load_drugcomb_synergy(
             loewe_score = score_vars["loewe_score"]
             hsa_score = score_vars["hsa_score"]
 
-            synergy_class = classify_synergy(zip_score)
+            synergy_class = classify_synergy(zip_score if zip_score is not None else bliss_score)
 
             conn.execute(
                 """INSERT INTO dc_synergy_results
