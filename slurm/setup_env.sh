@@ -38,7 +38,9 @@ pip install torch-scatter torch-sparse \
     -f https://data.pyg.org/whl/torch-2.2.2+cu121.html
 
 echo "Installing core dependencies..."
-pip install rdkit pandas pyarrow scikit-learn tqdm pyyaml requests mlcroissant
+pip install \
+    rdkit pandas pyarrow scikit-learn tqdm pyyaml requests \
+    mlcroissant rapidfuzz chembl-downloader pymetis pytest
 
 echo "Installing negbiodb package (editable)..."
 pip install -e "$NEGBIODB/"

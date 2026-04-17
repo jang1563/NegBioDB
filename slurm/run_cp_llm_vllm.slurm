@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=dc_llm_vllm
+#SBATCH --job-name=cp_llm_vllm
 #SBATCH --partition=scu-gpu
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
-#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/dc_llm_vllm_%j.log
-#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/dc_llm_vllm_%j.err
+#SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/cp_llm_vllm_%j.log
+#SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/cp_llm_vllm_%j.err
 
 set -euo pipefail
 
@@ -14,7 +14,7 @@ SCRATCH="${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}"
 SCRATCH_ENV="${SCRATCH}/conda_env/negbiodb-llm"
 PROJECT_DIR="${SCRATCH}/negbiodb"
 
-TASK="${TASK:-dc-l1}"
+TASK="${TASK:-cp-l1}"
 MODEL="${MODEL:-Qwen/Qwen2.5-7B-Instruct}"
 CONFIG="${CONFIG:-zero-shot}"
 FEWSHOT_SET="${FEWSHOT_SET:-0}"
@@ -24,7 +24,7 @@ export PATH="${SCRATCH_ENV}/bin:${PATH}"
 export CONDA_PREFIX="${SCRATCH_ENV}"
 export PYTHONPATH="${PROJECT_DIR}/src"
 
-echo "=== DC LLM vLLM Benchmark ==="
+echo "=== CP LLM vLLM Benchmark ==="
 echo "Task: ${TASK}, Model: ${MODEL}, Config: ${CONFIG}, FewshotSet: ${FEWSHOT_SET}"
 echo "Start: $(date)"
 
@@ -39,13 +39,12 @@ python -m vllm.entrypoints.openai.api_server \
 VLLM_PID=$!
 echo "vLLM server PID: ${VLLM_PID}"
 
-# Ensure vLLM process is killed on exit (including errors)
 cleanup() {
     kill "${VLLM_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT
 
-# Wait for model to be fully loaded (check /v1/models, not /health which is too early)
+# Wait for model readiness
 for i in $(seq 1 240); do
     MODELS=$(curl -s "http://localhost:${VLLM_PORT}/v1/models" 2>/dev/null || true)
     if echo "${MODELS}" | python3 -c "import json,sys; d=json.load(sys.stdin); exit(0 if d.get('data') else 1)" 2>/dev/null; then
@@ -55,14 +54,14 @@ for i in $(seq 1 240); do
     sleep 5
 done
 
-python "${PROJECT_DIR}/scripts_dc/run_dc_llm_benchmark.py" \
+python "${PROJECT_DIR}/scripts_cp/run_cp_llm_benchmark.py" \
     --task "${TASK}" \
     --config "${CONFIG}" \
     --fewshot-set "${FEWSHOT_SET}" \
     --model "${MODEL}" \
     --provider vllm \
     --api-base "http://localhost:${VLLM_PORT}/v1" \
-    --data-dir "${PROJECT_DIR}/exports/dc_llm" \
-    --output-dir "${PROJECT_DIR}/results/dc_llm"
+    --data-dir "${PROJECT_DIR}/exports/cp_llm" \
+    --output-dir "${PROJECT_DIR}/results/cp_llm"
 
 echo "End: $(date)"

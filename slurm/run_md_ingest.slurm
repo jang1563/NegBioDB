@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=8G
-#SBATCH --time=12:00:00
+#SBATCH --time=24:00:00
 #SBATCH --output=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/md_ingest_%j.log
 #SBATCH --error=/athena/masonlab/scratch/users/jak4013/negbiodb/logs/md_ingest_%j.err
 

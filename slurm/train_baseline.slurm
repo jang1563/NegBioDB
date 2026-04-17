@@ -27,6 +27,8 @@
 # ---------- paths -----------------------------------------------------------
 NEGBIODB=${SCRATCH_DIR:-/athena/masonlab/scratch/users/jak4013}/negbiodb
 CONDA_SH=${CONDA_PREFIX:-/athena/masonlab/scratch/users/jak4013}/miniconda3/etc/profile.d/conda.sh
+SCRATCH_ENV=${SCRATCH_ENV:-/athena/masonlab/scratch/users/jak4013/conda_env/negbiodb-ml}
+HOME_ENV=${HOME_ENV:-/home/fs01/jak4013/miniconda3/miniconda3/envs/negbiodb-ml}
 
 # ---------- validate required variables -------------------------------------
 if [[ -z "${MODEL:-}" ]] || [[ -z "${SPLIT:-}" ]] || [[ -z "${NEG:-}" ]]; then
@@ -45,11 +47,22 @@ SEED=${SEED:-42}
 
 # ---------- env setup -------------------------------------------------------
 source "$CONDA_SH"
-conda activate negbiodb-ml
+if conda activate negbiodb-ml 2>/dev/null; then
+    :
+elif [[ -d "$SCRATCH_ENV" ]]; then
+    conda activate "$SCRATCH_ENV"
+elif [[ -d "$HOME_ENV" ]]; then
+    conda activate "$HOME_ENV"
+else
+    echo "ERROR: Could not find negbiodb-ml environment."
+    echo "Checked named env 'negbiodb-ml', $SCRATCH_ENV, and $HOME_ENV"
+    exit 1
+fi
 
 echo "Job started: $(date)"
 echo "Node: $(hostname)"
 echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'n/a')"
+echo "Python: $(which python)"
 echo "Model=$MODEL  Split=$SPLIT  Neg=$NEG  Dataset=$DATASET  Seed=$SEED"
 
 cd "$NEGBIODB"
