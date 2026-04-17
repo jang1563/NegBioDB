@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from negbiodb.models.deepdta import AA_VOCAB_SIZE, _AA_LUT
+from negbiodb.models.deepdta import AA_VOCAB_SIZE, _AA_LUT, _as_int64_tensor
 
 MAX_SEQ_LEN = 1000
 
@@ -30,9 +30,7 @@ def seq_to_tensor(seqs: list[str], max_len: int = MAX_SEQ_LEN) -> torch.Tensor:
         s = seq[:max_len]
         codes = np.frombuffer(s.encode("ascii", errors="replace"), dtype=np.uint8)
         result[i, : len(codes)] = _AA_LUT[codes]
-    return torch.frombuffer(result.tobytes(), dtype=torch.int64).reshape(
-        len(seqs), max_len
-    ).clone()
+    return _as_int64_tensor(result)
 
 
 class _ResidueEncoder(nn.Module):

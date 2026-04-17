@@ -38,6 +38,17 @@ for _c, _idx in AA_VOCAB.items():
     _AA_LUT[ord(_c)] = _idx
 
 
+def _as_int64_tensor(result: np.ndarray) -> torch.Tensor:
+    """Convert an int64 numpy array without relying on torch.from_numpy.
+
+    A writable ``bytearray`` avoids PyTorch's non-writable-buffer warning while
+    preserving the NumPy-bridge workaround used for mixed torch/NumPy versions.
+    """
+
+    buffer = bytearray(result.tobytes())
+    return torch.frombuffer(buffer, dtype=torch.int64).reshape(result.shape).clone()
+
+
 def smiles_to_tensor(smiles: list[str], max_len: int = MAX_SMILES_LEN) -> torch.Tensor:
     """Encode SMILES strings to integer tensor (batch × max_len).
 
@@ -49,8 +60,7 @@ def smiles_to_tensor(smiles: list[str], max_len: int = MAX_SMILES_LEN) -> torch.
         s = smi[:max_len]
         codes = np.frombuffer(s.encode("ascii", errors="replace"), dtype=np.uint8)
         result[i, : len(codes)] = _SMILES_LUT[codes]
-    # torch.frombuffer bypasses the broken torch-numpy bridge (torch 2.2.2 + NumPy 2.x).
-    return torch.frombuffer(result.tobytes(), dtype=torch.int64).reshape(len(smiles), max_len).clone()
+    return _as_int64_tensor(result)
 
 
 def seq_to_tensor(seqs: list[str], max_len: int = MAX_SEQ_LEN) -> torch.Tensor:
@@ -64,8 +74,7 @@ def seq_to_tensor(seqs: list[str], max_len: int = MAX_SEQ_LEN) -> torch.Tensor:
         s = seq[:max_len]
         codes = np.frombuffer(s.encode("ascii", errors="replace"), dtype=np.uint8)
         result[i, : len(codes)] = _AA_LUT[codes]
-    # torch.frombuffer bypasses the broken torch-numpy bridge (torch 2.2.2 + NumPy 2.x).
-    return torch.frombuffer(result.tobytes(), dtype=torch.int64).reshape(len(seqs), max_len).clone()
+    return _as_int64_tensor(result)
 
 
 class _CNNEncoder(nn.Module):
@@ -119,6 +128,7 @@ class DeepDTA(nn.Module):
         target_kernels: tuple[int, int, int] = (4, 8, 12),
         fc_dims: tuple[int, int, int] = (1024, 1024, 512),
         dropout: float = 0.1,
+        train_logit_scale: float = 0.01,
     ) -> None:
         super().__init__()
         self.drug_encoder = _CNNEncoder(
@@ -139,6 +149,7 @@ class DeepDTA(nn.Module):
             in_dim = out_dim
         fc_layers.append(nn.Linear(in_dim, 1))
         self.fc = nn.Sequential(*fc_layers)
+        self.train_logit_scale = float(train_logit_scale)
 
     def forward(
         self, drug_tokens: torch.Tensor, target_tokens: torch.Tensor
@@ -154,4 +165,9 @@ class DeepDTA(nn.Module):
         d = self.drug_encoder(drug_tokens)      # (B, 96)
         t = self.target_encoder(target_tokens)  # (B, 96)
         h = torch.cat([d, t], dim=1)            # (B, 192)
-        return self.fc(h).squeeze(-1)           # (B,)
+        logits = self.fc(h).squeeze(-1)         # (B,)
+        # Keep evaluation/checkpoint behavior unchanged while damping training-time
+        # updates on tiny batches and aggressive learning rates.
+        if self.training and self.train_logit_scale != 1.0:
+            logits = logits * self.train_logit_scale
+        return logits

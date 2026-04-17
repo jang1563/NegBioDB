@@ -1,6 +1,7 @@
 """Tests for negbiodb_ppi.models — PPI ML baseline models."""
 
 import sys
+import warnings
 from pathlib import Path
 
 import torch
@@ -25,6 +26,15 @@ from negbiodb_ppi.models.mlp_features import (
 # ------------------------------------------------------------------
 
 class TestSeqToTensor:
+    def test_tokenization_emits_no_non_writable_buffer_warning(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            seq_to_tensor(["ACDEF"])
+            pipr_seq_to_tensor(["GHIKL"])
+
+        messages = [str(w.message) for w in caught]
+        assert not any("buffer is not writable" in msg for msg in messages)
+
     def test_basic(self):
         t = seq_to_tensor(["ACDEF", "GHI"])
         assert t.shape == (2, MAX_SEQ_LEN)

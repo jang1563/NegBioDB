@@ -190,9 +190,19 @@ def load_cto_outcomes(parquet_path: Path) -> pd.DataFrame:
     result.columns = ["nct_id", "outcome"]
     result["nct_id"] = result["nct_id"].astype(str).str.strip()
 
-    if result["outcome"].dtype == "object":
-        result["outcome"] = result["outcome"].map(
-            {"failure": 0, "success": 1, "0": 0, "1": 1, "fail": 0, "pass": 1}
+    if not pd.api.types.is_numeric_dtype(result["outcome"]):
+        normalized = result["outcome"].astype(str).str.strip().str.lower()
+        result["outcome"] = normalized.map(
+            {
+                "failure": 0,
+                "success": 1,
+                "0": 0,
+                "1": 1,
+                "0.0": 0,
+                "1.0": 1,
+                "fail": 0,
+                "pass": 1,
+            }
         )
 
     result = result.dropna(subset=["outcome"])

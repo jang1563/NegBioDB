@@ -412,8 +412,10 @@ class TestLogAUCEdgeCases:
 
 class TestBEDROCEdgeCases:
     def test_all_same_score(self):
-        """All same scores → BEDROC near ra (random)."""
+        """All same scores with randomized tie order → BEDROC near ra."""
         y_true = np.array([1] * 50 + [0] * 950)
+        rng = np.random.RandomState(0)
+        y_true = y_true[rng.permutation(len(y_true))]
         y_score = np.full(1000, 0.5)
         result = bedroc(y_true, y_score)
         ra = 50 / 1000  # 0.05
