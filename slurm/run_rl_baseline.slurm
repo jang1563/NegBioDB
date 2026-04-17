@@ -15,7 +15,7 @@ EVAL_DOMAINS="${EVAL_DOMAINS:-dti ct ppi ge vp}"
 
 SCRATCH="/athena/masonlab/scratch/users/jak4013"
 CONDA_ENV="${SCRATCH}/conda_env/negbiorl-train"
-OUTPUT_DIR="results/negbiorl/phase4_eval/baseline"
+OUTPUT_DIR="${OUTPUT_DIR:-results/negbiorl/phase4_eval/baseline}"
 
 set -euo pipefail
 mkdir -p logs "${OUTPUT_DIR}"
@@ -36,7 +36,7 @@ from vllm import LLM, SamplingParams
 from negbiorl.data_registry import get_export_path, get_gold_answer_field, load_jsonl
 from negbiorl.sft_data import _format_prompt
 
-llm = LLM(model='${BASE_MODEL}', trust_remote_code=True)
+llm = LLM(model='${BASE_MODEL}', trust_remote_code=True, max_model_len=4096)
 params = SamplingParams(temperature=0.0, max_tokens=512)
 output_dir = Path('${OUTPUT_DIR}')
 

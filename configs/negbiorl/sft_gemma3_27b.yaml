@@ -1,0 +1,26 @@
+# SFT config for Gemma3-27B-it (4-bit pre-quantized)
+# Tests whether SFT shortcut collapse persists at 27B scale
+
+model: unsloth/gemma-3-27b-it-bnb-4bit
+
+learning_rate: 2.0e-5
+epochs: 2
+batch_size: 1
+
+# LoRA (same as GRPO config for fair comparison)
+lora_r: 16
+lora_alpha: 32
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Model loading
+load_in_4bit: false   # model is pre-quantized (embedded bnb config)
+
+# Logging
+report_to: wandb

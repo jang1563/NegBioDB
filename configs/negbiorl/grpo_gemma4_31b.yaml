@@ -1,0 +1,35 @@
+# GRPO config for Gemma4-31B-it (4-bit, architecture/scale diversity test)
+# GRPO directly from base model (no SFT — avoids 62GB CPU merge)
+# G=2 due to VRAM constraints; batch_size=1 for 31B
+
+model: unsloth/gemma-3-27b-it-bnb-4bit
+
+# GRPO hyperparameters
+num_generations: 2
+generation_batch_size: 2
+learning_rate: 5.0e-7       # Lower LR for larger model
+epochs: 2
+batch_size: 1               # batch=1 for 31B model
+max_completion_length: 512
+
+# LoRA (lighter config for 31B — from BioReview project)
+lora_r: 16
+lora_alpha: 32
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Model loading
+use_vllm: false
+load_in_4bit: false   # model is pre-quantized (embedded bnb config)
+
+# Rewards
+reward_weights: [1.0, 1.0, 0.2, 0.1]
+
+# Logging
+report_to: wandb

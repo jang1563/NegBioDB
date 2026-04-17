@@ -30,11 +30,11 @@ from negbiorl.data_registry import (
 class TestDomainRegistry:
     """Verify registry is complete and consistent."""
 
-    def test_all_five_domains_registered(self):
-        assert set(ALL_DOMAINS) == {"dti", "ct", "ppi", "ge", "vp"}
+    def test_all_six_domains_registered(self):
+        assert set(ALL_DOMAINS) == {"dti", "ct", "ppi", "ge", "dc", "vp"}
 
     def test_train_domains_exclude_vp(self):
-        assert set(TRAIN_DOMAINS) == {"dti", "ct", "ppi", "ge"}
+        assert set(TRAIN_DOMAINS) == {"dti", "ct", "ppi", "ge", "dc"}
         assert TRANSFER_TEST_DOMAIN == "vp"
 
     @pytest.mark.parametrize("domain", ALL_DOMAINS)

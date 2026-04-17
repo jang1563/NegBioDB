@@ -1,14 +1,14 @@
-# NegBioRL Experiment Matrix
-# All training runs ordered by priority
+# NegBioRL Experiment Matrix (Phase 5)
+# All training runs ordered by tier and priority
 
 experiments:
-  # === Primary experiments (P1-P3): Multi-domain SFT+GRPO ===
+  # === Phase 3/4 (completed): Multi-domain SFT+GRPO ===
   P1_qwen3_multi:
     model: Qwen/Qwen3-8B
     strategy: sft_grpo
     domains: [dti, ct, ppi, ge]
     group_size: 8
-    priority: 1
+    tier: completed
     gpu_hours_est: 15
     role: primary_target
 
@@ -17,93 +17,140 @@ experiments:
     strategy: sft_grpo
     domains: [dti, ct, ppi, ge]
     group_size: 8
-    priority: 2
+    tier: completed
     gpu_hours_est: 15
-    role: historical_baseline
+    role: winner
 
   P3_llama31_multi:
     model: meta-llama/Llama-3.1-8B-Instruct
     strategy: sft_grpo
     domains: [dti, ct, ppi, ge]
     group_size: 8
-    priority: 3
+    tier: completed
     gpu_hours_est: 15
     role: historical_baseline
 
-  # === Group size ablation (P4-P5) ===
-  P4_qwen3_G2:
-    model: Qwen/Qwen3-8B
+  # === Tier 1 — MUST HAVE ===
+
+  BL_qwen25_baseline:
+    model: Qwen/Qwen2.5-7B-Instruct
+    strategy: inference_only
+    domains: [dti, ct, ppi, ge, vp]
+    tier: 1
+    gpu_hours_est: 2
+    role: before_after_denominator
+
+  S_MULTI_qwen25_sft:
+    model: Qwen/Qwen2.5-7B-Instruct
+    strategy: sft
+    domains: [dti, ct, ppi, ge]
+    tier: 1
+    gpu_hours_est: 3
+    role: shared_sft_foundation
+
+  P2c_qwen25_multi_retrain:
+    model: Qwen/Qwen2.5-7B-Instruct
     strategy: sft_grpo
     domains: [dti, ct, ppi, ge]
-    group_size: 2
-    priority: 4
-    gpu_hours_est: 6
-    role: ablation_grpo_is_dpo
+    group_size: 8
+    tier: 1
+    gpu_hours_est: 12
+    role: clean_ablation_reference
+    depends_on: S_MULTI
 
-  P5_qwen3_G16:
-    model: Qwen/Qwen3-8B
-    strategy: sft_grpo
-    domains: [dti, ct, ppi, ge]
-    group_size: 16
-    priority: 5
-    gpu_hours_est: 24
-    role: ablation_grpo_is_dpo
-
-  # === Method ablations (P6-P7) ===
-  P6_qwen3_dpo:
-    model: Qwen/Qwen3-8B
+  P6_qwen25_dpo:
+    model: Qwen/Qwen2.5-7B-Instruct
     strategy: dpo
     domains: [dti, ct, ppi, ge]
-    priority: 6
+    tier: 1
     gpu_hours_est: 3
     role: ablation_dpo_comparison
+    depends_on: S_MULTI
 
-  P7_qwen3_sft_only:
-    model: Qwen/Qwen3-8B
+  P7_qwen25_sft_only:
+    model: Qwen/Qwen2.5-7B-Instruct
     strategy: sft_only
     domains: [dti, ct, ppi, ge]
-    priority: 7
-    gpu_hours_est: 3
+    tier: 1
+    gpu_hours_est: 2
     role: ablation_sft_vs_grpo
+    depends_on: S_MULTI
 
-  # === Single-domain for transfer matrix (P8-P11) ===
-  P8_qwen3_dti:
-    model: Qwen/Qwen3-8B
+  # Single-domain for transfer matrix
+  P8_qwen25_dti:
+    model: Qwen/Qwen2.5-7B-Instruct
     strategy: sft_grpo
     domains: [dti]
     group_size: 8
-    priority: 8
-    gpu_hours_est: 8
+    epochs: 4
+    tier: 1
+    gpu_hours_est: 7
     role: transfer_matrix
 
-  P9_qwen3_ct:
-    model: Qwen/Qwen3-8B
+  P9_qwen25_ct:
+    model: Qwen/Qwen2.5-7B-Instruct
     strategy: sft_grpo
     domains: [ct]
     group_size: 8
-    priority: 9
-    gpu_hours_est: 8
+    epochs: 4
+    tier: 1
+    gpu_hours_est: 7
     role: transfer_matrix
 
-  P10_qwen3_ppi:
-    model: Qwen/Qwen3-8B
+  P10_qwen25_ppi:
+    model: Qwen/Qwen2.5-7B-Instruct
     strategy: sft_grpo
     domains: [ppi]
     group_size: 8
-    priority: 10
-    gpu_hours_est: 8
+    epochs: 4
+    tier: 1
+    gpu_hours_est: 7
     role: transfer_matrix
 
-  P11_qwen3_ge:
-    model: Qwen/Qwen3-8B
+  P11_qwen25_ge:
+    model: Qwen/Qwen2.5-7B-Instruct
     strategy: sft_grpo
     domains: [ge]
     group_size: 8
-    priority: 11
-    gpu_hours_est: 8
+    epochs: 4
+    tier: 1
+    gpu_hours_est: 7
     role: transfer_matrix
 
-# Total estimated: ~125 GPU-hours
+  # === Tier 2 — SHOULD HAVE ===
+
+  P4_qwen25_G2:
+    model: Qwen/Qwen2.5-7B-Instruct
+    strategy: sft_grpo
+    domains: [dti, ct, ppi, ge]
+    group_size: 2
+    tier: 2
+    gpu_hours_est: 6
+    role: ablation_group_size
+    depends_on: S_MULTI
+
+  P5_qwen25_G16:
+    model: Qwen/Qwen2.5-7B-Instruct
+    strategy: sft_grpo
+    domains: [dti, ct, ppi, ge]
+    group_size: 16
+    tier: 2
+    gpu_hours_est: 26
+    role: ablation_group_size
+    depends_on: S_MULTI
+
+  P12_gemma4_31b:
+    model: unsloth/gemma-4-31B-it-unsloth-bnb-4bit
+    strategy: grpo_from_base
+    domains: [dti, ct, ppi, ge]
+    group_size: 2
+    quantization: nf4
+    tier: 2
+    gpu_hours_est: 16
+    role: architecture_scale_diversity
+
+# Total estimated GPU-hours
+# Tier 1: ~70h | Tier 2: ~48h | Grand total: ~118h (+ completed ~45h)
 
 # Success criteria
 success_criteria:
@@ -111,9 +158,10 @@ success_criteria:
     l4_mcc_improvement: 0.10  # ≥ +0.10 on 2+ domains
     pbs_reduction: true
   strong_top_venue:
-    l3_reasoning_improvement: true
-    positive_transfers: 3  # 3+ positive off-diagonal cells
-    grpo_g2_matches_g16: true
+    positive_transfers: 3  # 3+ positive off-diagonal cells in transfer matrix
+    grpo_beats_sft_and_dpo: true
+    group_size_insight: true
   exceptional:
     beats_gpt4o_mini_l4: true
     vp_zero_shot_improves: true
+    gemma4_shows_scale_benefit: true

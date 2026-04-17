@@ -1,0 +1,30 @@
+# GRPO config for single-domain training (4 epochs, lower LR to prevent overfitting)
+# Used by P8-P11: DTI-only, CT-only, PPI-only, GE-only transfer experiments
+
+model: Qwen/Qwen2.5-7B-Instruct
+
+# GRPO hyperparameters
+num_generations: 8
+generation_batch_size: 8
+learning_rate: 5.0e-7  # Halved from 1e-6 to prevent overfitting on ~590 records
+epochs: 4              # 4 epochs × ~590 records ≈ 2 epochs × 2,360 records (matched exposure)
+batch_size: 2
+max_completion_length: 512
+
+# LoRA
+lora_r: 64
+lora_alpha: 128
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+
+# vLLM
+use_vllm: false
+
+# Rewards
+reward_weights: [1.0, 1.0, 0.2, 0.1]  # l1, l4, evidence, format
+
+# Logging
+report_to: wandb

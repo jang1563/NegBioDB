@@ -1,6 +1,6 @@
 # NegBioDB Experiment Results
 
-*Last updated: 2026-04-04*
+*Last updated: 2026-04-16*
 
 ## Cross-Domain Summary
 
@@ -223,3 +223,71 @@ Aggregated over 3 seeds (source: `results/ppi/table1_aggregated.md`):
 - **Configs:** Zero-shot × 1 + 3-shot × 3 fewshot sets = 4 configs per (model × task)
 - **L3 judge:** Gemini 2.5-Flash LLM-as-judge, 4 dimensions × 5-point scale
 - **L4 contamination test:** Older vs newer entity pairs (pre-cutoff vs post-cutoff)
+
+---
+
+## NegBioRL: Eval-to-Train Pipeline (Phase 5)
+
+**Purpose:** Use NegBioDB benchmarks as training signal to improve LLM reasoning about negative results. Base model: Qwen/Qwen2.5-7B-Instruct (winner from Phase 4 evaluation). Training strategy: GRPO with L1/L4 verifiable rewards; DPO from L3 judge; SFT on gold reasoning chains.
+
+### ΔMCC from Baseline (Phase 5 complete — 6 experiments)
+
+| Domain | Task | Baseline | SFT | DPO | GRPO G=2 | GRPO G=8 | GRPO G=16 | Gemma3-27B G=2 |
+|--------|------|----------|-----|-----|----------|----------|-----------|----------------|
+| DTI | L1 | 0.510 | +0.368 | −0.008 | +0.009 | +0.022 | +0.028 | **+0.106** |
+| DTI | L4 | 0.121 | −0.121 | −0.015 | −0.006 | −0.020 | −0.011 | −0.036 |
+| CT | L1 | 0.539 | +0.071 | −0.000 | +0.003 | +0.006 | +0.002 | **+0.169** |
+| CT | L4 | 0.461 | **−0.461** | −0.009 | +0.001 | −0.002 | −0.054 | **+0.184** |
+| PPI | L1 | 0.673 | +0.318 | +0.006 | +0.003 | −0.010 | −0.010 | +0.029 |
+| PPI | L4 | 0.317 | **−0.317** | +0.011 | −0.002 | −0.038 | +0.008 | +0.046 |
+| GE | L1 | 0.147 | +0.203 | +0.002 | +0.015 | +0.041 | +0.042 | **+0.179** |
+| GE | L4 | −0.012 | +0.012 | +0.016 | +0.016 | **+0.061** | **+0.061** | **+0.135** |
+| VP | L1 | 0.102 | −0.102 | −0.024 | −0.001 | −0.022 | +0.026 | — |
+| VP | L4 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | — |
+
+G=8 = Phase 3/4 winner (multi-domain GRPO, 2 epochs). G=2/G=16 = Phase 5 Tier 2 ablations. Gemma3-27B = `unsloth/gemma-3-27b-it-bnb-4bit` (4-bit, G=2, epoch 1 only due to wall time). VP not evaluated (HF backend timeout). Full data: `results/negbiorl/phase5_summary.md`.
+
+### Key Findings
+
+1. **SFT L1 gain / L4 collapse:** SFT dramatically improves L1 format (DTI +0.37, PPI +0.32) but collapses L4 MCC to 0 across all domains — classic shortcut learning.
+2. **GE L4 is uniquely learnable:** GRPO G=8 and G=16 both achieve +0.061 ΔMCC on GE L4 (baseline ≈0). DTI/CT L4 resist improvement or regress — possible training data contamination.
+3. **G=8 recommended (Qwen 7B):** Matches G=16's best GE gain (+0.061) with far lower CT L4 regression (−0.002 vs −0.054). DPO is conservative (mean L4 ΔMCC ≈ 0).
+4. **Transfer paradox:** Home-domain GRPO does not improve home-domain L4 (PPI-only → PPI L4 = −0.006); cross-domain transfer is more effective (GE-only → PPI L4 = +0.029).
+5. **VP L4 degenerate:** All-"untested" single-class test set — ClinVar data limitation, not a training failure. Novel metric PBS (Publication Bias Score) computed per domain.
+6. **Model scale matters (P12):** Gemma3-27B (4-bit, G=2, 1 epoch) dramatically outperforms all Qwen-7B experiments. CT L4 +0.184 (vs best Qwen +0.001), GE L4 +0.135 (vs Qwen +0.061), PPI L4 +0.046 (all Qwen negative or near-zero). Larger models learn negative-result reasoning more effectively from the same GRPO signal, even with smaller group size.
+
+---
+
+## NegBioRL: Phase 6 (Gemma3-27B Scale + Transfer Matrix)
+
+**Purpose:** Scale ablation at 27B + single-domain transfer matrix to test whether transfer paradox replicates. Base model: `unsloth/gemma-3-27b-it-bnb-4bit`. Gemma3-27B base MCC: DTI L4=0.000 (parse_rate 59%), CT L4=0.191, PPI L4=0.242, GE L4=−0.111.
+
+### L4 ΔMCC Transfer Matrix (Phase 6 — Gemma3-27B)
+
+| Experiment | Train Domain | DTI L4 | CT L4 | PPI L4 | GE L4 |
+|---|---|---|---|---|---|
+| **SFT** (2789387) | all 4 (multi) | **+0.160** | −0.073 | +0.035 | +0.111 |
+| **DPO** (2789566) | all 4 (multi) | −0.081 | **+0.185** | +0.056 | **+0.135** |
+| **DTI-only GRPO** (2789389) | DTI | −0.116 | +0.192 | +0.040 | +0.104 |
+| **CT-only GRPO** (2789390) | CT | −0.111 | +0.189 | +0.045 | +0.104 |
+| **PPI-only GRPO** (2789391) | PPI | −0.120 | +0.180 | +0.045 | +0.104 |
+| **GE-only GRPO** (2806626) | GE | −0.101 | +0.180 | +0.051 | **+0.135** |
+
+### L1 ΔMCC (Phase 6)
+
+| Experiment | DTI L1 | CT L1 | PPI L1 | GE L1 |
+|---|---|---|---|---|
+| **SFT** | +0.386 | +0.221 | +0.357 | +0.441 |
+| **DPO** | +0.169 | +0.196 | +0.087 | +0.277 |
+| **DTI GRPO** | +0.169 | +0.196 | +0.087 | +0.271 |
+| **CT GRPO** | +0.169 | +0.194 | +0.087 | +0.274 |
+| **PPI GRPO** | +0.169 | +0.194 | +0.087 | +0.278 |
+| **GE GRPO** | +0.169 | +0.196 | +0.087 | +0.276 |
+
+### Key Findings (Phase 6)
+
+1. **Transfer pattern is nearly domain-invariant at 27B:** DTI/CT/PPI-only GRPO all give near-identical ΔMCC across all eval domains (±0.01). GE-only shows one exception: it gives GE L4 +0.135 (vs +0.104 for the other single-domain GRPOs), matching DPO and P12 multi-domain GRPO. Home-domain benefit at full training is a real but small effect (~+0.03 ΔMCC above cross-domain transfer).
+2. **DPO ≈ GRPO at 27B (CT and GE):** DPO achieves CT L4 +0.185 and GE L4 +0.135, matching P12 GRPO (+0.184/+0.135). Method choice matters less than model scale.
+3. **SFT uniquely preserves DTI L4:** SFT is the only method giving positive DTI L4 ΔMCC (+0.160). All GRPO/DPO methods hurt DTI L4 (−0.08 to −0.12), consistent with contamination penalty — GRPO reward signal penalizes the shortcut that contaminated DTI data enables.
+4. **CT L4 learnable at 27B scale:** All GRPO conditions give CT L4 +0.18–+0.19. CT was resistant in all Qwen-7B experiments (best +0.001). Scale unlocks a new domain.
+5. **L1 gains plateau across GRPO domains:** DPO/GRPO L1 gains are indistinguishable regardless of training domain (~+0.17/+0.19/+0.09/+0.27 for DTI/CT/PPI/GE). SFT gives 2–5× larger L1 gains but at cost of L4.

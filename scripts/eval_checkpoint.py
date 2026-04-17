@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import logging
 import sys
@@ -32,10 +33,30 @@ logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).parent.parent
 SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
 
-import train_baseline as baseline
+
+def _load_dti_baseline_module():
+    """Load the DTI training harness by file path, not sys.path order.
+
+    The repo also ships other train_baseline.py scripts (for example PPI), so
+    a bare ``import train_baseline`` becomes order-dependent during test runs.
+    """
+
+    module_name = "negbiodb_dti_train_baseline"
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+
+    module_path = SCRIPT_DIR / "train_baseline.py"
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load baseline module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+baseline = _load_dti_baseline_module()
 
 
 def _resolve_run_directory(output_dir: Path, args) -> tuple[str, Path]:
@@ -163,7 +184,9 @@ def main(argv: list[str] | None = None) -> int:
         with open(training_log) as f:
             rows = list(csv.DictReader(f))
         if rows:
-            best_val = max(float(r["val_log_auc"]) for r in rows if r["val_log_auc"])
+            val_aucs = [float(r["val_log_auc"]) for r in rows
+                        if r.get("val_log_auc", "").strip()]
+            best_val = max(val_aucs) if val_aucs else float("nan")
 
     results = {
         "run_name": run_name,

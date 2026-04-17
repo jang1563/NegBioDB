@@ -1,0 +1,30 @@
+# GRPO config for G=2 ablation (tests "GRPO is secretly DPO" hypothesis)
+# Same as grpo_qwen25_7b.yaml but with num_generations=2
+
+model: Qwen/Qwen2.5-7B-Instruct
+
+# GRPO hyperparameters
+num_generations: 2
+generation_batch_size: 2
+learning_rate: 1.0e-6
+epochs: 2
+batch_size: 2
+max_completion_length: 512
+
+# LoRA
+lora_r: 64
+lora_alpha: 128
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+
+# vLLM
+use_vllm: false
+
+# Rewards
+reward_weights: [1.0, 1.0, 0.2, 0.1]
+
+# Logging
+report_to: wandb

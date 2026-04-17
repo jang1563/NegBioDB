@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--tasks", nargs="+", default=["l1", "l4"])
     parser.add_argument("--split", default="train")
     parser.add_argument("--max-per", type=int, default=None, help="Max records per domain×task")
+    parser.add_argument("--output-name", default="sft_dataset.jsonl", help="Output filename")
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -36,7 +37,7 @@ def main():
         max_per_domain_task=args.max_per,
     )
 
-    out_path = args.output_dir / "sft_dataset.jsonl"
+    out_path = args.output_dir / args.output_name
     count = save_dataset(records, out_path)
     print(f"Saved {count} SFT records to {out_path}")
 

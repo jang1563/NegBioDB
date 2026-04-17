@@ -31,7 +31,6 @@ def main():
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--max-length", type=int, default=2560)
-    parser.add_argument("--max-prompt-length", type=int, default=2048)
     parser.add_argument("--beta", type=float, default=0.1, help="DPO beta parameter")
     parser.add_argument("--lora-r", type=int, default=64)
     parser.add_argument("--lora-alpha", type=int, default=128)
@@ -47,6 +46,8 @@ def main():
     from peft import LoraConfig
     from trl import DPOConfig, DPOTrainer
 
+    from negbiorl.adapter_utils import load_tokenizer, prepare_merged_adapter
+
     # Load DPO pairs
     print(f"Loading dataset: {args.dataset}")
     records = []
@@ -54,14 +55,23 @@ def main():
         for line in f:
             if line.strip():
                 records.append(json.loads(line))
+    # TRL 1.0 conversational format: chosen/rejected must be lists of messages
+    # when prompt is already a list of messages.
+    for r in records:
+        if isinstance(r.get("prompt"), list) and isinstance(r.get("chosen"), str):
+            r["chosen"] = [{"role": "assistant", "content": r["chosen"]}]
+        if isinstance(r.get("prompt"), list) and isinstance(r.get("rejected"), str):
+            r["rejected"] = [{"role": "assistant", "content": r["rejected"]}]
     dataset = Dataset.from_list(records)
     print(f"  {len(dataset)} preference pairs")
 
-    # Model
+    # Model — either base or SFT-adapted
     model_id = args.base_model
     if args.sft_adapter:
-        print(f"Loading SFT adapter from {args.sft_adapter}")
-        model_id = str(args.sft_adapter)
+        print(f"Merging SFT adapter from {args.sft_adapter}")
+        _, merged_dir = prepare_merged_adapter(args.sft_adapter, args.base_model)
+        print(f"  Using merged model at {merged_dir}")
+        model_id = str(merged_dir)
 
     # LoRA
     lora_config = LoraConfig(
@@ -80,8 +90,8 @@ def main():
         learning_rate=config.get("learning_rate", args.learning_rate),
         num_train_epochs=config.get("epochs", args.epochs),
         per_device_train_batch_size=config.get("batch_size", args.batch_size),
+        gradient_accumulation_steps=config.get("gradient_accumulation_steps", 1),
         max_length=config.get("max_length", args.max_length),
-        max_prompt_length=config.get("max_prompt_length", args.max_prompt_length),
         bf16=True,
         gradient_checkpointing=True,
         logging_steps=5,
@@ -92,10 +102,13 @@ def main():
     print(f"DPO config: beta={dpo_config.beta}, lr={dpo_config.learning_rate}, "
           f"epochs={dpo_config.num_train_epochs}")
 
+    tokenizer = load_tokenizer(model_id)
+
     trainer = DPOTrainer(
         model=model_id,
         args=dpo_config,
         train_dataset=dataset,
+        processing_class=tokenizer,
         peft_config=lora_config,
     )
 

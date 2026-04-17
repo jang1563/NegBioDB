@@ -125,6 +125,34 @@ DOMAIN_REGISTRY: dict[str, dict[str, Any]] = {
             "context_specificity", "mechanistic_depth",
         ],
     },
+    "dc": {
+        "label": "Drug Combination Synergy",
+        "eval_module": "negbiodb_dc.llm_eval",
+        "prompt_module": "negbiodb_dc.llm_prompts",
+        "task_prefix": "dc-",
+        "exports_dir": "exports/dc_llm",
+        "results_dir": "results/dc_llm",
+        "gold_answer_field": "gold_answer",
+        "gold_class_field": "gold_category",
+        "l1_choices": 4,
+        "l1_file": "dc_l1_dataset.jsonl",
+        "l2_file": "dc_l2_dataset.jsonl",
+        "l3_file": "dc_l3_dataset.jsonl",
+        "l4_file": "dc_l4_dataset.jsonl",
+        "format_prompt": "format_dc_prompt",
+        "parse_l1": "parse_dc_l1_answer",
+        "parse_l4": "parse_dc_l4_answer",
+        "l4_returns_tuple": True,
+        "temporal_groups": [],
+        "evidence_keywords": [
+            "DrugComb", "SynergyFinder", "Bliss", "Loewe", "HSA", "ZIP",
+            "synergy score", "antagonism", "combination index", "PMID",
+        ],
+        "l3_judge_dims": [
+            "mechanistic_reasoning", "pathway_analysis",
+            "pharmacological_context", "therapeutic_relevance",
+        ],
+    },
     "vp": {
         "label": "Variant Pathogenicity",
         "eval_module": "negbiodb_vp.llm_eval",
@@ -156,7 +184,7 @@ DOMAIN_REGISTRY: dict[str, dict[str, Any]] = {
 }
 
 # Domains used for training (VP reserved for zero-shot transfer test)
-TRAIN_DOMAINS = ["dti", "ct", "ppi", "ge"]
+TRAIN_DOMAINS = ["dti", "ct", "ppi", "ge", "dc"]
 TRANSFER_TEST_DOMAIN = "vp"
 ALL_DOMAINS = list(DOMAIN_REGISTRY.keys())
 
@@ -293,7 +321,7 @@ def load_predictions(
     results_dir = get_results_dir(domain)
 
     # Domain prefix in directory names
-    prefix_map = {"dti": "", "ct": "ct-", "ppi": "ppi-", "ge": "ge-", "vp": "vp-"}
+    prefix_map = {"dti": "", "ct": "ct-", "ppi": "ppi-", "ge": "ge-", "dc": "dc-", "vp": "vp-"}
     prefix = prefix_map.get(domain, "")
 
     # Try exact pattern first: {prefix}{task}_{model-substring}_{shot}_{seed}/predictions.jsonl

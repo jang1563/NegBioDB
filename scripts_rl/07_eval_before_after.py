@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from negbiorl.data_registry import ALL_DOMAINS, PROJECT_ROOT, load_jsonl
@@ -36,6 +37,8 @@ def main():
     args = parser.parse_args()
 
     results = {}
+    skipped = 0
+    evaluated = 0
     for domain in args.domains:
         results[domain] = {}
         for task in args.tasks:
@@ -44,6 +47,7 @@ def main():
 
             if not before_path.exists() or not after_path.exists():
                 print(f"  SKIP {domain}/{task}: missing predictions")
+                skipped += 1
                 continue
 
             before_preds = load_jsonl(before_path)
@@ -51,6 +55,7 @@ def main():
 
             result = evaluate_before_after(before_preds, after_preds, domain, task)
             results[domain][task] = result
+            evaluated += 1
 
             # Print summary
             deltas = result["deltas"]
@@ -62,12 +67,16 @@ def main():
             sign = "+" if delta_val >= 0 else ""
             print(f"  {domain}/{task}: {key} {before_val:.3f} → {after_val:.3f} ({sign}{delta_val:.3f})")
 
+    if evaluated == 0:
+        print(f"\nERROR: No predictions found ({skipped} skipped). Check prediction paths.")
+        return 1
+
     # Save results
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w") as f:
         json.dump(results, f, indent=2, default=str)
-    print(f"\nSaved to {args.output}")
+    print(f"\nSaved to {args.output} ({evaluated} evaluated, {skipped} skipped)")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

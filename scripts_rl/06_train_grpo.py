@@ -37,8 +37,12 @@ def main():
     parser.add_argument("--max-completion-length", type=int, default=512)
     parser.add_argument("--lora-r", type=int, default=64)
     parser.add_argument("--lora-alpha", type=int, default=128)
-    parser.add_argument("--use-vllm", action="store_true", default=True)
+    parser.add_argument("--use-vllm", action="store_true", default=False)
     parser.add_argument("--no-vllm", dest="use_vllm", action="store_false")
+    parser.add_argument("--load-in-4bit", action="store_true",
+                        help="Load model in 4-bit quantization (for large models like Gemma4-31B)")
+    parser.add_argument("--resume-from-checkpoint", type=str, default=None,
+                        help="Path to checkpoint directory to resume training from")
     args = parser.parse_args()
 
     config = {}
@@ -51,6 +55,7 @@ def main():
     from peft import LoraConfig
     from trl import GRPOConfig, GRPOTrainer
 
+    from negbiorl.adapter_utils import load_tokenizer, prepare_merged_adapter
     from negbiorl.rewards import (
         DEFAULT_REWARD_FUNCS,
         DEFAULT_REWARD_WEIGHTS,
@@ -69,35 +74,9 @@ def main():
     # Model — either base or SFT-adapted
     model_id = args.base_model
     if args.sft_adapter:
-        adapter_path = args.sft_adapter
-        # Check for /final subdirectory (SFT saves adapter there)
-        if (adapter_path / "final" / "adapter_config.json").exists():
-            adapter_path = adapter_path / "final"
-        print(f"Merging SFT adapter from {adapter_path}")
-
-        # GRPOTrainer calls AutoModelForCausalLM.from_pretrained(model_id),
-        # which requires a full model directory (not a LoRA-only adapter).
-        # Merge the LoRA adapter into the base model and save for GRPO use.
-        merged_dir = adapter_path.parent.parent / f"merged_{adapter_path.parent.name}"
-        if not (merged_dir / "config.json").exists():
-            import torch
-            from peft import PeftModel
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-            with open(adapter_path / "adapter_config.json") as _f:
-                _base = json.load(_f)["base_model_name_or_path"]
-            print(f"  Loading base model {_base} for merge...")
-            _base_model = AutoModelForCausalLM.from_pretrained(
-                _base, torch_dtype=torch.bfloat16, device_map="cpu"
-            )
-            _peft = PeftModel.from_pretrained(_base_model, str(adapter_path))
-            _merged = _peft.merge_and_unload()
-            _merged.save_pretrained(str(merged_dir))
-            AutoTokenizer.from_pretrained(str(adapter_path)).save_pretrained(str(merged_dir))
-            del _merged, _peft, _base_model
-            torch.cuda.empty_cache()
-            print(f"  Merged model saved to {merged_dir}")
-        else:
-            print(f"  Using cached merged model at {merged_dir}")
+        print(f"Merging SFT adapter from {args.sft_adapter}")
+        _, merged_dir = prepare_merged_adapter(args.sft_adapter, args.base_model)
+        print(f"  Using merged model at {merged_dir}")
         model_id = str(merged_dir)
 
     # LoRA
@@ -112,11 +91,12 @@ def main():
 
     # GRPO config
     num_gen = config.get("num_generations", args.num_generations)
+    use_vllm = config.get("use_vllm", args.use_vllm)
     grpo_config = GRPOConfig(
         output_dir=str(args.output_dir),
         num_generations=num_gen,
-        use_vllm=config.get("use_vllm", args.use_vllm),
-        vllm_mode="colocate",
+        use_vllm=use_vllm,
+        vllm_mode="colocate",  # only used when use_vllm=True
         scale_rewards="batch",
         learning_rate=config.get("learning_rate", args.learning_rate),
         num_train_epochs=config.get("epochs", args.epochs),
@@ -135,20 +115,52 @@ def main():
     reward_weights = config.get("reward_weights", DEFAULT_REWARD_WEIGHTS)
     grpo_config.reward_weights = reward_weights
 
+    load_4bit = args.load_in_4bit or config.get("load_in_4bit", False)
+
     print(f"GRPO config: G={num_gen}, lr={grpo_config.learning_rate}, "
-          f"epochs={grpo_config.num_train_epochs}, vLLM={grpo_config.use_vllm}")
+          f"epochs={grpo_config.num_train_epochs}, vLLM={grpo_config.use_vllm}, "
+          f"4bit={load_4bit}")
     print(f"Rewards: {len(DEFAULT_REWARD_FUNCS)} functions, weights={reward_weights}")
 
-    trainer = GRPOTrainer(
-        model=model_id,
-        reward_funcs=DEFAULT_REWARD_FUNCS,
-        args=grpo_config,
-        train_dataset=dataset,
-        peft_config=lora_config,
-    )
+    tokenizer = load_tokenizer(model_id)
+
+    if load_4bit:
+        # Pre-load model with 4-bit quantization (e.g. Gemma4-31B).
+        # GRPOTrainer accepts a model object instead of a string ID.
+        import torch
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_type="nf4",
+        )
+        print(f"Loading model in 4-bit: {model_id}")
+        model_obj = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+        trainer = GRPOTrainer(
+            model=model_obj,
+            reward_funcs=DEFAULT_REWARD_FUNCS,
+            args=grpo_config,
+            train_dataset=dataset,
+            processing_class=tokenizer,
+            peft_config=lora_config,
+        )
+    else:
+        trainer = GRPOTrainer(
+            model=model_id,
+            reward_funcs=DEFAULT_REWARD_FUNCS,
+            args=grpo_config,
+            train_dataset=dataset,
+            processing_class=tokenizer,
+            peft_config=lora_config,
+        )
 
     print("Starting GRPO training...")
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     trainer.save_model(str(args.output_dir / "final"))
     print(f"Model saved to {args.output_dir / 'final'}")
 

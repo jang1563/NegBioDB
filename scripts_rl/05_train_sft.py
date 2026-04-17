@@ -26,6 +26,8 @@ def main():
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--lora-r", type=int, default=64)
     parser.add_argument("--lora-alpha", type=int, default=128)
+    parser.add_argument("--load-in-4bit", action="store_true",
+                        help="Load model in 4-bit quantization (for large models)")
     args = parser.parse_args()
 
     # Load config overrides if provided
@@ -40,13 +42,26 @@ def main():
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import SFTConfig, SFTTrainer
 
-    print(f"Loading model: {args.base_model}")
+    load_4bit = args.load_in_4bit or config.get("load_in_4bit", False)
+
+    print(f"Loading model: {args.base_model} (4bit={load_4bit})")
     tokenizer = AutoTokenizer.from_pretrained(args.base_model, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        args.base_model,
-        torch_dtype="bfloat16",
-        trust_remote_code=True,
-    )
+
+    load_kwargs = {
+        "torch_dtype": "bfloat16",
+        "trust_remote_code": True,
+    }
+    if load_4bit:
+        import torch
+        from transformers import BitsAndBytesConfig
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_type="nf4",
+        )
+        load_kwargs["device_map"] = "auto"
+
+    model = AutoModelForCausalLM.from_pretrained(args.base_model, **load_kwargs)
 
     # Load dataset
     print(f"Loading dataset: {args.dataset}")
