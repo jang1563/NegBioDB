@@ -1,0 +1,54 @@
+# Negative-JEPA pretraining: DTI + PPI + GE (Option A: SIGReg, no EMA)
+# ref: research/24_negative_jepa_design.md §3.5 Option A
+#
+# Usage:
+#   python scripts_jepa/pretrain_negjepa.py --config configs/negbiojepa/pretrain_3domain.yaml
+# HPC:
+#   sbatch slurm/run_negjepa_pretrain.slurm  # CONFIG defaults to this file
+
+# Encoder
+embed_dim: 256
+tabular_max_features: 300
+tabular_depth: 2
+tabular_n_heads: 8
+perceiver_n_latents: 16
+perceiver_depth: 2
+n_domains: 8
+
+# Predictor (smaller than encoder)
+predictor_depth: 4
+predictor_n_heads: 8
+
+# Training objective: Option A (SIGReg / LeJEPA, arXiv:2511.08544)
+reg_type: sigreg
+use_ema: false
+sigreg_lambda: 1.0
+sigreg_sketch_dim: 64
+
+# Optimizer
+lr: 3.0e-4
+weight_decay: 0.05
+warmup_epochs: 5
+epochs: 20    # ~238K batches/epoch × 20 epochs; resume with --resume if 72h wall time exceeded
+batch_size: 256
+grad_clip: 1.0
+
+# Masking
+entity_mask_ratio: 0.5
+feature_mask_ratio: 0.5
+subgraph_mask_ratio: 0.2
+
+# Data: initial trio — covers all 3 modality encoders (graph+seq+tabular)
+# DTI 30.5M + GE 28.8M + PPI 2.2M = ~61M samples
+domains: [dti, ppi, ge]
+domain_temp: 0.5   # P(d) ∝ |D_d|^0.5 → DTI ~36%, GE ~35%, PPI ~29% (3-domain only)
+max_samples_per_domain: 2000000  # cap per domain to fit in 64GB (lazy loading)
+num_workers: 4
+
+# HPC paths (set data_root=synthetic for local smoke test)
+data_root: /athena/masonlab/scratch/users/jak4013/negbiodb_exports
+output_dir: /athena/masonlab/scratch/users/jak4013/negjepa_pretrain_3d_sigreg
+
+# Logging
+log_every: 100
+save_every: 10

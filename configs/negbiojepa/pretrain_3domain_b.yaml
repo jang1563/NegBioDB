@@ -1,0 +1,50 @@
+# Negative-JEPA pretraining: DTI + PPI + GE (Option B: VICReg + EMA)
+# ref: research/24_negative_jepa_design.md §3.5 Option B
+#
+# Same as pretrain_3domain.yaml but with VICReg regularization and EMA target encoder.
+# EchoJEPA (arXiv:2602.02603) and GeneJepa (bioRxiv:2025.10.14.682378) use this approach.
+#
+# Ablation comparison: run both Option A and B, compare cold-split AUROC.
+# Usage:
+#   sbatch --export=ALL,CONFIG=configs/negbiojepa/pretrain_3domain_b.yaml slurm/run_negjepa_pretrain.slurm
+
+embed_dim: 256
+tabular_max_features: 300
+tabular_depth: 2
+tabular_n_heads: 8
+perceiver_n_latents: 16
+perceiver_depth: 2
+n_domains: 8
+
+predictor_depth: 4
+predictor_n_heads: 8
+
+# Training objective: Option B (VICReg + EMA)
+reg_type: vicreg
+use_ema: true
+ema_base_decay: 0.996
+ema_final_decay: 0.999
+vicreg_lambda_var: 1.0
+vicreg_lambda_cov: 0.04
+
+lr: 3.0e-4
+weight_decay: 0.05
+warmup_epochs: 5
+epochs: 20    # ~238K batches/epoch × 20 epochs; resume with --resume if 72h wall time exceeded
+batch_size: 256
+grad_clip: 1.0
+
+entity_mask_ratio: 0.5
+feature_mask_ratio: 0.5
+subgraph_mask_ratio: 0.2
+
+domains: [dti, ppi, ge]
+domain_temp: 0.5
+max_samples_per_domain: 2000000  # cap per domain to fit in 64GB (lazy loading)
+num_workers: 4
+
+data_root: /athena/masonlab/scratch/users/jak4013/negbiodb_exports
+output_dir: /athena/masonlab/scratch/users/jak4013/negjepa_pretrain_3d_vicreg
+
+log_every: 100
+save_every: 10

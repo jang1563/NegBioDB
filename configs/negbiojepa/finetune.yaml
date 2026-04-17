@@ -1,0 +1,32 @@
+# Negative-JEPA fine-tuning template
+# Per-domain fine-tuning on top of a pretrained JEPA encoder.
+# Domain and split are passed via CLI args to finetune_negjepa.py.
+#
+# Usage:
+#   python scripts_jepa/finetune_negjepa.py \
+#       --pretrained /path/to/best.pt \
+#       --domain dti \
+#       --split cold_compound \
+#       --config configs/negbiojepa/finetune.yaml
+
+# Must match pretrained model's encoder architecture exactly
+embed_dim: 256
+tabular_max_features: 300
+tabular_depth: 2
+tabular_n_heads: 8
+perceiver_n_latents: 16
+perceiver_depth: 2
+n_domains: 8
+
+# Fine-tuning
+freeze_encoder: true    # linear probing mode; set false for full fine-tune
+ft_lr: 1.0e-4
+ft_epochs: 50
+ft_patience: 10
+weight_decay: 0.05
+
+batch_size: 256
+num_workers: 4
+
+data_root: /athena/masonlab/scratch/users/jak4013/negbiodb_exports
+output_dir: /athena/masonlab/scratch/users/jak4013/negjepa_finetune
