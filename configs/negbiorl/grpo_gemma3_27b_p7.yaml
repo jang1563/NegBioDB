@@ -1,0 +1,38 @@
+# GRPO config for Phase 7: SFT-initialized Gemma3-27B GRPO
+# save_strategy=steps so checkpoints survive if job times out before epoch end
+
+model: unsloth/gemma-3-27b-it-bnb-4bit
+
+# GRPO hyperparameters
+num_generations: 2
+generation_batch_size: 2
+learning_rate: 5.0e-7
+epochs: 2
+batch_size: 1
+max_completion_length: 512
+
+# LoRA
+lora_r: 16
+lora_alpha: 32
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Model loading
+use_vllm: false
+load_in_4bit: false
+
+# Checkpointing — save every 500 steps so timeouts don't wipe all progress
+save_strategy: steps
+save_steps: 500
+
+# Rewards
+reward_weights: [1.0, 1.0, 0.2, 0.1]
+
+# Logging
+report_to: wandb

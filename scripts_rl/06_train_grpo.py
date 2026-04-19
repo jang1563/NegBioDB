@@ -106,7 +106,8 @@ def main():
         bf16=True,
         gradient_checkpointing=True,
         logging_steps=5,
-        save_strategy="epoch",
+        save_strategy=config.get("save_strategy", "epoch"),
+        save_steps=config.get("save_steps", 500),
         report_to=config.get("report_to", "wandb"),
     )
 

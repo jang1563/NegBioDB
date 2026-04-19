@@ -136,7 +136,10 @@ def _run_hf(args, tasks_data):
 
     print(f"Loading base model (HF, 4bit={args.load_in_4bit}): {args.base_model}")
     model = AutoModelForCausalLM.from_pretrained(args.base_model, **load_kwargs)
-    tokenizer = AutoTokenizer.from_pretrained(args.base_model, trust_remote_code=True)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(args.base_model, trust_remote_code=True)
+    except TypeError:
+        tokenizer = AutoTokenizer.from_pretrained(args.base_model, use_fast=False, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 

@@ -56,7 +56,13 @@ def load_tokenizer(model_id: str):
             **tokenizer_kwargs,
         )
     except TypeError:
+        pass
+    try:
         return AutoTokenizer.from_pretrained(model_id, **tokenizer_kwargs)
+    except TypeError:
+        # _patch_mistral_regex in some transformers versions fails on local paths;
+        # slow tokenizer avoids that code path entirely.
+        return AutoTokenizer.from_pretrained(model_id, use_fast=False, **tokenizer_kwargs)
 
 
 def _align_special_token_ids(model, tokenizer) -> None:
